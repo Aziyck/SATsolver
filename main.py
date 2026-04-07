@@ -132,7 +132,7 @@ if __name__ == "__main__":
         # [ 0,  0,  0,  0,   0,  0,  0,  0,   13, 0, 15,  0,   0,  0,  0,  0],
         # [ 0,  0,  0,  0,   0,  0,  0,  0,   0, 14,  0, 16,   0, 10,  0, 12],
         
-        [ 0]*16,
+        [ 1,  0,  0,  4,   5,  0,  7,  0,   9,  0, 11,  0,  13,  0, 15,  0],
         [ 0]*16,
         [ 0]*16,
         [ 0]*16,
@@ -204,15 +204,18 @@ if __name__ == "__main__":
     
     solution = dpll(formula_sudoku_4x4)
     print_sudoku(decode_sudoku(solution, 4))
+    solution = solve_sudoku(grid_4x4)
+    print_sudoku(solution)
 
     solution = dpll(formula_sudoku_9x9, choose_var_fn=choose_variable_small_clause)
     print_sudoku(decode_sudoku(solution, 9))
-
-    # solution = solve_sudoku(grid_16x16)
-    # print_sudoku(solution)
+    solution = solve_sudoku(grid_9x9)
+    print_sudoku(solution)
 
     solution = dpll(formula_sudoku_16x16,choose_var_fn=choose_variable_small_clause)
     print_sudoku(decode_sudoku(solution, 16))
+    solution = solve_sudoku(grid_16x16)
+    print_sudoku(solution)
 
     
 

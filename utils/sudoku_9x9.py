@@ -98,35 +98,35 @@ def generate_sudoku_9x9_clauses(grid):
     return clauses
 
 
-def decode_sudoku_9x9_solution(solution):
-    grid = [[0]*9 for _ in range(9)]
+# def decode_sudoku_9x9_solution(solution):
+#     grid = [[0]*9 for _ in range(9)]
 
-    for key, value in solution.items():
-        if value:
-            r = key // 100
-            c = (key // 10) % 10
-            v = key % 10
+#     for key, value in solution.items():
+#         if value:
+#             r = key // 100
+#             c = (key // 10) % 10
+#             v = key % 10
 
-            grid[r-1][c-1] = v
+#             grid[r-1][c-1] = v
 
-    return grid
+#     return grid
 
-def print_sudoku_9x9_solution(solution):
-    if solution:
-        board = decode_sudoku_9x9_solution(solution)
+# def print_sudoku_9x9_solution(solution):
+#     if solution:
+#         board = decode_sudoku_9x9_solution(solution)
 
-        for i in range(9):
-            row = board[i]
+#         for i in range(9):
+#             row = board[i]
 
-            if (i % 3 == 0):
-                print('-'*31)
+#             if (i % 3 == 0):
+#                 print('-'*31)
             
-            for j in range(9):
-                if(j == 0):
-                    print(f"|{row[j]:^3}", end="")
-                elif((j+1) % 3 == 0):
-                    print(f"{row[j]:^3}|", end="")
-                else:
-                    print(f"{row[j]:^3}", end="")
-            print()
-        print('-'*31)
+#             for j in range(9):
+#                 if(j == 0):
+#                     print(f"|{row[j]:^3}", end="")
+#                 elif((j+1) % 3 == 0):
+#                     print(f"{row[j]:^3}|", end="")
+#                 else:
+#                     print(f"{row[j]:^3}", end="")
+#             print()
+#         print('-'*31)

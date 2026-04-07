@@ -83,23 +83,23 @@ def generate_sudoku_4x4_clauses(grid):
     return clauses
 
 
-def decode_sudoku_4x4_solution(solution):
-    grid = [[0]*4 for _ in range(4)]
+# def decode_sudoku_4x4_solution(solution):
+#     grid = [[0]*4 for _ in range(4)]
 
-    for key, value in solution.items():
-        if value:
-            r = key // 100
-            c = (key // 10) % 10
-            v = key % 10
+#     for key, value in solution.items():
+#         if value:
+#             r = key // 100
+#             c = (key // 10) % 10
+#             v = key % 10
 
-            grid[r-1][c-1] = v
+#             grid[r-1][c-1] = v
 
-    return grid
+#     return grid
 
 
-def print_sudoku_4x4_solution(solution):
-    if solution:
-        sudoku_4x4_solution = decode_sudoku_4x4_solution(solution)
+# def print_sudoku_4x4_solution(solution):
+#     if solution:
+#         sudoku_4x4_solution = decode_sudoku_4x4_solution(solution)
 
-        for row in sudoku_4x4_solution:
-            print(row)
+#         for row in sudoku_4x4_solution:
+#             print(row)

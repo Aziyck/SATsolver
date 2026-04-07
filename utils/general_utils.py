@@ -14,4 +14,4 @@ def var(r, c, v):
     transforma (r,c,v) intr-un numar unic
     ex: (1,2,3) → 123
     """
-    return 100*r + 10*c + v
+    return (r * 10000) + (c * 100) + v

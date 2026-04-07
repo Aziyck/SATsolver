@@ -1,158 +1,16 @@
+from solvers.heuristics import choose_variable_smart, choose_variable_basic, choose_variable_small_clause
+
 from utils.general_utils import clear_console, indent
 import utils.colored_text as txt
-from utils.sudoku_4x4 import generate_sudoku_4x4_clauses, print_sudoku_4x4_solution
-from utils.sudoku_9x9 import generate_sudoku_9x9_clauses, print_sudoku_9x9_solution
+from utils.sudoku_4x4 import generate_sudoku_4x4_clauses 
+from utils.sudoku_9x9 import generate_sudoku_9x9_clauses 
+from utils.sudoku_general import generate_sudoku_clauses, print_sudoku, decode_sudoku, solve_sudoku
 from utils.dimacs import read_dimacs_cnf, write_dimacs_cnf
 
+from solvers.dpll import dpll,dpll_debug
+# from solvers.cdcl import cdcl
+# from solvers.cdcl2 import cdcl_debug as cdcl
 
-
-
-def unit_propagate(clauses, assignment):
-    """
-    clauses = lista de clauze
-    assignment = dict {var: True/False}
-
-    ideea:
-    daca avem o clauza cu un singur literal -> trebuie sa fie adevarat
-    """
-
-    changed = True
-
-    while changed:
-        changed = False
-
-        for clause in clauses:
-            # daca clauza are un singur literal
-            if len(clause) == 1:
-                lit = clause[0]
-                var = abs(lit)       # variabila
-                val = lit > 0        # True sau False
-
-                print(txt.YELLOW + f"Unit clause found: {clause}" + txt.RESET)
-                # print(txt.YELLOW + f"Derived unit: {clause} → forces {var} = {val}" + txt.RESET)
-
-                # daca variabila deja are valoare diferita -> conflict
-                if var in assignment:
-                    if assignment[var] != val:
-                        print(txt.RED + "Conflict in unit propagation!" + txt.RESET)
-                        return None
-                else:
-                    print(txt.GREEN + f"Assign {var} = {val} (unit propagation)" + txt.RESET)
-                    # setam variabila
-                    assignment[var] = val
-                    changed = True
-
-                    new_clauses = []
-
-                    for c in clauses:
-                        # daca clauza este deja satisfacuta -> o ignoram
-                        if lit in c:
-                            print(txt.CYAN + f"Clause satisfied and removed: {c}" + txt.RESET)
-                            continue
-
-                        # daca contine negatia -> eliminam literalul
-                        if -lit in c:
-                            new_c = [x for x in c if x != -lit]
-
-                            print(txt.YELLOW + f"Removing {-lit} from {c} → {new_c}" + txt.RESET)
-
-                            # daca clauza devine goala -> conflict
-                            if not new_c:
-                                print(txt.RED + "Empty clause after propagation!" + txt.RESET)
-                                return None
-
-                            new_clauses.append(new_c)
-                        else:
-                            new_clauses.append(c)
-
-                    clauses = new_clauses
-                    break
-
-    return clauses, assignment
-
-def choose_variable(clauses):
-    """
-    alegem prima variabila gasita
-    (simplu, dar nu optim)
-    """
-    for clause in clauses:
-        for lit in clause:
-            return abs(lit)
-    return None
-
-def dpll(clauses, assignment={}, level=0):
-    """
-    returneaza:
-    - dict (solutie) daca SAT
-    - None daca UNSAT
-    """
-
-    print(indent(level) + txt.BOLD + txt.CYAN + "Entering DPLL" + txt.RESET)
-
-    # 1️⃣ simplificare
-    result = unit_propagate(clauses, assignment.copy())
-
-    if result is None:
-        print(indent(level) + txt.RED + "Conflict after propagation → BACKTRACK" + txt.RESET)
-        return None
-
-    clauses, assignment = result
-
-    print('\n'+'-'*level + '-'*txt.separator_lenght)
-    print(indent(level) + txt.BLUE + f"Clauses: {clauses}" + txt.RESET)
-    print(indent(level) + txt.GREEN + f"Assignment: {assignment}" + txt.RESET)
-    print('-'*level + '-'*txt.separator_lenght)
-
-    # SAT
-    # 2️⃣ daca nu mai avem clauze -> toate sunt satisfacute
-    if not clauses:
-        print(txt.BOLD + txt.RED + f'level = {level}' + txt.RESET)
-        print(indent(level) + txt.GREEN + "SAT FOUND ✅" + txt.RESET)
-        return assignment
-
-    # 3️⃣ alegem variabila
-    var = choose_variable(clauses)
-    print(indent(level) + txt.YELLOW + f"Choose variable: {var}" + txt.RESET)
-
-    # 4️⃣ incercam True si False
-    for value in [True, False]:
-        print(indent(level) + txt.CYAN + f"Trying {var} = {value}" + txt.RESET)
-
-        new_assignment = assignment.copy()
-        new_assignment[var] = value
-
-        lit = var if value else -var
-
-        new_clauses = []
-
-        for c in clauses:
-            # clauza devine adevarata
-            if lit in c:
-                continue
-
-            # eliminam negatia
-            if -lit in c:
-                new_c = [x for x in c if x != -lit]
-
-                if not new_c:
-                    print(indent(level) + txt.RED + "Empty clause → conflict" + txt.RESET)
-                    break
-
-                new_clauses.append(new_c)
-            else:
-                new_clauses.append(c)
-
-        else:
-            # apel recursiv
-            result = dpll(new_clauses, new_assignment, level+1)
-
-            if result is not None:
-                return result
-            
-        print(indent(level) + txt.RED + f"Backtracking on {var} = {value}" + txt.RESET)
-
-    # daca nici True nici False nu merg
-    return None
 
 
 
@@ -214,15 +72,15 @@ if __name__ == "__main__":
     # 4 x 4 x 4 = 64 variabile
 
     grid_4x4 = [
-        [1, 0, 0, 2],
+        [0, 4, 0, 0],
+        [3, 1, 2, 0],
         [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [3, 0, 0, 4]
+        [0, 3, 0, 2]
     ]
 
     # UNCOMENT for sudoku 4x4 solution
-    write_dimacs_cnf("sudoku_4x4.cnf", generate_sudoku_4x4_clauses(grid_4x4))
-    formula_sudoku_4x4 = read_dimacs_cnf("sudoku_4x4.cnf")
+    write_dimacs_cnf("input/sudoku_4x4.cnf", generate_sudoku_clauses(grid_4x4))
+    formula_sudoku_4x4 = read_dimacs_cnf("input/sudoku_4x4.cnf")
 
 
     # ----------------------- 
@@ -250,29 +108,116 @@ if __name__ == "__main__":
         [0, 0, 0, 4, 0, 9, 0, 0, 0],
         [0, 0, 0, 0, 8, 0, 0, 0, 0]
     ]
-    write_dimacs_cnf("sudoku_9x9.cnf", generate_sudoku_9x9_clauses(grid_9x9))
-    formula_sudoku_9x9 = read_dimacs_cnf("sudoku_9x9.cnf")
+    write_dimacs_cnf("input/sudoku_9x9.cnf", generate_sudoku_clauses(grid_9x9))
+    formula_sudoku_9x9 = read_dimacs_cnf("input/sudoku_9x9.cnf")
+
+    grid_16x16 = [
+        # [ 1,  0,  0,  4,   5,  0,  7,  0,   9,  0, 11,  0,  13,  0, 15,  0],
+        # [ 0,  6,  0,  8,   0, 10,  0, 12,   0, 14,  0, 16,   0,  2,  0,  4],
+        # [ 0,  0,  3,  0,   0,  0,  0,  0,   13, 0, 15,  0,   0,  0,  1,  0],
+        # [ 0,  0,  0,  2,   0,  0,  0,  0,   0, 12,  0, 14,   0,  0,  0, 16],
+
+        # [ 5,  0,  7,  0,   1,  0,  3,  0,   0,  0,  0,  0,   9,  0, 11,  0],
+        # [ 0, 10,  0, 12,   0,  6,  0,  8,   0,  4,  0,  2,   0, 14,  0, 16],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   5,  0,  7,  0,   0,  0,  0,  0],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   0,  6,  0,  8,   0, 10,  0, 12],
+
+        # [ 9,  0, 11,  0,   13, 0, 15,  0,   1,  0,  3,  0,   5,  0,  7,  0],
+        # [ 0, 14,  0, 16,   0, 12,  0, 10,   0,  8,  0,  6,   0,  4,  0,  2],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   9,  0, 11,  0,   0,  0,  0,  0],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   0, 10,  0, 12,   0,  6,  0,  8],
+
+        # [13,  0, 15,  0,   9,  0, 11,  0,   5,  0,  7,  0,   1,  0,  3,  0],
+        # [ 0,  2,  0,  4,   0, 16,  0, 14,   0, 12,  0, 10,   0,  8,  0,  6],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   13, 0, 15,  0,   0,  0,  0,  0],
+        # [ 0,  0,  0,  0,   0,  0,  0,  0,   0, 14,  0, 16,   0, 10,  0, 12],
+        
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+        [ 0]*16,
+    ]
+
+    write_dimacs_cnf("input/sudoku_16x16.cnf", generate_sudoku_clauses(grid_16x16))
+    formula_sudoku_16x16 = read_dimacs_cnf("input/sudoku_16x16.cnf")
+
+    grid_25x25 = [
+        [ 1,  0,  0,  0,  5,   6,  0,  0,  0, 10,  0,  0, 13,  0, 15,  0, 17,  0,  0, 21,  0, 23,  0,  0, 25],
+        [ 0,  2,  0,  4,  0,   0,  7,  0,  9,  0, 11,  0,  0, 14,  0, 16,  0, 18,  0,  0, 22,  0, 24,  0,  0],
+        [ 0,  0,  3,  0,  0,   0,  0,  8,  0,  0,  0, 12,  0,  0, 15,  0,  0, 19,  0,  0, 0,  23,  0, 25,  0],
+        [ 0,  0,  0,  0,  0,   6,  0,  0, 10,  0, 12,  0, 14,  0,  0, 17,  0,  0, 20,  0, 22,  0, 24,  0,  0],
+        [ 0,  0,  0,  0,  5,   0,  0,  0,  0,  0, 11,  0, 13,  0, 15,  0, 17,  0,  0, 21,  0, 23,  0,  0, 25],
+
+        [ 6,  0,  8,  0, 10,   1,  0,  3,  0,  5,  0,  7,  0,  9,  0, 11,  0, 13,  0, 15,  0, 17,  0, 19,  0],
+        [ 0,  7,  0,  9,  0,   0,  2,  0,  4,  0,  6,  0,  8,  0, 10,  0, 12,  0, 14,  0, 16,  0, 18,  0, 20],
+        [ 0,  0,  8,  0,  0,   0,  0,  3,  0,  0,  0,  9,  0,  0, 11,  0,  0, 13,  0,  0, 0, 15,  0, 17,  0],
+        [ 0,  0,  0,  0,  0,   7,  0,  0, 11,  0, 13,  0, 15,  0,  0, 18,  0,  0, 21,  0, 23,  0, 25,  0,  0],
+        [ 0,  0,  0,  0, 10,   0,  0,  0,  0,  0, 12,  0, 14,  0, 16,  0, 18,  0,  0, 22,  0, 24,  0,  0, 25],
+
+        # rest mostly empty pattern (kept consistent structure)
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+        [ 0]*25,
+    ]
+
+    write_dimacs_cnf("input/sudoku_25x25.cnf", generate_sudoku_clauses(grid_25x25))
+    formula_sudoku_25x25 = read_dimacs_cnf("input/sudoku_25x25.cnf")
 
 
 
     # Set formula HERE
-    used_formula = formula_sudoku_9x9
+    # used_formula = formula_sudoku_9x9
 
     clear_console()
-    print('\n'+'-'*txt.separator_lenght)
-    print(txt.BLUE + f"Clauses: {used_formula}" + txt.RESET)
-    print(txt.GREEN + f"Assignment: {{}}" + txt.RESET)
-    print('-'*txt.separator_lenght)
+    # print('\n'+'-'*txt.separator_lenght)
+    # print(txt.BLUE + f"Clauses: {used_formula}" + txt.RESET)
+    # print(txt.GREEN + f"Assignment: {{}}" + txt.RESET)
+    # print('-'*txt.separator_lenght)
 
-    solution = dpll(used_formula)
+    # solution = dpll(used_formula)
+    
+    # print(solution)
 
-    # UNCOMENT for sudoku 4x4 solution
-    # print_sudoku_4x4_solution(solution)
+    # print_sudoku(decode_sudoku(solution,9))
+    
+    solution = dpll(formula_sudoku_4x4)
+    print_sudoku(decode_sudoku(solution, 4))
 
-    # UNCOMENT for sudoku 9x9 solution
-    print_sudoku_9x9_solution(solution)
+    solution = dpll(formula_sudoku_9x9, choose_var_fn=choose_variable_small_clause)
+    print_sudoku(decode_sudoku(solution, 9))
+
+    # solution = solve_sudoku(grid_16x16)
+    # print_sudoku(solution)
+
+    solution = dpll(formula_sudoku_16x16,choose_var_fn=choose_variable_small_clause)
+    print_sudoku(decode_sudoku(solution, 16))
 
     
+
+
+
 
     
 

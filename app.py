@@ -75,6 +75,7 @@ from sat_core.solver_runner import SOLVERS
 
 INPUT_GENERATED = Path("input/generated")
 BENCHMARK_OUTPUT = Path("output/benchmarks")
+APP_ICON_PATH = Path("assets/logo.png")
 SUDOKU_SIZES = (4, 9, 16, 25)
 PROBLEM_KINDS = ("Sudoku", "Graph Coloring", "N-Queens", "Random 3-SAT", "Hamiltonian Path", "Independent Set", "Clique", "DIMACS/CNF")
 BENCHMARK_PROBLEMS = ("Graph Coloring", "Graph Suite", "Sudoku", "N-Queens", "Random 3-SAT", "Hamiltonian Path", "Independent Set", "Clique")
@@ -152,8 +153,9 @@ def parse_timeout_seconds(text: str) -> float | None:
 class SATApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("SAT Problem Solver")
+        self.root.title("WizSAT Problem Solver")
         self.root.geometry("1500x900")
+        self._configure_window_icon()
 
         INPUT_GENERATED.mkdir(parents=True, exist_ok=True)
         BENCHMARK_OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -189,6 +191,31 @@ class SATApp:
         self._build_layout()
         self.root.bind("<Control-w>", lambda _event: self.root.destroy())
         self.root.after(100, self._poll_run_events)
+
+    def _configure_window_icon(self) -> None:
+        if not APP_ICON_PATH.exists():
+            return
+
+        try:
+            self.app_icon = tk.PhotoImage(file=str(APP_ICON_PATH))
+            self.root.iconphoto(True, self.app_icon)
+        except (OSError, tk.TclError):
+            pass
+
+    def _toolbar_logo_image(self):
+        if hasattr(self, "toolbar_logo"):
+            return self.toolbar_logo
+        if not APP_ICON_PATH.exists():
+            self.toolbar_logo = None
+            return None
+
+        try:
+            logo = tk.PhotoImage(file=str(APP_ICON_PATH))
+            scale = max(1, math.ceil(max(logo.width(), logo.height()) / 34))
+            self.toolbar_logo = logo.subsample(scale, scale)
+        except (OSError, tk.TclError):
+            self.toolbar_logo = None
+        return self.toolbar_logo
 
     def _configure_styles(self) -> None:
         self.style = ttk.Style(self.root)
@@ -320,6 +347,10 @@ class SATApp:
     def _build_top_toolbar(self, parent) -> ttk.Frame:
         toolbar = ttk.Frame(parent, padding=(0, 0, 0, 8))
         toolbar.columnconfigure(99, weight=1)
+        logo = self._toolbar_logo_image()
+        if logo is not None:
+            label = ttk.Label(toolbar, image=logo)
+            label.grid(row=0, column=99, sticky="e", padx=(12, 0))
         return toolbar
 
     def _toolbar_button(self, parent, text: str, command, *, style: str | None = None, state=tk.NORMAL):

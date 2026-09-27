@@ -51,7 +51,7 @@ SUMMARY_INTERVAL = 0.2
 
 
 def now_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
 
 
 @dataclass
@@ -80,6 +80,9 @@ class Job:
     terminal_seen: bool = False
     cancel_requested: bool = False
     dirty: bool = False
+    # Bumped every time a summary is published, so clients can drop stale copies
+    # (an HTTP response can arrive after newer WebSocket events).
+    rev: int = 0
     log_window: float = 0.0
     log_sent: int = 0
     log_suppressed: int = 0
@@ -93,6 +96,7 @@ class Job:
         request = self.request or {}
         return {
             "id": self.id,
+            "rev": self.rev,
             "label": self.label,
             "kind": self.kind,
             "title": self.title,
@@ -213,8 +217,10 @@ class JobManager:
             pass
 
     def publish_job(self, job: Job) -> None:
-        job.dirty = False
-        self.publish({"type": "job", "job": job.summary()})
+        with self.lock:
+            job.rev += 1
+            job.dirty = False
+            self.publish({"type": "job", "job": job.summary()})
 
     async def flush_summaries(self) -> None:
         """Push throttled progress updates for jobs marked dirty."""
@@ -237,6 +243,16 @@ class JobManager:
     def summaries(self) -> list[dict[str, Any]]:
         with self.lock:
             return [job.summary() for job in self.jobs.values()]
+
+    def summary(self, job: Job) -> dict[str, Any]:
+        with self.lock:
+            return job.summary()
+
+    def detail(self, job: Job) -> dict[str, Any]:
+        # Under the lock so the snapshot is consistent with its rev and the log
+        # deque is not mutated while it is copied.
+        with self.lock:
+            return job.detail()
 
     def rows(self, job: Job) -> list[dict[str, Any]]:
         with self.lock:

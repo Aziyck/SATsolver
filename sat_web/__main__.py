@@ -6,6 +6,7 @@ Start WizSAT in the browser.
     python -m sat_web --port 8080
     python -m sat_web --build      force a rebuild of the web UI first
     python -m sat_web --dev        auto-reload the Python server (run `npm run dev` in frontend/ for the UI)
+    python -m sat_web --strict-port   fail instead of moving to the next free port
 
 The server only listens on 127.0.0.1 (this machine) unless --host is given.
 """
@@ -13,6 +14,7 @@ The server only listens on 127.0.0.1 (this machine) unless --host is given.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import socket
 import subprocess
@@ -75,11 +77,17 @@ def build_frontend() -> bool:
 def free_port(host: str, port: int, attempts: int = 20) -> int:
     for candidate in range(port, port + attempts):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if os.name != "nt":
+                # uvicorn binds with SO_REUSEADDR, so a port that only has
+                # TIME_WAIT connections left from a previous run is free for it.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind((host, candidate))
             except OSError:
                 continue
             return candidate
+    if attempts == 1:
+        raise SystemExit(f"[wizsat] Port {port} is already in use. Stop the other server or pass --port.")
     raise SystemExit(f"[wizsat] No free port between {port} and {port + attempts - 1}.")
 
 
@@ -93,7 +101,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-browser", action="store_true", help="do not open a browser window")
     parser.add_argument("--build", action="store_true", help="rebuild the web UI before starting")
     parser.add_argument("--skip-build", action="store_true", help="never build the web UI")
-    parser.add_argument("--dev", action="store_true", help="auto-reload the server when Python files change")
+    parser.add_argument("--dev", action="store_true", help="auto-reload the server when Python files change (implies --strict-port)")
+    parser.add_argument("--strict-port", action="store_true", help="exit if the port is busy instead of trying the next one")
     args = parser.parse_args(argv)
 
     try:
@@ -104,7 +113,8 @@ def main(argv: list[str] | None = None) -> None:
     if not args.skip_build and (args.build or frontend_is_stale()):
         build_frontend()
 
-    port = free_port(args.host, args.port)
+    # The Vite dev server proxies to a fixed port, so --dev never moves.
+    port = free_port(args.host, args.port, attempts=1 if args.strict_port or args.dev else 20)
     shown_host = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     url = f"http://{shown_host}:{port}"
     print(f"\n[wizsat] WizSAT is starting at {url}  (press Ctrl+C to stop)\n")

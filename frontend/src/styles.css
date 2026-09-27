@@ -1,0 +1,208 @@
+:root {
+  --wz-page: #f7f6fb;
+  --wz-surface: #fcfcfb;
+  --wz-hairline: rgba(11, 11, 11, 0.1);
+  --wz-muted: #898781;
+  --wz-given: #1d1b2e;
+  --wz-solved: #5a39bd;
+  --wz-cell: #ffffff;
+  --wz-cell-alt: #f3f0fc;
+  --wz-box-line: #3d3560;
+  --wz-board-dark: #cfc6ee;
+  --wz-board-light: #f7f4ff;
+  --wz-conflict: #fde2e2;
+}
+
+[data-mantine-color-scheme="dark"] {
+  --wz-page: #0f0e14;
+  --wz-surface: #1a1a19;
+  --wz-hairline: rgba(255, 255, 255, 0.1);
+  --wz-given: #f1eefc;
+  --wz-solved: #b3a2f0;
+  --wz-cell: #1c1b24;
+  --wz-cell-alt: #24212f;
+  --wz-box-line: #9c8ee0;
+  --wz-board-dark: #3b3358;
+  --wz-board-light: #26222f;
+  --wz-conflict: #4a2020;
+}
+
+body {
+  background: var(--wz-page);
+}
+
+.wz-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.wz-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Problem cards */
+.wz-problem-card {
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  height: 100%;
+}
+.wz-problem-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mantine-shadow-md);
+  border-color: var(--mantine-color-wizard-4);
+}
+.wz-problem-card[data-selected="true"] {
+  border-color: var(--mantine-color-wizard-6);
+  box-shadow: 0 0 0 2px var(--mantine-color-wizard-3);
+}
+.wz-problem-image {
+  height: 110px;
+  object-fit: cover;
+  object-position: center 58%;
+}
+
+/* Sudoku */
+.wz-sudoku {
+  display: grid;
+  border: 2px solid var(--wz-box-line);
+  border-radius: 6px;
+  overflow: hidden;
+  width: fit-content;
+  user-select: none;
+}
+.wz-sudoku-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wz-cell);
+  border-right: 1px solid var(--wz-hairline);
+  border-bottom: 1px solid var(--wz-hairline);
+  font-variant-numeric: tabular-nums;
+  color: var(--wz-given);
+  font-weight: 650;
+  position: relative;
+}
+.wz-sudoku-cell[data-alt="true"] {
+  background: var(--wz-cell-alt);
+}
+.wz-sudoku-cell[data-box-right="true"] {
+  border-right: 2px solid var(--wz-box-line);
+}
+.wz-sudoku-cell[data-box-bottom="true"] {
+  border-bottom: 2px solid var(--wz-box-line);
+}
+.wz-sudoku-cell[data-solved="true"] {
+  color: var(--wz-solved);
+  font-weight: 450;
+}
+.wz-sudoku-cell[data-conflict="true"] {
+  background: var(--wz-conflict);
+}
+.wz-sudoku-input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: none;
+  text-align: center;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  caret-color: var(--mantine-color-wizard-6);
+}
+.wz-sudoku-input:focus {
+  background: var(--mantine-color-wizard-light);
+  box-shadow: inset 0 0 0 2px var(--mantine-color-wizard-5);
+}
+
+/* N-Queens */
+.wz-board {
+  display: grid;
+  border: 2px solid var(--wz-box-line);
+  border-radius: 6px;
+  overflow: hidden;
+  width: fit-content;
+}
+.wz-board-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wz-board-light);
+  color: var(--mantine-color-wizard-8);
+}
+.wz-board-cell[data-dark="true"] {
+  background: var(--wz-board-dark);
+}
+[data-mantine-color-scheme="dark"] .wz-board-cell {
+  color: var(--mantine-color-gold-4);
+}
+
+/* Assignment bits */
+.wz-bits {
+  display: grid;
+  gap: 2px;
+}
+.wz-bit {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.wz-bit[data-value="1"] {
+  background: #2a78d6;
+  color: #fff;
+}
+.wz-bit[data-value="0"] {
+  background: var(--wz-cell-alt);
+  color: var(--wz-muted);
+}
+
+/* Log and CNF viewers */
+.wz-lines {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 20px;
+  background: var(--wz-surface);
+  border: 1px solid var(--wz-hairline);
+  border-radius: 8px;
+}
+.wz-line {
+  white-space: pre;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wz-line-number {
+  display: inline-block;
+  min-width: 52px;
+  color: var(--wz-muted);
+  user-select: none;
+}
+
+/* Graph */
+.wz-graph {
+  width: 100%;
+  border: 1px solid var(--wz-hairline);
+  border-radius: 12px;
+  background: var(--wz-surface);
+  position: relative;
+}
+
+/* Charts */
+.wz-chart {
+  width: 100%;
+}
+
+.wz-table-row {
+  cursor: pointer;
+}
+.wz-table-row:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+.wz-sticky {
+  position: sticky;
+  top: calc(var(--app-shell-header-height, 56px) + 16px);
+}

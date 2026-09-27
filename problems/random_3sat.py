@@ -58,8 +58,18 @@ def unsat_core(variables: list[int]) -> list[list[int]]:
     ]
 
 
-def generate_formula(variables: int, ratio: float, mode: str, sat_percent: float, seed: int) -> tuple[list[list[int]], dict[str, Any]]:
+def generate_formula(
+    variables: int,
+    ratio: float,
+    mode: str,
+    sat_percent: float,
+    seed: int,
+    limit: int | None = None,
+) -> tuple[list[list[int]], dict[str, Any]]:
+    """Generate the formula; limit stops early (the first clauses are identical either way)."""
+
     clauses_wanted = clause_count(variables, ratio)
+    target = clauses_wanted if limit is None else min(limit, clauses_wanted)
     rng = rng_for("3sat", variables, clauses_wanted, mode, sat_percent if mode == "mixed" else None, seed)
     selected = mode
     if mode == "mixed":
@@ -69,7 +79,7 @@ def generate_formula(variables: int, ratio: float, mode: str, sat_percent: float
     clauses: list[list[int]] = []
     if selected == "forced_unsat":
         clauses.extend(unsat_core(rng.sample(range(1, variables + 1), 3)))
-    while len(clauses) < clauses_wanted:
+    while len(clauses) < target:
         clause = _random_clause(rng, variables)
         if selected != "planted" or _satisfied(clause, planted):
             clauses.append(clause)
@@ -189,6 +199,21 @@ class Random3SAT(ProblemSpec):
             facts.append(fact("This formula", MODE_LABELS[metadata["selected_mode"]]))
         facts.append(fact("Seed", metadata["seed"]))
         return facts
+
+    def preview(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        params = self.resolve_seed(params)
+        sample, metadata = generate_formula(
+            params["variables"], params["ratio"], params["mode"], params["sat_percent"], params["seed"], limit=12
+        )
+        clauses = metadata["clauses_requested"]
+        return {
+            "variables": params["variables"],
+            "clauses": clauses,
+            "ratio": clauses / params["variables"],
+            "sample": sample,
+            "selected_mode": metadata["selected_mode"],
+            "seed": params["seed"],
+        }
 
     def visual(self, instance: ProblemInstance) -> dict[str, Any]:
         return {

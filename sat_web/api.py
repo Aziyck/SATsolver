@@ -250,12 +250,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs", status_code=201)
     async def create_job(request: Request, body: JobBody) -> dict[str, Any]:
         normalized, title = await run_in_threadpool(validate_job, body.kind, body.request, body.title)
-        job = manager_of(request).submit(body.kind, normalized, title)
-        return job.summary()
+        manager = manager_of(request)
+        return manager.summary(manager.submit(body.kind, normalized, title))
 
     @app.get("/api/jobs/{job_id}")
     async def get_job(request: Request, job_id: int) -> dict[str, Any]:
-        return job_or_404(request, job_id).detail()
+        return manager_of(request).detail(job_or_404(request, job_id))
 
     @app.get("/api/jobs/{job_id}/rows")
     async def get_rows(request: Request, job_id: int) -> dict[str, Any]:
@@ -266,23 +266,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/jobs/{job_id}/logs")
     async def get_logs(request: Request, job_id: int) -> dict[str, Any]:
         job = job_or_404(request, job_id)
-        return {"job_id": job_id, "logs": list(job.logs)}
+        with manager_of(request).lock:
+            logs = list(job.logs)
+        return {"job_id": job_id, "logs": logs}
 
     @app.post("/api/jobs/{job_id}/cancel")
     async def cancel_job(request: Request, job_id: int) -> dict[str, Any]:
         job_or_404(request, job_id)
-        return manager_of(request).cancel(job_id).summary()
+        manager = manager_of(request)
+        return manager.summary(manager.cancel(job_id))
 
     @app.post("/api/jobs/{job_id}/skip")
     async def skip_case(request: Request, job_id: int) -> dict[str, Any]:
         job_or_404(request, job_id)
-        return manager_of(request).skip(job_id).summary()
+        manager = manager_of(request)
+        return manager.summary(manager.skip(job_id))
 
     @app.post("/api/jobs/{job_id}/rerun", status_code=201)
     async def rerun_job(request: Request, job_id: int) -> dict[str, Any]:
         job = job_or_404(request, job_id)
         normalized, title = await run_in_threadpool(validate_job, job.kind, job.request, job.title)
-        return manager_of(request).submit(job.kind, normalized, title).summary()
+        manager = manager_of(request)
+        return manager.summary(manager.submit(job.kind, normalized, title))
 
     @app.delete("/api/jobs/{job_id}", status_code=204)
     async def delete_job(request: Request, job_id: int) -> Response:

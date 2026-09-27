@@ -190,14 +190,21 @@ class JobTests(ApiTestCase):
             self.assertEqual(hello["type"], "hello")
             job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
             seen = set()
+            revs = []
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 message = socket.receive_json()
                 for event in message["events"]:
                     seen.add(event["type"])
-                    if event["type"] == "job" and event["job"]["id"] == job["id"] and event["job"]["status"] == "done":
-                        deadline = 0
+                    if event["type"] == "job" and event["job"]["id"] == job["id"]:
+                        revs.append(event["job"]["rev"])
+                        if event["job"]["status"] == "done":
+                            deadline = 0
             self.assertTrue({"job", "log", "instance", "result"} <= seen)
+            # Every published summary is newer than the last, so clients can drop stale copies.
+            self.assertEqual(revs, sorted(set(revs)))
+            self.assertIn(job["rev"], revs)
+            self.assertEqual(self.client.get(f"/api/jobs/{job['id']}").json()["rev"], revs[-1])
 
 
 class PersistenceTests(unittest.TestCase):

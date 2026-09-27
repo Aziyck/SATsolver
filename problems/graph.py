@@ -111,7 +111,7 @@ def graph_fields(default_mode: str = "gnp", default_nodes: int = 10) -> tuple[Pa
             "seed",
             "Seed",
             "seed",
-            default=1,
+            default=2,
             optional=True,
             sweepable=True,
             group="graph",

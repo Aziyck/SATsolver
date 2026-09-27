@@ -7,15 +7,16 @@ import time
 from typing import Any, Callable
 
 
-EVENT_LOG = "log"
-EVENT_PROGRESS = "progress"
-EVENT_RESULT = "result"
-EVENT_ROW = "row"
-EVENT_CNF = "cnf"
-EVENT_ERROR = "error"
-EVENT_DONE = "done"
+# Event types sent from worker processes to the server (and on to the UI).
+EVENT_LOG = "log"            # a log line
+EVENT_PROGRESS = "progress"  # current/total progress
+EVENT_INSTANCE = "instance"  # an encoded instance is ready (solve/generate jobs)
+EVENT_RESULT = "result"      # a solver result (solve jobs)
+EVENT_PLAN = "plan"          # benchmark size, sent before the first run
+EVENT_ROW = "row"            # one finished benchmark run
+EVENT_ERROR = "error"        # the job failed
+EVENT_DONE = "done"          # the job finished normally
 EVENT_CANCELLED = "cancelled"
-EVENT_SKIPPED = "skipped"
 
 
 class CancellationError(Exception):

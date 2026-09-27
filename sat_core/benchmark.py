@@ -1,54 +1,56 @@
+"""
+Generic benchmark engine.
+
+A benchmark request says which problem(s) to generate, over which parameter
+grid, and which solvers to run on every generated instance:
+
+    {
+      "problems": ["graph_coloring"],
+      "segments": [{"graph_mode": "gnp", "nodes": "10,20", "probability": [0.1, 0.3], "colors": 3}],
+      "solvers": [{"solver": "cdcl"}, {"solver": "walksat", "options": {"noise": 0.4}}],
+      "repeats": 3,
+      "timeout": 30,
+      "rules": [{"solver": "dpll", "action": "cap", "min_variables": 200, "seconds": 10}],
+      "seed": 1
+    }
+
+- A segment is one parameter grid. Sweepable fields may hold lists or range
+  strings ("1..20", "0.1..0.5:0.1"); the cases are their cartesian product.
+  Several segments let one benchmark cover grids that are not rectangular.
+- Several graph problems may be listed together (a "graph suite"): they share
+  the graph fields, so every problem sees exactly the same graphs.
+- repeats re-run each case; repeat r > 1 derives a fresh seed from the case
+  seed, so repeats are independent samples. Repeat 1 keeps the typed seed, so
+  any row can be reproduced on the Solve page.
+- The same solver may appear several times with different options (to
+  compare heuristics); each entry gets its own label.
+- rules cap the timeout of, or skip, a solver once the formula has at least
+  min_variables variables (see ProblemInstance.size_variables).
+"""
+
 from __future__ import annotations
 
 import csv
-import math
-from pathlib import Path
-from typing import Iterable
+from dataclasses import dataclass, field
+import io
+import json
+import time
+from typing import Any, Iterable
 
-from problems.clique import (
-    average_degree_clique_problem,
-    clique_problem,
-    exact_edges_clique_problem,
-    random_clique_problem,
+from problems import get_problem
+from problems.base import ProblemSpec
+from sat_core.models import (
+    STATUS_CANCELLED,
+    STATUS_ERROR,
+    STATUS_SAT,
+    STATUS_SKIPPED,
+    BenchmarkRow,
 )
-from problems.graph_coloring import (
-    average_degree_graph_coloring_problem,
-    edge_count_from_average_degree,
-    exact_edges_graph_coloring_problem,
-    graph_coloring_problem,
-    random_graph_coloring_problem,
-)
-from problems.hamiltonian_path import (
-    average_degree_hamiltonian_path_problem,
-    exact_edges_hamiltonian_path_problem,
-    hamiltonian_path_problem,
-    random_hamiltonian_path_problem,
-)
-from problems.independent_set import (
-    average_degree_independent_set_problem,
-    exact_edges_independent_set_problem,
-    independent_set_problem,
-    random_independent_set_problem,
-)
-from problems.n_queens import n_queens_problem
-from problems.random_3sat import random_3sat_problem
-from problems.sudoku import sudoku_problem, validate_sudoku_grid
-from sat_core.models import BENCHMARK_HEADERS, BenchmarkRow, ProblemInstance, SolveResult
-from sat_core.benchmark_presets.random_3sat_presets import (
-    RANDOM_3SAT_PRESET_A,
-    RANDOM_3SAT_PRESET_B,
-    RANDOM_3SAT_PRESET_C,
-    RANDOM_3SAT_PRESET_CUSTOM,
-    RANDOM_3SAT_PRESETS,
-    random_3sat_preset_case_count,
-    random_3sat_preset_cases,
-    random_3sat_preset_default_solvers,
-    random_3sat_preset_should_skip_solver,
-    random_3sat_preset_solver_timeout,
-)
+from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_LOG,
+    EVENT_PLAN,
     EVENT_PROGRESS,
     EVENT_ROW,
     RunToken,
@@ -56,1165 +58,611 @@ from sat_core.runtime import (
     emit,
     skip_requested,
 )
-from sat_core.solver_runner import solve_problem
-from utils.graph_utils import generate_random_graph, generate_random_graph_exact_edges, graph_edges
+from sat_core.seeds import fresh_seed, repeat_seed
+from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
+from sat_core.verify import check_assignment
 
 
-SUDOKU_BENCHMARK_SIZES = (4, 9, 16, 25)
-MAX_STORED_BENCHMARK_CLAUSES = 50_000
-RANDOM_3SAT_CSV_HEADERS = [
-    "problem_mode",
-    "n_vars",
-    "ratio",
-    "n_clauses",
-    "sat_fraction",
-    "seed",
-    "solver",
-    "status",
-    "elapsed",
+MAX_BENCHMARK_RUNS = 200_000
+MAX_ROW_DECODED_CHARS = 16_000
+DEFAULT_TIMEOUT = 30.0
+
+# Default safety net for the recursive DPLL baseline on larger formulas.
+# Presets and new benchmarks start with it; it can be edited or removed.
+DPLL_FALLBACK_RULE = {"solver": "dpll", "action": "cap", "min_variables": 200, "seconds": 10.0}
+
+
+@dataclass
+class SolverRun:
+    solver: str
+    options: dict[str, Any]
+    label: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"solver": self.solver, "options": self.options, "label": self.label}
+
+
+@dataclass
+class LimitRule:
+    solver: str
+    action: str
+    min_variables: int = 0
+    seconds: float | None = None
+
+    def matches(self, solver: str, size_variables: int) -> bool:
+        return self.solver in ("*", solver) and size_variables >= self.min_variables
+
+    def describe(self) -> str:
+        who = "every solver" if self.solver == "*" else get_solver(self.solver).title
+        when = f" when variables >= {self.min_variables}" if self.min_variables else ""
+        if self.action == "skip":
+            return f"skip {who}{when}"
+        return f"cap {who} at {self.seconds:g} s{when}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"solver": self.solver, "action": self.action, "min_variables": self.min_variables, "seconds": self.seconds}
+
+
+@dataclass
+class BenchmarkCase:
+    index: int
+    problem: str
+    params: dict[str, Any]
+    repeat: int
+    segment: int
+    label: str
+
+
+@dataclass
+class BenchmarkPlan:
+    problems: list[str]
+    cases: list[BenchmarkCase]
+    solvers: list[SolverRun]
+    rules: list[LimitRule]
+    timeout: float | None
+    repeats: int
+    log_level: str
+    seed: int
+    title: str = ""
+    normalized: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def total_runs(self) -> int:
+        return len(self.cases) * len(self.solvers)
+
+    def summary(self, sample: int = 20) -> dict[str, Any]:
+        estimates = [estimate_case(case) for case in self.cases]
+        known = [estimate for estimate in estimates if estimate]
+        largest = max(known, key=lambda estimate: estimate["clauses"], default=None)
+        return {
+            "cases": len(self.cases),
+            "runs": self.total_runs,
+            "solvers": [solver.label for solver in self.solvers],
+            "rules": [rule.describe() for rule in self.rules],
+            "largest": largest,
+            "total_clauses": sum(estimate["clauses"] for estimate in known) if known else None,
+            "sample": [
+                {"problem": case.problem, "label": case.label, "repeat": case.repeat, "estimate": estimates[index]}
+                for index, case in enumerate(self.cases[:sample])
+            ],
+            "seed": self.seed,
+        }
+
+
+def estimate_case(case: BenchmarkCase) -> dict[str, int] | None:
+    try:
+        return get_problem(case.problem).estimate(case.params)
+    except Exception:  # noqa: BLE001 - estimates are best effort
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Request parsing
+# ---------------------------------------------------------------------------
+
+def _prefixed(prefix: str, error: ParamError) -> ParamError:
+    return ParamError({f"{prefix}.{name}": message for name, message in error.errors.items()})
+
+
+def _parse_solvers(raw_solvers: Any) -> list[SolverRun]:
+    if not isinstance(raw_solvers, list) or not raw_solvers:
+        raise ParamError({"solvers": "select at least one solver"})
+    runs = []
+    for index, raw in enumerate(raw_solvers):
+        if isinstance(raw, str):
+            raw = {"solver": raw}
+        if not isinstance(raw, dict) or "solver" not in raw:
+            raise ParamError({f"solvers.{index}": "needs a solver key"})
+        try:
+            spec = get_solver(raw["solver"])
+        except ValueError as exc:
+            raise ParamError({f"solvers.{index}.solver": str(exc)}) from None
+        try:
+            options = spec.parse_options(raw.get("options"))
+        except ParamError as exc:
+            raise _prefixed(f"solvers.{index}.options", exc) from None
+        runs.append(SolverRun(spec.key, options, str(raw.get("label") or "").strip()))
+
+    # Give every entry a distinct label: "CDCL", or "CDCL (branching=MOMS)"
+    # when the same solver appears more than once.
+    counts: dict[str, int] = {}
+    for run in runs:
+        counts[run.solver] = counts.get(run.solver, 0) + 1
+    seen: set[str] = set()
+    for run in runs:
+        spec = get_solver(run.solver)
+        if not run.label:
+            run.label = spec.title
+            if counts[run.solver] > 1:
+                run.label = f"{spec.title} ({options_summary(spec, run.options)})"
+        base, suffix = run.label, 2
+        while run.label in seen:
+            run.label = f"{base} #{suffix}"
+            suffix += 1
+        seen.add(run.label)
+    return runs
+
+
+def _parse_rules(raw_rules: Any) -> list[LimitRule]:
+    if raw_rules is None:
+        return []
+    if not isinstance(raw_rules, list):
+        raise ParamError({"rules": "must be a list"})
+    rules = []
+    for index, raw in enumerate(raw_rules):
+        prefix = f"rules.{index}"
+        if not isinstance(raw, dict):
+            raise ParamError({prefix: "must be an object"})
+        solver = str(raw.get("solver", "*"))
+        if solver != "*":
+            try:
+                solver = get_solver(solver).key
+            except ValueError as exc:
+                raise ParamError({f"{prefix}.solver": str(exc)}) from None
+        action = raw.get("action", "cap")
+        if action not in ("cap", "skip"):
+            raise ParamError({f"{prefix}.action": "must be cap or skip"})
+        try:
+            min_variables = int(raw.get("min_variables") or 0)
+        except (TypeError, ValueError):
+            raise ParamError({f"{prefix}.min_variables": "must be a whole number"}) from None
+        if min_variables < 0:
+            raise ParamError({f"{prefix}.min_variables": "must not be negative"})
+        seconds = raw.get("seconds")
+        if action == "cap":
+            try:
+                seconds = float(seconds)
+            except (TypeError, ValueError):
+                raise ParamError({f"{prefix}.seconds": "a cap needs a time in seconds"}) from None
+            if seconds < 0:
+                raise ParamError({f"{prefix}.seconds": "must not be negative"})
+        else:
+            seconds = None
+        rules.append(LimitRule(solver, action, min_variables, seconds))
+    return rules
+
+
+def _parse_timeout(raw: Any) -> float | None:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        raise ParamError({"timeout": "must be a number of seconds"}) from None
+    if timeout < 0:
+        raise ParamError({"timeout": "must not be negative"})
+    return timeout
+
+
+def _graph_signature(spec: ProblemSpec, params: dict[str, Any]) -> str:
+    graph_values = {field.name: params.get(field.name) for field in spec.fields if field.group == "graph"}
+    return json.dumps(graph_values, sort_keys=True, default=str)
+
+
+def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
+    if not isinstance(raw, dict):
+        raise ParamError({"_": "the benchmark request must be an object"})
+
+    problem_keys = raw.get("problems") or ([raw["problem"]] if raw.get("problem") else [])
+    if not isinstance(problem_keys, list) or not problem_keys:
+        raise ParamError({"problems": "select a problem"})
+    specs = []
+    for key in problem_keys:
+        try:
+            specs.append(get_problem(key))
+        except ValueError as exc:
+            raise ParamError({"problems": str(exc)}) from None
+    if len(specs) != len({spec.key for spec in specs}):
+        raise ParamError({"problems": "each problem can be selected once"})
+    if len(specs) > 1 and not all(spec.graph_based for spec in specs):
+        raise ParamError({"problems": "only graph problems can be benchmarked together"})
+
+    segments = raw.get("segments")
+    if segments is None:
+        segments = [raw.get("params") or {}]
+    if not isinstance(segments, list) or not segments:
+        raise ParamError({"segments": "add at least one parameter grid"})
+
+    try:
+        repeats = int(raw.get("repeats", 1))
+    except (TypeError, ValueError):
+        raise ParamError({"repeats": "must be a whole number"}) from None
+    if repeats < 1 or repeats > 1000:
+        raise ParamError({"repeats": "must be between 1 and 1000"})
+
+    log_level = raw.get("log_level", "normal")
+    if log_level not in LOG_LEVELS:
+        raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
+
+    base_seed = raw.get("seed")
+    if base_seed is None or (isinstance(base_seed, str) and not base_seed.strip()):
+        base_seed = fresh_seed()
+    try:
+        base_seed = int(base_seed)
+    except (TypeError, ValueError):
+        raise ParamError({"seed": "must be a whole number"}) from None
+
+    solvers = _parse_solvers(raw.get("solvers"))
+    rules = _parse_rules(raw.get("rules"))
+    timeout = _parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
+
+    cases: list[BenchmarkCase] = []
+    for segment_index, segment in enumerate(segments):
+        if not isinstance(segment, dict):
+            raise ParamError({f"segments.{segment_index}": "must be an object"})
+        field_names = {field.name for spec in specs for field in spec.fields}
+        unknown = [name for name in segment if name not in field_names]
+        if unknown:
+            raise ParamError({f"segments.{segment_index}.{name}": "unknown parameter" for name in unknown})
+
+        # expanded[problem_index] = list of parameter dicts for that problem
+        expanded = []
+        for spec in specs:
+            own = {name: value for name, value in segment.items() if any(f.name == name for f in spec.fields)}
+            try:
+                expanded.append(spec.expand(own))
+            except ParamError as exc:
+                raise _prefixed(f"segments.{segment_index}", exc) from None
+
+        def with_seed(spec: ProblemSpec, params: dict[str, Any], repeat: int) -> dict[str, Any]:
+            if not spec.has_visible_seed(params):
+                return params
+            seed = params.get("seed")
+            seed = base_seed if seed is None else seed
+            return {**params, "seed": repeat_seed(seed, repeat)}
+
+        if len(specs) == 1:
+            spec = specs[0]
+            for params in expanded[0]:
+                for repeat in range(1, repeats + 1):
+                    case_params = with_seed(spec, params, repeat)
+                    cases.append(BenchmarkCase(0, spec.key, case_params, repeat, segment_index, spec.case_label(case_params)))
+        else:
+            # Group by graph so every problem runs on a graph before moving on.
+            groups: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+            for problem_index, spec in enumerate(specs):
+                for params in expanded[problem_index]:
+                    groups.setdefault(_graph_signature(spec, params), []).append((problem_index, params))
+            for members in groups.values():
+                for repeat in range(1, repeats + 1):
+                    for problem_index, params in members:
+                        spec = specs[problem_index]
+                        case_params = with_seed(spec, params, repeat)
+                        cases.append(BenchmarkCase(0, spec.key, case_params, repeat, segment_index, spec.case_label(case_params)))
+
+        if len(cases) * len(solvers) > MAX_BENCHMARK_RUNS:
+            raise ParamError({"_": f"more than {MAX_BENCHMARK_RUNS:,} solver runs; narrow the grid"})
+
+    for index, case in enumerate(cases):
+        case.index = index
+
+    normalized = {
+        "problems": [spec.key for spec in specs],
+        "segments": segments,
+        "solvers": [solver.to_dict() for solver in solvers],
+        "repeats": repeats,
+        "timeout": timeout,
+        "rules": [rule.to_dict() for rule in rules],
+        "log_level": log_level,
+        "seed": base_seed,
+        "title": str(raw.get("title") or ""),
+    }
+    return BenchmarkPlan(
+        problems=[spec.key for spec in specs],
+        cases=cases,
+        solvers=solvers,
+        rules=rules,
+        timeout=timeout,
+        repeats=repeats,
+        log_level=log_level,
+        seed=base_seed,
+        title=str(raw.get("title") or ""),
+        normalized=normalized,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Running
+# ---------------------------------------------------------------------------
+
+def display_params(params: dict[str, Any], spec: ProblemSpec | None = None) -> dict[str, Any]:
+    """
+    Parameters for rows and exports: only fields visible for these values
+    (no G(n,p) probability on a manual graph), without bulky payloads such as
+    CNF text.
+    """
+
+    if spec is not None:
+        visible = {field.name for field in spec.fields if field.visible(params)}
+        params = {name: value for name, value in params.items() if name in visible}
+    clean = {}
+    for name, value in params.items():
+        if isinstance(value, dict) and "text" in value:
+            clean[name] = value.get("name") or f"{len(value['text'])} chars"
+        else:
+            clean[name] = value
+    return clean
+
+
+def _small(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        text = json.dumps(value)
+    except (TypeError, ValueError):
+        return None
+    return value if len(text) <= MAX_ROW_DECODED_CHARS else None
+
+
+def limits_for(plan: BenchmarkPlan, solver: str, size_variables: int) -> tuple[bool, float | None, str | None]:
+    """Return (skip, timeout, rule description) for one solver run."""
+
+    timeout = plan.timeout
+    applied = []
+    for rule in plan.rules:
+        if not rule.matches(solver, size_variables):
+            continue
+        if rule.action == "skip":
+            return True, timeout, rule.describe()
+        if timeout is None or rule.seconds < timeout:
+            timeout = rule.seconds
+            applied.append(rule.describe())
+    return False, timeout, (applied[-1] if applied else None)
+
+
+def _row(case, instance, spec, solver, index, **values) -> BenchmarkRow:
+    defaults = dict(
+        index=index,
+        case_index=case.index,
+        problem=case.problem,
+        case_label=case.label,
+        params=display_params(case.params, spec),
+        repeat=case.repeat,
+        solver=solver.solver,
+        solver_label=solver.label,
+        elapsed=0.0,
+        variables=instance.variable_count if instance else 0,
+        clauses=instance.clause_count if instance else 0,
+        size_variables=instance.size_variables if instance else 0,
+        expected=spec.expected_status(instance) if instance else None,
+    )
+    defaults.update(values)
+    return BenchmarkRow(**defaults)
+
+
+def run_benchmark(
+    plan: BenchmarkPlan,
+    event_callback=None,
+    cancel_token: RunToken | None = None,
+) -> list[BenchmarkRow]:
+    rows: list[BenchmarkRow] = []
+    total = plan.total_runs
+    emit(
+        event_callback,
+        EVENT_PLAN,
+        f"Benchmark: {len(plan.cases)} cases x {len(plan.solvers)} solvers = {total} runs",
+        payload={"cases": len(plan.cases), "runs": total, "solvers": [solver.label for solver in plan.solvers]},
+        current=0,
+        total=total,
+    )
+    for rule in plan.rules:
+        emit(event_callback, EVENT_LOG, f"Rule: {rule.describe()}")
+
+    def add(row: BenchmarkRow) -> None:
+        rows.append(row)
+        emit(event_callback, EVENT_ROW, payload={"row": row.to_dict()}, current=len(rows), total=total)
+        emit(event_callback, EVENT_PROGRESS, f"{len(rows)}/{total} runs", current=len(rows), total=total)
+
+    for case in plan.cases:
+        if cancel_requested(cancel_token):
+            emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=len(rows), total=total)
+            return rows
+
+        spec = get_problem(case.problem)
+        prefix = f"[{case.index + 1}/{len(plan.cases)}]"
+        repeat_text = f" repeat {case.repeat}" if plan.repeats > 1 else ""
+        emit(event_callback, EVENT_LOG, f"{prefix} {spec.title}: {case.label}{repeat_text}")
+
+        try:
+            started = time.perf_counter()
+            instance = spec.build(case.params)
+            encode_seconds = time.perf_counter() - started
+        except Exception as exc:  # noqa: BLE001 - one bad case must not stop the sweep
+            message = str(exc) if isinstance(exc, ParamError) else f"{type(exc).__name__}: {exc}"
+            emit(event_callback, EVENT_LOG, f"   encoding failed: {message}")
+            for solver in plan.solvers:
+                add(_row(case, None, spec, solver, len(rows), status=STATUS_ERROR, error=f"Encoding failed: {message}"))
+            continue
+
+        emit(
+            event_callback,
+            EVENT_LOG,
+            f"   {instance.variable_count} variables, {instance.clause_count} clauses (encoded in {encode_seconds:.3f}s)",
+        )
+
+        for position, solver in enumerate(plan.solvers):
+            if cancel_requested(cancel_token):
+                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=len(rows), total=total)
+                return rows
+
+            if skip_requested(cancel_token):
+                emit(event_callback, EVENT_LOG, "   skip requested: remaining runs of this case are SKIPPED")
+                for skipped in plan.solvers[position:]:
+                    add(_row(case, instance, spec, skipped, len(rows), status=STATUS_SKIPPED, rule="skipped by user"))
+                cancel_token.clear_skip()
+                break
+
+            skip, timeout, rule_text = limits_for(plan, solver.solver, instance.size_variables)
+            if skip:
+                emit(event_callback, EVENT_LOG, f"   {solver.label}: skipped ({rule_text})")
+                add(_row(case, instance, spec, solver, len(rows), status=STATUS_SKIPPED, rule=rule_text, timeout=timeout))
+                continue
+
+            result = run_solver(
+                instance.clauses,
+                solver.solver,
+                solver.options,
+                timeout=timeout,
+                log_level=plan.log_level,
+                event_callback=event_callback,
+                cancel_token=cancel_token,
+                label=solver.label,
+            )
+            if result.status == STATUS_CANCELLED:
+                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled during a solver run.", current=len(rows), total=total)
+                return rows
+
+            verified = None
+            check_errors: list[str] = []
+            decoded = None
+            if result.status == STATUS_SAT:
+                verified = check_assignment(instance.clauses, result.solution)
+                if not verified:
+                    check_errors.append("the model does not satisfy every clause")
+                try:
+                    decoded = spec.decode(instance, result.solution)
+                    if decoded is not None:
+                        check_errors.extend(spec.check(instance, decoded))
+                except Exception as exc:  # noqa: BLE001
+                    check_errors.append(f"decoding failed: {exc}")
+                verified = verified and not check_errors
+
+            add(
+                _row(
+                    case,
+                    instance,
+                    spec,
+                    solver,
+                    len(rows),
+                    status=result.status,
+                    elapsed=result.elapsed,
+                    verified=verified,
+                    check_errors=check_errors,
+                    stats=result.stats,
+                    timeout=timeout,
+                    rule=rule_text,
+                    error=result.error,
+                    decoded=_small(decoded),
+                )
+            )
+
+            if result.status == STATUS_SKIPPED:
+                remaining = plan.solvers[position + 1:]
+                if remaining:
+                    emit(event_callback, EVENT_LOG, "   skip requested: remaining runs of this case are SKIPPED")
+                for skipped in remaining:
+                    add(_row(case, instance, spec, skipped, len(rows), status=STATUS_SKIPPED, rule="skipped by user"))
+                if cancel_token is not None:
+                    cancel_token.clear_skip()
+                break
+
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+STAT_COLUMNS = (
     "decisions",
     "conflicts",
     "propagations",
     "learned_clauses",
-    "flips",
+    "restarts",
     "tries",
+    "flips",
     "best_unsatisfied",
+)
+BASE_COLUMNS = (
+    "run",
+    "case",
+    "problem",
+    "case_label",
+    "repeat",
+    "solver",
+    "solver_label",
+    "status",
+    "expected",
+    "verified",
+    "elapsed",
+    "variables",
+    "clauses",
+    "size_variables",
     "timeout",
-]
-
-
-def stored_benchmark_clauses(problem: ProblemInstance) -> list[list[int]]:
-    if problem.clause_count > MAX_STORED_BENCHMARK_CLAUSES:
-        return []
-    return [clause[:] for clause in problem.clauses]
-
-
-def result_to_row(problem: ProblemInstance, result: SolveResult, repeat: int) -> BenchmarkRow:
-    stats = result.stats or {}
-    metadata = dict(problem.metadata)
-    if problem.clause_count > MAX_STORED_BENCHMARK_CLAUSES:
-        metadata["cnf_storage"] = f"skipped; {problem.clause_count} clauses exceeds {MAX_STORED_BENCHMARK_CLAUSES}"
-    return BenchmarkRow(
-        case_name=problem.name,
-        problem_type=problem.problem_type,
-        solver=result.solver,
-        status=result.status,
-        elapsed=result.elapsed,
-        clauses=problem.clause_count,
-        variables=problem.variable_count,
-        repeat=repeat,
-        detail=benchmark_detail(problem),
-        conflicts=stats.get("conflicts", "-"),
-        decisions=stats.get("decisions", "-"),
-        propagations=stats.get("propagations", "-"),
-        learned_clauses=stats.get("learned_clauses", "-"),
-        generation_mode=problem.metadata.get("mode", ""),
-        edge_count=problem.metadata.get("edges", "-"),
-        node_count=problem.metadata.get("nodes", "-"),
-        graph_edges=problem.metadata.get("graph_edges", []),
-        decoded=result.decoded,
-        seed=problem.metadata.get("seed", "-"),
-        solver_options=stats.get("solver_options", ""),
-        problem_metadata=metadata,
-        problem_clauses=stored_benchmark_clauses(problem),
-        flips=stats.get("flips", "-"),
-        tries=stats.get("tries", "-"),
-        best_unsatisfied=stats.get("best_unsatisfied", "-"),
-        timeout=stats.get("timeout", "-"),
-    )
-
-
-def skipped_result(problem: ProblemInstance, solver: str) -> SolveResult:
-    return SolveResult(
-        solver=solver,
-        status="SKIPPED",
-        elapsed=0.0,
-        solution=None,
-        stats={"status": "SKIPPED", "elapsed": 0.0},
-        clauses=problem.clause_count,
-        variables=problem.variable_count,
-    )
-
-
-def _emit_benchmark_result(
-    rows: list[BenchmarkRow],
-    event_callback,
-    problem: ProblemInstance,
-    result: SolveResult,
-    repeat: int,
-    run_index: int,
-    total_runs: int,
-) -> int:
-    run_index += 1
-    row = result_to_row(problem, result, repeat)
-    rows.append(row)
-    emit(event_callback, EVENT_ROW, payload={"row": row}, current=run_index, total=total_runs)
-    emit(event_callback, EVENT_PROGRESS, f"{run_index}/{total_runs} solver runs finished", current=run_index, total=total_runs)
-    emit(event_callback, EVENT_LOG, f"      {result.solver} time: {result.elapsed:.5f}s ({result.status})")
-    return run_index
-
-
-def _clear_skip(cancel_token: RunToken | None) -> None:
-    if cancel_token is not None:
-        cancel_token.clear_skip()
-
-
-def _run_case_solvers(
-    problem: ProblemInstance,
-    solvers: list[str],
-    repeat: int,
-    rows: list[BenchmarkRow],
-    run_index: int,
-    total_runs: int,
-    event_callback,
-    cancel_token: RunToken | None,
-    logging_options: dict | None,
-    timeout_seconds: float | None,
-    timeout_for_solver=None,
-    skip_solver=None,
-) -> tuple[int, bool]:
-    for solver_index, solver in enumerate(solvers):
-        if cancel_requested(cancel_token):
-            emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-            return run_index, False
-
-        if skip_requested(cancel_token):
-            emit(event_callback, EVENT_LOG, "   -> Skip requested; marking current case as SKIPPED.")
-            for skipped_solver in solvers[solver_index:]:
-                run_index = _emit_benchmark_result(
-                    rows,
-                    event_callback,
-                    problem,
-                    skipped_result(problem, skipped_solver),
-                    repeat,
-                    run_index,
-                    total_runs,
-                )
-            _clear_skip(cancel_token)
-            return run_index, True
-
-        if skip_solver is not None and skip_solver(solver, problem):
-            emit(event_callback, EVENT_LOG, f"   -> Skipping {solver} solver by preset policy.")
-            run_index = _emit_benchmark_result(
-                rows,
-                event_callback,
-                problem,
-                skipped_result(problem, solver),
-                repeat,
-                run_index,
-                total_runs,
-            )
-            continue
-
-        emit(event_callback, EVENT_LOG, f"   -> Running {solver} solver...")
-        solver_timeout = timeout_for_solver(solver, problem, timeout_seconds) if timeout_for_solver else timeout_seconds
-        result = solve_problem(
-            problem,
-            solver,
-            event_callback=event_callback,
-            cancel_token=cancel_token,
-            logging_options=logging_options,
-            timeout_seconds=solver_timeout,
-        )
-
-        if result.status == "CANCELLED":
-            emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled during solver run.", current=run_index, total=total_runs)
-            return run_index, False
-
-        run_index = _emit_benchmark_result(
-            rows,
-            event_callback,
-            problem,
-            result,
-            repeat,
-            run_index,
-            total_runs,
-        )
-
-        if result.status == "SKIPPED":
-            remaining_solvers = solvers[solver_index + 1:]
-            if remaining_solvers:
-                emit(event_callback, EVENT_LOG, "   -> Skipping remaining solvers for this case.")
-            for skipped_solver in remaining_solvers:
-                run_index = _emit_benchmark_result(
-                    rows,
-                    event_callback,
-                    problem,
-                    skipped_result(problem, skipped_solver),
-                    repeat,
-                    run_index,
-                    total_runs,
-                )
-            _clear_skip(cancel_token)
-            return run_index, True
-
-    _clear_skip(cancel_token)
-    return run_index, True
-
-
-def benchmark_detail(problem: ProblemInstance) -> str:
-    mode = problem.metadata.get("mode", "")
-    edges = problem.metadata.get("edges", "-")
-
-    if problem.metadata.get("suite"):
-        graph_label = problem.metadata.get("suite_graph_label", "-")
-        if problem.problem_type in ("Independent Set", "Clique"):
-            return f"graph={graph_label}, k={problem.metadata.get('target', '?')}, edges={edges}"
-        if problem.problem_type == "Graph Coloring":
-            return f"graph={graph_label}, colors={problem.metadata.get('colors', '?')}, edges={edges}"
-        return f"graph={graph_label}, edges={edges}"
-
-    if problem.problem_type == "Sudoku":
-        size = problem.metadata.get("size", "?")
-        givens = problem.metadata.get("givens", "?")
-        return f"size={size}, givens={givens}"
-
-    if problem.problem_type == "N-Queens":
-        return f"n={problem.metadata.get('size', '?')}"
-
-    if problem.problem_type == "Random 3-SAT":
-        mode = problem.metadata.get("mode", "random")
-        if mode == "Random" and problem.metadata.get("sat_percentage") is not None:
-            mode = (
-                f"{mode} ({problem.metadata.get('sat_percentage'):g}% SAT, "
-                f"selected {problem.metadata.get('selected_mode', '-')})"
-            )
-        return (
-            f"n={problem.metadata.get('variables', '?')}, "
-            f"m={problem.metadata.get('clauses_requested', '?')}, "
-            f"ratio={problem.metadata.get('ratio', 0):.2f}, "
-            f"{mode}"
-        )
-
-    if problem.problem_type in ("Independent Set", "Clique"):
-        return f"k={problem.metadata.get('target', '?')}, edges={edges}"
-
-    if problem.problem_type in ("Graph Coloring", "Hamiltonian Path"):
-        return f"{mode}, edges={edges}" if mode else f"edges={edges}"
-
-    return ""
-
-
-def graph_coloring_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float],
-    color_counts: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-) -> list[BenchmarkRow]:
-    return run_graph_coloring_sweep(
-        node_counts,
-        probabilities,
-        color_counts,
-        solvers,
-        repeats,
-        seed=seed,
-    )
-
-
-def solved_sudoku_grid(size: int) -> list[list[int]]:
-    root = int(math.sqrt(size))
-    validate_sudoku_grid([[0] * size for _ in range(size)])
-
-    return [
-        [((row * root + row // root + col) % size) + 1 for col in range(size)]
-        for row in range(size)
-    ]
-
-
-def sudoku_benchmark_grid(size: int) -> list[list[int]]:
-    solved = solved_sudoku_grid(size)
-    return [
-        [solved[row][col] if (row + col) % 2 == 0 else 0 for col in range(size)]
-        for row in range(size)
-    ]
-
-
-def sudoku_benchmark_problem(size: int) -> ProblemInstance:
-    grid = sudoku_benchmark_grid(size)
-    problem = sudoku_problem(grid, name=f"Sudoku {size}x{size} benchmark")
-    problem.metadata.update({"mode": "benchmark", "benchmark_size": size})
-    return problem
-
-
-def run_sudoku_sweep(
-    sizes: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    sizes = list(sizes)
-    solvers = list(solvers)
-    rows = []
-    total_cases = len(sizes) * repeats
-    total_runs = total_cases * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for size in sizes:
-        if size not in SUDOKU_BENCHMARK_SIZES:
-            raise ValueError(f"Unsupported Sudoku benchmark size: {size}")
-
-        for repeat in range(1, repeats + 1):
-            if cancel_requested(cancel_token):
-                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                return rows
-
-            case_index += 1
-            case_label = f"Sudoku {size}x{size} benchmark"
-            emit(event_callback, EVENT_LOG, f"[{case_index}/{total_cases}] {case_label} repeat {repeat}")
-            emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-            problem = sudoku_benchmark_problem(size)
-            emit(event_callback, EVENT_LOG, _sudoku_generation_summary(problem))
-
-            run_index, should_continue = _run_case_solvers(
-                problem,
-                solvers,
-                repeat,
-                rows,
-                run_index,
-                total_runs,
-                event_callback,
-                cancel_token,
-                logging_options,
-                timeout_seconds,
-            )
-            if not should_continue:
-                return rows
-
-    return rows
-
-
-def run_n_queens_sweep(
-    sizes: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    sizes = list(sizes)
-    solvers = list(solvers)
-    rows = []
-    total_cases = len(sizes) * repeats
-    total_runs = total_cases * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for size in sizes:
-        for repeat in range(1, repeats + 1):
-            if cancel_requested(cancel_token):
-                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                return rows
-
-            case_index += 1
-            emit(event_callback, EVENT_LOG, f"[{case_index}/{total_cases}] N-Queens n{size} repeat {repeat}")
-            emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-            problem = n_queens_problem(size)
-            emit(event_callback, EVENT_LOG, _generic_generation_summary(problem))
-
-            run_index, should_continue = _run_case_solvers(
-                problem,
-                solvers,
-                repeat,
-                rows,
-                run_index,
-                total_runs,
-                event_callback,
-                cancel_token,
-                logging_options,
-                timeout_seconds,
-            )
-            if not should_continue:
-                return rows
-
-    return rows
-
-
-def _random_3sat_preset_timeout(solver: str, problem: ProblemInstance, timeout_seconds: float | None) -> float | None:
-    return random_3sat_preset_solver_timeout(
-        solver,
-        int(problem.metadata.get("variables", 0)),
-        timeout_seconds,
-        problem.metadata.get("preset"),
-    )
-
-
-def _random_3sat_preset_skip(solver: str, problem: ProblemInstance) -> bool:
-    return random_3sat_preset_should_skip_solver(
-        solver,
-        int(problem.metadata.get("variables", 0)),
-        problem.metadata.get("preset"),
-    )
-
-
-def run_random_3sat_preset(
-    preset_name: str,
-    solvers: Iterable[str],
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    cases = random_3sat_preset_cases(preset_name)
-    solvers = list(solvers)
-    rows = []
-    total_runs = len(cases) * len(solvers)
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for case_index, case in enumerate(cases, start=1):
-        if cancel_requested(cancel_token):
-            emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-            return rows
-
-        problem = random_3sat_problem(
-            case["variable_count"],
-            case["clause_count"],
-            seed=case["seed"],
-            formula_mode=case["formula_mode"],
-            sat_percentage=case["sat_percentage"],
-        )
-        problem.metadata.update({
-            "preset": preset_name,
-            "preset_case_index": case_index,
-            "preset_sat_fraction": case["sat_fraction"],
-        })
-        emit(event_callback, EVENT_LOG, f"[{case_index}/{len(cases)}] {preset_name}: {problem.name} seed {case['seed']}")
-        emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-        emit(event_callback, EVENT_LOG, _random_3sat_generation_summary(problem))
-
-        run_index, should_continue = _run_case_solvers(
-            problem,
-            solvers,
-            case["seed"],
-            rows,
-            run_index,
-            total_runs,
-            event_callback,
-            cancel_token,
-            logging_options,
-            timeout_seconds,
-            timeout_for_solver=_random_3sat_preset_timeout,
-            skip_solver=_random_3sat_preset_skip,
-        )
-        if not should_continue:
-            return rows
-
-    return rows
-
-
-def run_random_3sat_sweep(
-    variable_counts: Iterable[int],
-    clause_ratios: Iterable[float],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    planted: bool = True,
-    formula_mode: str | None = None,
-    sat_percentage: float | None = None,
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    variable_counts = list(variable_counts)
-    clause_ratios = list(clause_ratios)
-    solvers = list(solvers)
-    rows = []
-    total_cases = len(variable_counts) * len(clause_ratios) * repeats
-    total_runs = total_cases * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for variable_count in variable_counts:
-        for ratio in clause_ratios:
-            clause_count = max(1, round(variable_count * ratio))
-            for repeat in range(1, repeats + 1):
-                if cancel_requested(cancel_token):
-                    emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                    return rows
-
-                case_index += 1
-                ratio_seed = int(ratio * 1000)
-                case_seed = None if seed is None else seed + repeat + variable_count * 1000 + ratio_seed
-                problem = random_3sat_problem(
-                    variable_count,
-                    clause_count,
-                    seed=case_seed,
-                    planted=planted,
-                    formula_mode=formula_mode,
-                    sat_percentage=sat_percentage,
-                )
-                emit(event_callback, EVENT_LOG, f"[{case_index}/{total_cases}] {problem.name} repeat {repeat}")
-                emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-                emit(event_callback, EVENT_LOG, _random_3sat_generation_summary(problem))
-
-                run_index, should_continue = _run_case_solvers(
-                    problem,
-                    solvers,
-                    repeat,
-                    rows,
-                    run_index,
-                    total_runs,
-                    event_callback,
-                    cancel_token,
-                    logging_options,
-                    timeout_seconds,
-                )
-                if not should_continue:
-                    return rows
-
-    return rows
-
-
-def run_graph_coloring_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    color_counts: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    node_counts = list(node_counts)
-    if generation_mode == "exact_edges":
-        values = list(edge_counts or [])
-    elif generation_mode == "average_degree":
-        values = list(average_degrees or [])
-    else:
-        values = list(probabilities or [])
-    color_counts = list(color_counts)
-    solvers = list(solvers)
-    rows = []
-    total_cases = len(node_counts) * len(values) * len(color_counts) * repeats
-    total_runs = total_cases * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for n in node_counts:
-        for graph_value in values:
-            for colors in color_counts:
-                for repeat in range(1, repeats + 1):
-                    if cancel_requested(cancel_token):
-                        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                        return rows
-
-                    case_index += 1
-                    seed_component = int(float(graph_value) * 100) if generation_mode in ("probability", "average_degree") else int(graph_value)
-                    case_seed = None if seed is None else seed + repeat + n * 1000 + seed_component * 10 + colors
-                    if generation_mode == "exact_edges":
-                        case_label = f"Graph Coloring n{n}_m{int(graph_value)}_k{colors}"
-                    elif generation_mode == "average_degree":
-                        case_label = f"Graph Coloring n{n}_d{float(graph_value):g}_k{colors}"
-                    else:
-                        case_label = f"Graph Coloring n{n}_p{int(float(graph_value) * 100)}_k{colors}"
-                    emit(
-                        event_callback,
-                        EVENT_LOG,
-                        f"[{case_index}/{total_cases}] {case_label} repeat {repeat}",
-                    )
-                    emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-                    if generation_mode == "exact_edges":
-                        problem = exact_edges_graph_coloring_problem(n, int(graph_value), colors, seed=case_seed)
-                    elif generation_mode == "average_degree":
-                        problem = average_degree_graph_coloring_problem(n, float(graph_value), colors, seed=case_seed)
-                    else:
-                        problem = random_graph_coloring_problem(n, float(graph_value), colors, seed=case_seed)
-                    emit(
-                        event_callback,
-                        EVENT_LOG,
-                        _graph_generation_summary(problem),
-                    )
-
-                    run_index, should_continue = _run_case_solvers(
-                        problem,
-                        solvers,
-                        repeat,
-                        rows,
-                        run_index,
-                        total_runs,
-                        event_callback,
-                        cancel_token,
-                        logging_options,
-                        timeout_seconds,
-                    )
-                    if not should_continue:
-                        return rows
-
-    return rows
-
-
-def run_hamiltonian_path_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    return _run_graph_problem_sweep(
-        "Hamiltonian Path",
-        _hamiltonian_problem_for_mode,
-        node_counts,
-        probabilities,
-        None,
-        solvers,
-        repeats,
-        seed=seed,
-        edge_counts=edge_counts,
-        generation_mode=generation_mode,
-        event_callback=event_callback,
-        cancel_token=cancel_token,
-        average_degrees=average_degrees,
-        logging_options=logging_options,
-        timeout_seconds=timeout_seconds,
-    )
-
-
-def run_independent_set_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    target_sizes: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    return _run_graph_problem_sweep(
-        "Independent Set",
-        _independent_set_problem_for_mode,
-        node_counts,
-        probabilities,
-        list(target_sizes),
-        solvers,
-        repeats,
-        seed=seed,
-        edge_counts=edge_counts,
-        generation_mode=generation_mode,
-        event_callback=event_callback,
-        cancel_token=cancel_token,
-        average_degrees=average_degrees,
-        logging_options=logging_options,
-        timeout_seconds=timeout_seconds,
-    )
-
-
-def run_clique_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    target_sizes: Iterable[int],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    return _run_graph_problem_sweep(
-        "Clique",
-        _clique_problem_for_mode,
-        node_counts,
-        probabilities,
-        list(target_sizes),
-        solvers,
-        repeats,
-        seed=seed,
-        edge_counts=edge_counts,
-        generation_mode=generation_mode,
-        event_callback=event_callback,
-        cancel_token=cancel_token,
-        average_degrees=average_degrees,
-        logging_options=logging_options,
-        timeout_seconds=timeout_seconds,
-    )
-
-
-def run_graph_suite_sweep(
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    suite_problems: Iterable[str],
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    target_sizes: Iterable[int] | None = None,
-    color_counts: Iterable[int] | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    node_counts = list(node_counts)
-    graph_values = _graph_values_for_mode(generation_mode, probabilities, edge_counts, average_degrees)
-    suite_problems = list(suite_problems)
-    solvers = list(solvers)
-    target_sizes = list(target_sizes or [])
-    color_counts = list(color_counts or [])
-    _validate_graph_suite_inputs(suite_problems, target_sizes, color_counts)
-
-    rows = []
-    total_graph_cases = len(node_counts) * len(graph_values) * repeats
-    case_problem_count = _graph_suite_problem_count(suite_problems, target_sizes, color_counts)
-    total_runs = total_graph_cases * case_problem_count * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for node_count in node_counts:
-        for graph_value in graph_values:
-            graph_label = _graph_suite_label(node_count, graph_value, generation_mode)
-            seed_component = int(float(graph_value) * 100) if generation_mode in ("probability", "average_degree") else int(graph_value)
-            for repeat in range(1, repeats + 1):
-                if cancel_requested(cancel_token):
-                    emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                    return rows
-
-                case_index += 1
-                case_seed = None if seed is None else seed + repeat + node_count * 1000 + seed_component * 10
-                graph, graph_metadata = _graph_suite_graph(node_count, graph_value, generation_mode, case_seed)
-                shared_graph_id = f"{graph_label}_r{repeat}"
-                emit(event_callback, EVENT_LOG, f"[{case_index}/{total_graph_cases}] Graph Suite {shared_graph_id}")
-                emit(event_callback, EVENT_LOG, "   -> Generating shared graph...")
-                emit(event_callback, EVENT_LOG, _graph_generation_summary(_graph_suite_summary_problem(graph, graph_label, graph_metadata)))
-
-                for problem in _graph_suite_problems(
-                    graph,
-                    graph_label,
-                    shared_graph_id,
-                    repeat,
-                    suite_problems,
-                    target_sizes,
-                    color_counts,
-                    graph_metadata,
-                ):
-                    emit(event_callback, EVENT_LOG, f"   -> Encoding {problem.name}...")
-                    run_index, should_continue = _run_case_solvers(
-                        problem,
-                        solvers,
-                        repeat,
-                        rows,
-                        run_index,
-                        total_runs,
-                        event_callback,
-                        cancel_token,
-                        logging_options,
-                        timeout_seconds,
-                    )
-                    if not should_continue:
-                        return rows
-
-    return rows
-
-
-def _graph_values_for_mode(
-    generation_mode: str,
-    probabilities: Iterable[float] | None,
-    edge_counts: Iterable[int] | None,
-    average_degrees: Iterable[float] | None,
-) -> list:
-    if generation_mode == "exact_edges":
-        return list(edge_counts or [])
-    if generation_mode == "average_degree":
-        return list(average_degrees or [])
-    return list(probabilities or [])
-
-
-def _validate_graph_suite_inputs(suite_problems: list[str], target_sizes: list[int], color_counts: list[int]) -> None:
-    valid = {"Graph Coloring", "Hamiltonian Path", "Independent Set", "Clique"}
-    if not suite_problems:
-        raise ValueError("Select at least one Graph Suite problem")
-    unknown = [problem for problem in suite_problems if problem not in valid]
-    if unknown:
-        raise ValueError(f"Unknown Graph Suite problem: {unknown[0]}")
-    if any(problem in suite_problems for problem in ("Independent Set", "Clique")) and not target_sizes:
-        raise ValueError("Graph Suite target problems need at least one target k value")
-    if "Graph Coloring" in suite_problems and not color_counts:
-        raise ValueError("Graph Suite graph coloring needs at least one color count")
-
-
-def _graph_suite_problem_count(suite_problems: list[str], target_sizes: list[int], color_counts: list[int]) -> int:
-    total = 0
-    if "Graph Coloring" in suite_problems:
-        total += len(color_counts)
-    if "Hamiltonian Path" in suite_problems:
-        total += 1
-    if "Independent Set" in suite_problems:
-        total += len(target_sizes)
-    if "Clique" in suite_problems:
-        total += len(target_sizes)
-    return total
-
-
-def _graph_suite_label(node_count: int, graph_value, generation_mode: str) -> str:
-    if generation_mode == "exact_edges":
-        return f"n{node_count}_m{int(graph_value)}"
-    if generation_mode == "average_degree":
-        return f"n{node_count}_d{float(graph_value):g}"
-    return f"n{node_count}_p{int(float(graph_value) * 100)}"
-
-
-def _graph_suite_graph(node_count: int, graph_value, generation_mode: str, seed: int | None):
-    import random
-
-    rng = random.Random(seed) if seed is not None else random
-    if generation_mode == "exact_edges":
-        requested_edges = int(graph_value)
-        graph = generate_random_graph_exact_edges(node_count, requested_edges, rng=rng)
-        max_edges = node_count * (node_count - 1) // 2
-        return graph, {
-            "mode": "exact_edges",
-            "requested_edges": requested_edges,
-            "max_edges": max_edges,
-            "edge_request_clamped": requested_edges > max_edges,
-            "seed": seed,
-        }
-    if generation_mode == "average_degree":
-        average_degree = float(graph_value)
-        requested_edges = round(node_count * average_degree / 2)
-        edges = edge_count_from_average_degree(node_count, average_degree)
-        graph = generate_random_graph_exact_edges(node_count, edges, rng=rng)
-        max_edges = node_count * (node_count - 1) // 2
-        return graph, {
-            "mode": "average_degree",
-            "average_degree": average_degree,
-            "requested_edges": requested_edges,
-            "max_edges": max_edges,
-            "edge_request_clamped": requested_edges > max_edges,
-            "seed": seed,
-        }
-
-    probability = float(graph_value)
-    graph = generate_random_graph(node_count, probability, rng=rng)
-    return graph, {"mode": "probability", "probability": probability, "seed": seed}
-
-
-def _graph_suite_summary_problem(graph, graph_label: str, graph_metadata: dict) -> ProblemInstance:
-    metadata = {
-        "nodes": len(graph),
-        "edges": len(graph_edges(graph)),
-        "graph_edges": graph_edges(graph),
-        **graph_metadata,
-    }
-    return ProblemInstance(
-        name=f"Graph Suite {graph_label}",
-        problem_type="Graph Suite",
-        clauses=[],
-        metadata=metadata,
-    )
-
-
-def _apply_graph_suite_metadata(
-    problem: ProblemInstance,
-    graph_label: str,
-    shared_graph_id: str,
-    suite_problem: str,
-    repeat: int,
-    graph_metadata: dict,
-) -> ProblemInstance:
-    problem.metadata.update(graph_metadata)
-    problem.metadata.update({
-        "suite": True,
-        "shared_graph_id": shared_graph_id,
-        "suite_graph_label": graph_label,
-        "suite_problem": suite_problem,
-        "repeat": repeat,
-    })
-    return problem
-
-
-def _graph_suite_problems(
-    graph,
-    graph_label: str,
-    shared_graph_id: str,
-    repeat: int,
-    suite_problems: list[str],
-    target_sizes: list[int],
-    color_counts: list[int],
-    graph_metadata: dict,
-) -> list[ProblemInstance]:
-    problems = []
-    if "Graph Coloring" in suite_problems:
-        for colors in color_counts:
-            problem = graph_coloring_problem(
-                graph,
-                int(colors),
-                name=f"Graph Suite {graph_label} Graph Coloring colors{int(colors)}",
-            )
-            problems.append(_apply_graph_suite_metadata(problem, graph_label, shared_graph_id, "Graph Coloring", repeat, graph_metadata))
-    if "Hamiltonian Path" in suite_problems:
-        problem = hamiltonian_path_problem(graph, name=f"Graph Suite {graph_label} Hamiltonian Path")
-        problems.append(_apply_graph_suite_metadata(problem, graph_label, shared_graph_id, "Hamiltonian Path", repeat, graph_metadata))
-    if "Independent Set" in suite_problems:
-        for target in target_sizes:
-            problem = independent_set_problem(
-                graph,
-                int(target),
-                name=f"Graph Suite {graph_label} Independent Set k{int(target)}",
-            )
-            problems.append(_apply_graph_suite_metadata(problem, graph_label, shared_graph_id, "Independent Set", repeat, graph_metadata))
-    if "Clique" in suite_problems:
-        for target in target_sizes:
-            problem = clique_problem(
-                graph,
-                int(target),
-                name=f"Graph Suite {graph_label} Clique k{int(target)}",
-            )
-            problems.append(_apply_graph_suite_metadata(problem, graph_label, shared_graph_id, "Clique", repeat, graph_metadata))
-    return problems
-
-
-def _run_graph_problem_sweep(
-    label: str,
-    problem_builder,
-    node_counts: Iterable[int],
-    probabilities: Iterable[float] | None,
-    target_values: list[int] | None,
-    solvers: Iterable[str],
-    repeats: int,
-    seed: int | None = None,
-    edge_counts: Iterable[int] | None = None,
-    generation_mode: str = "probability",
-    event_callback=None,
-    cancel_token: RunToken | None = None,
-    average_degrees: Iterable[float] | None = None,
-    logging_options: dict | None = None,
-    timeout_seconds: float | None = None,
-) -> list[BenchmarkRow]:
-    node_counts = list(node_counts)
-    if generation_mode == "exact_edges":
-        graph_values = list(edge_counts or [])
-    elif generation_mode == "average_degree":
-        graph_values = list(average_degrees or [])
-    else:
-        graph_values = list(probabilities or [])
-
-    targets = target_values if target_values is not None else [None]
-    solvers = list(solvers)
-    rows = []
-    total_cases = len(node_counts) * len(graph_values) * len(targets) * repeats
-    total_runs = total_cases * len(solvers)
-    case_index = 0
-    run_index = 0
-
-    if cancel_requested(cancel_token):
-        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled before start.", current=0, total=total_runs)
-        return rows
-
-    for node_count in node_counts:
-        for graph_value in graph_values:
-            for target in targets:
-                for repeat in range(1, repeats + 1):
-                    if cancel_requested(cancel_token):
-                        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=run_index, total=total_runs)
-                        return rows
-
-                    case_index += 1
-                    seed_component = int(float(graph_value) * 100) if generation_mode in ("probability", "average_degree") else int(graph_value)
-                    case_seed = None if seed is None else seed + repeat + node_count * 1000 + seed_component * 10 + int(target or 0)
-                    problem = problem_builder(node_count, graph_value, target, generation_mode, case_seed)
-                    emit(event_callback, EVENT_LOG, f"[{case_index}/{total_cases}] {problem.name} repeat {repeat}")
-                    emit(event_callback, EVENT_LOG, "   -> Generating CNF...")
-                    emit(event_callback, EVENT_LOG, _graph_generation_summary(problem))
-
-                    run_index, should_continue = _run_case_solvers(
-                        problem,
-                        solvers,
-                        repeat,
-                        rows,
-                        run_index,
-                        total_runs,
-                        event_callback,
-                        cancel_token,
-                        logging_options,
-                        timeout_seconds,
-                    )
-                    if not should_continue:
-                        return rows
-
-    return rows
-
-
-def _hamiltonian_problem_for_mode(node_count, graph_value, _target, generation_mode, seed):
-    if generation_mode == "exact_edges":
-        return exact_edges_hamiltonian_path_problem(node_count, int(graph_value), seed=seed)
-    if generation_mode == "average_degree":
-        return average_degree_hamiltonian_path_problem(node_count, float(graph_value), seed=seed)
-    return random_hamiltonian_path_problem(node_count, float(graph_value), seed=seed)
-
-
-def _independent_set_problem_for_mode(node_count, graph_value, target, generation_mode, seed):
-    if generation_mode == "exact_edges":
-        return exact_edges_independent_set_problem(node_count, int(graph_value), int(target), seed=seed)
-    if generation_mode == "average_degree":
-        return average_degree_independent_set_problem(node_count, float(graph_value), int(target), seed=seed)
-    return random_independent_set_problem(node_count, float(graph_value), int(target), seed=seed)
-
-
-def _clique_problem_for_mode(node_count, graph_value, target, generation_mode, seed):
-    if generation_mode == "exact_edges":
-        return exact_edges_clique_problem(node_count, int(graph_value), int(target), seed=seed)
-    if generation_mode == "average_degree":
-        return average_degree_clique_problem(node_count, float(graph_value), int(target), seed=seed)
-    return random_clique_problem(node_count, float(graph_value), int(target), seed=seed)
-
-
-def _graph_generation_summary(problem: ProblemInstance) -> str:
-    edges = problem.metadata.get("edges")
-    requested_edges = problem.metadata.get("requested_edges")
-    average_degree = problem.metadata.get("average_degree")
-    if average_degree is not None:
-        if problem.metadata.get("edge_request_clamped"):
-            return (
-                f"      Requested average degree: {average_degree:g} "
-                f"({requested_edges} edges), Generated edges: {edges} "
-                f"(complete graph), Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-            )
-
-        return (
-            f"      Average degree: {average_degree:g}, Edges: {edges}, "
-            f"Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-        )
-
-    if problem.metadata.get("edge_request_clamped"):
-        return (
-            f"      Requested edges: {requested_edges}, Generated edges: {edges} "
-            f"(complete graph), Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-        )
-
-    return f"      Edges: {edges}, Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-
-
-def _sudoku_generation_summary(problem: ProblemInstance) -> str:
-    size = problem.metadata.get("size")
-    givens = problem.metadata.get("givens")
-    return f"      Size: {size}x{size}, Givens: {givens}, Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-
-
-def _generic_generation_summary(problem: ProblemInstance) -> str:
-    return f"      Clauses: {problem.clause_count}, Variables: {problem.variable_count}"
-
-
-def _random_3sat_generation_summary(problem: ProblemInstance) -> str:
-    sat_mix = ""
-    if problem.metadata.get("mode") == "Random" and problem.metadata.get("sat_percentage") is not None:
-        sat_mix = (
-            f", SAT target: {problem.metadata.get('sat_percentage'):g}%, "
-            f"Selected: {problem.metadata.get('selected_mode')}"
-        )
-    return (
-        f"      Variables: {problem.metadata.get('variables')}, "
-        f"Clauses: {problem.metadata.get('clauses_requested')}, "
-        f"Ratio: {problem.metadata.get('ratio', 0):.2f}, "
-        f"Mode: {problem.metadata.get('mode')}{sat_mix}"
-    )
-
-
-def write_benchmark_csv(path: str | Path, rows: list[BenchmarkRow]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    with target.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(BENCHMARK_HEADERS)
-        for row in rows:
-            writer.writerow(row.as_csv_row())
-
-
-def _random_3sat_sat_fraction(row: BenchmarkRow):
-    metadata = row.problem_metadata
-    if "preset_sat_fraction" in metadata:
-        return metadata["preset_sat_fraction"]
-    if metadata.get("mode") == "Planted SAT":
-        return 1.0
-    if metadata.get("mode") == "Forced UNSAT":
-        return 0.0
-    sat_percentage = metadata.get("sat_percentage")
-    if sat_percentage is None:
+    "rule",
+)
+
+
+def csv_columns(rows: Iterable[BenchmarkRow | dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Parameter columns (in first-seen order) and all columns."""
+
+    param_names: list[str] = []
+    for row in rows:
+        params = row.params if isinstance(row, BenchmarkRow) else row.get("params", {})
+        for name in params:
+            if name not in param_names:
+                param_names.append(name)
+    columns = list(BASE_COLUMNS[:4]) + param_names + list(BASE_COLUMNS[4:]) + list(STAT_COLUMNS) + ["error"]
+    return param_names, columns
+
+
+def rows_to_csv(rows: list[BenchmarkRow | dict[str, Any]], run_label: str = "") -> str:
+    """One CSV format for every problem: base columns, one column per parameter, stats."""
+
+    param_names, columns = csv_columns(rows)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(columns)
+    for row in rows:
+        data = row.to_dict() if isinstance(row, BenchmarkRow) else row
+        label = data.get("run_label", run_label)
+        params = data.get("params", {})
+        stats = data.get("stats", {})
+        values = [label, data["case_index"] + 1, data["problem"], data["case_label"]]
+        values += [_csv_value(params.get(name, "")) for name in param_names]
+        values += [
+            data["repeat"],
+            data["solver"],
+            data["solver_label"],
+            data["status"],
+            data.get("expected") or "",
+            "" if data.get("verified") is None else data["verified"],
+            f"{data['elapsed']:.6f}",
+            data["variables"],
+            data["clauses"],
+            data.get("size_variables", ""),
+            "" if data.get("timeout") is None else data["timeout"],
+            data.get("rule") or "",
+        ]
+        values += [stats.get(name, "") for name in STAT_COLUMNS]
+        values.append(data.get("error") or "")
+        writer.writerow(values)
+    return buffer.getvalue()
+
+
+def _csv_value(value: Any) -> Any:
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, separators=(",", ":"))
+    if value is None:
         return ""
-    return float(sat_percentage) / 100
-
-
-def random_3sat_csv_row(row: BenchmarkRow) -> list:
-    metadata = row.problem_metadata
-    return [
-        metadata.get("mode", ""),
-        metadata.get("variables", ""),
-        metadata.get("ratio", ""),
-        metadata.get("clauses_requested", row.clauses),
-        _random_3sat_sat_fraction(row),
-        metadata.get("seed", row.seed),
-        row.solver,
-        row.status,
-        f"{row.elapsed:.8f}",
-        row.decisions,
-        row.conflicts,
-        row.propagations,
-        row.learned_clauses,
-        row.flips,
-        row.tries,
-        row.best_unsatisfied,
-        row.timeout,
-    ]
-
-
-def write_random_3sat_benchmark_csv(path: str | Path, rows: list[BenchmarkRow]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    with target.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(RANDOM_3SAT_CSV_HEADERS)
-        for row in rows:
-            writer.writerow(random_3sat_csv_row(row))
+    return value

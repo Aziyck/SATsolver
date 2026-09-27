@@ -1,123 +1,199 @@
+"""
+Random 3-SAT formulas.
+
+A formula has n variables and m = round(n * ratio) clauses of three distinct
+variables with random signs. Around ratio 4.26 random formulas switch from
+mostly satisfiable to mostly unsatisfiable, and are hardest to decide there.
+
+Modes:
+- planted: pick a hidden assignment first and keep only clauses it
+  satisfies, so the formula is guaranteed SAT;
+- forced_unsat: add all 8 sign patterns over 3 variables (a tiny
+  unsatisfiable core), so the formula is guaranteed UNSAT;
+- mixed: each formula is planted with probability "SAT share", otherwise
+  forced UNSAT (useful for mixed benchmarks with a known answer);
+- random: plain random clauses; the answer is unknown in advance.
+"""
+
 from __future__ import annotations
 
-import random
+from typing import Any
 
-from sat_core.models import ProblemInstance
-
-RANDOM_3SAT_MODES = ("Planted SAT", "Forced UNSAT", "Random")
-
-
-def _decode_assignment(solution: dict[int, bool]) -> dict[str, list[int]]:
-    true_variables = sorted(var for var, value in solution.items() if value)
-    false_variables = sorted(var for var, value in solution.items() if not value)
-    return {
-        "true_variables": true_variables,
-        "false_variables": false_variables,
-    }
+from problems.assignment import assignment_bits
+from problems.base import ProblemSpec, fact, register_problem
+from sat_core.models import STATUS_SAT, STATUS_UNSAT, ProblemInstance
+from sat_core.params import Choice, ParamError, ParamField, format_value
+from sat_core.seeds import rng_for
 
 
-def _clause_is_satisfied(clause: list[int], assignment: dict[int, bool]) -> bool:
+MODES = (
+    Choice("planted", "Planted SAT", "Satisfiable by construction."),
+    Choice("forced_unsat", "Forced UNSAT", "Contains an 8-clause unsatisfiable core."),
+    Choice("mixed", "Mixed SAT/UNSAT", "Planted with probability SAT share, otherwise forced UNSAT."),
+    Choice("random", "Random", "Unconstrained random clauses; SAT or UNSAT is not known in advance."),
+)
+MODE_LABELS = {choice.value: choice.label for choice in MODES}
+
+
+def clause_count(variables: int, ratio: float) -> int:
+    return max(1, round(variables * ratio))
+
+
+def _random_clause(rng, variables: int) -> list[int]:
+    chosen = rng.sample(range(1, variables + 1), 3)
+    return [variable if rng.random() < 0.5 else -variable for variable in chosen]
+
+
+def _satisfied(clause: list[int], assignment: dict[int, bool]) -> bool:
     return any(assignment[abs(lit)] == (lit > 0) for lit in clause)
 
 
-def _random_clause(rng, variable_count: int) -> list[int]:
-    variables = rng.sample(range(1, variable_count + 1), 3)
+def unsat_core(variables: list[int]) -> list[list[int]]:
+    a, b, c = variables
     return [
-        variable if rng.choice((False, True)) else -variable
-        for variable in variables
+        [a * sa, b * sb, c * sc]
+        for sa in (1, -1)
+        for sb in (1, -1)
+        for sc in (1, -1)
     ]
 
 
-def _forced_unsat_core(variables: list[int]) -> list[list[int]]:
-    a, b, c = variables
-    clauses = []
-    for a_positive in (False, True):
-        for b_positive in (False, True):
-            for c_positive in (False, True):
-                clauses.append([
-                    a if a_positive else -a,
-                    b if b_positive else -b,
-                    c if c_positive else -c,
-                ])
-    return clauses
+def generate_formula(variables: int, ratio: float, mode: str, sat_percent: float, seed: int) -> tuple[list[list[int]], dict[str, Any]]:
+    clauses_wanted = clause_count(variables, ratio)
+    rng = rng_for("3sat", variables, clauses_wanted, mode, sat_percent if mode == "mixed" else None, seed)
+    selected = mode
+    if mode == "mixed":
+        selected = "planted" if rng.random() < sat_percent / 100 else "forced_unsat"
 
+    planted = {variable: rng.random() < 0.5 for variable in range(1, variables + 1)}
+    clauses: list[list[int]] = []
+    if selected == "forced_unsat":
+        clauses.extend(unsat_core(rng.sample(range(1, variables + 1), 3)))
+    while len(clauses) < clauses_wanted:
+        clause = _random_clause(rng, variables)
+        if selected != "planted" or _satisfied(clause, planted):
+            clauses.append(clause)
 
-def random_3sat_problem(
-    variable_count: int,
-    clause_count: int,
-    seed: int | None = None,
-    planted: bool = True,
-    formula_mode: str | None = None,
-    sat_percentage: float | None = None,
-) -> ProblemInstance:
-    if variable_count < 3:
-        raise ValueError("Random 3-SAT needs at least 3 variables")
-    if clause_count <= 0:
-        raise ValueError("Clause count must be positive")
-
-    if formula_mode is None:
-        formula_mode = "Planted SAT" if planted else "Random"
-    if formula_mode not in RANDOM_3SAT_MODES:
-        raise ValueError(f"Unknown Random 3-SAT mode: {formula_mode}")
-    if formula_mode == "Forced UNSAT" and clause_count < 8:
-        raise ValueError("Forced UNSAT Random 3-SAT needs at least 8 clauses")
-    if sat_percentage is not None and (sat_percentage < 0 or sat_percentage > 100):
-        raise ValueError("Random 3-SAT SAT target must be between 0 and 100")
-    if formula_mode == "Random" and sat_percentage is not None and sat_percentage < 100 and clause_count < 8:
-        raise ValueError("Random 3-SAT SAT/UNSAT mix needs at least 8 clauses")
-
-    rng = random.Random(seed) if seed is not None else random
-    selected_mode = formula_mode
-    random_sat_percentage = sat_percentage
-    if formula_mode == "Random":
-        if sat_percentage is not None:
-            random_sat_percentage = float(sat_percentage)
-            selected_mode = "Planted SAT" if rng.random() < random_sat_percentage / 100 else "Forced UNSAT"
-
-    planted_assignment = {
-        variable: rng.choice((False, True))
-        for variable in range(1, variable_count + 1)
+    metadata = {
+        "variables": variables,
+        "clauses_requested": clauses_wanted,
+        "ratio": ratio,
+        "mode": mode,
+        "selected_mode": selected,
+        "sat_percent": sat_percent if mode == "mixed" else None,
+        "seed": seed,
     }
-    clauses = []
+    return clauses, metadata
 
-    if selected_mode == "Forced UNSAT":
-        core_variables = rng.sample(range(1, variable_count + 1), 3)
-        clauses.extend(_forced_unsat_core(core_variables))
 
-    while len(clauses) < clause_count:
-        while True:
-            clause = _random_clause(rng, variable_count)
-            if selected_mode != "Planted SAT" or _clause_is_satisfied(clause, planted_assignment):
-                clauses.append(clause)
-                break
-
-    ratio = clause_count / variable_count
-    name = f"Random 3-SAT n{variable_count}_m{clause_count}"
-    mode_suffix = {
-        "Planted SAT": "planted_sat",
-        "Forced UNSAT": "forced_unsat",
-        "Random": "random",
-    }[formula_mode]
-    name += f"_{mode_suffix}"
-    if formula_mode == "Random" and random_sat_percentage is not None:
-        name += f"_sat{random_sat_percentage:g}_{selected_mode.lower().replace(' ', '_')}"
-
-    return ProblemInstance(
-        name=name,
-        problem_type="Random 3-SAT",
-        clauses=clauses,
-        metadata={
-            "variables": variable_count,
-            "clauses_requested": clause_count,
-            "width": 3,
-            "ratio": ratio,
-            "seed": seed,
-            "mode": formula_mode,
-            "selected_mode": selected_mode,
-            "sat_percentage": random_sat_percentage,
-            "unsat_percentage": None if random_sat_percentage is None else 100 - random_sat_percentage,
-            "planted": selected_mode == "Planted SAT",
-            "forced_unsat": selected_mode == "Forced UNSAT",
-        },
-        decoder=_decode_assignment,
+@register_problem
+class Random3SAT(ProblemSpec):
+    key = "random_3sat"
+    title = "Random 3-SAT"
+    summary = "Random formulas with three literals per clause; hardest near 4.26 clauses per variable."
+    description = (
+        "m = round(n x ratio) clauses, each over three distinct variables with random signs. "
+        "Planted formulas are SAT by construction and forced ones UNSAT; plain random formulas "
+        "show the SAT/UNSAT phase transition around ratio 4.26."
     )
+    category = "logic"
+    image = "3sat.jpg"
+    result_view = "assignment"
+    fields = (
+        ParamField("variables", "Variables n", "int", default=50, minimum=3, maximum=100_000, sweepable=True, short="n"),
+        ParamField(
+            "ratio",
+            "Clauses per variable",
+            "float",
+            default=4.26,
+            minimum=0.01,
+            maximum=20.0,
+            step=0.05,
+            sweepable=True,
+            short="r",
+            help="m = round(n x ratio). The phase transition is near 4.26.",
+        ),
+        ParamField("mode", "Formula", "choice", default="planted", choices=MODES, sweepable=True, short="mode"),
+        ParamField(
+            "sat_percent",
+            "SAT share",
+            "float",
+            default=50.0,
+            minimum=0.0,
+            maximum=100.0,
+            step=5.0,
+            unit="%",
+            sweepable=True,
+            show_if=(("mode", ("mixed",)),),
+            short="sat",
+            help="Probability that a formula is planted SAT (otherwise forced UNSAT).",
+        ),
+        ParamField(
+            "seed",
+            "Seed",
+            "seed",
+            default=1,
+            optional=True,
+            sweepable=True,
+            placeholder="random",
+            short="seed",
+            help="Same parameters and seed give the same formula.",
+        ),
+    )
+
+    def validate(self, params: dict[str, Any]) -> None:
+        clauses = clause_count(params["variables"], params["ratio"])
+        needs_core = params["mode"] == "forced_unsat" or (params["mode"] == "mixed" and params["sat_percent"] < 100)
+        if needs_core and clauses < 8:
+            raise ParamError({"ratio": f"forced UNSAT formulas need at least 8 clauses (currently {clauses})"})
+
+    def estimate(self, params: dict[str, Any]) -> dict[str, int]:
+        return {"variables": params["variables"], "clauses": clause_count(params["variables"], params["ratio"])}
+
+    def case_label(self, params: dict[str, Any]) -> str:
+        parts = [f"n={params['variables']}", f"r={format_value(params['ratio'])}", MODE_LABELS[params["mode"]]]
+        if params["mode"] == "mixed":
+            parts.append(f"sat={format_value(params['sat_percent'])}%")
+        parts.append(f"seed={format_value(params.get('seed'))}")
+        return " ".join(parts)
+
+    def encode(self, params: dict[str, Any]) -> ProblemInstance:
+        variables = params["variables"]
+        clauses, metadata = generate_formula(variables, params["ratio"], params["mode"], params["sat_percent"], params["seed"])
+        return ProblemInstance(
+            name=self.instance_name(params),
+            problem_type=self.key,
+            clauses=clauses,
+            metadata=metadata,
+            decoder=lambda solution: assignment_bits(solution, variables),
+        )
+
+    def expected_status(self, instance: ProblemInstance) -> str | None:
+        selected = instance.metadata["selected_mode"]
+        if selected == "planted":
+            return STATUS_SAT
+        if selected == "forced_unsat":
+            return STATUS_UNSAT
+        return None
+
+    def describe(self, instance: ProblemInstance) -> list[dict[str, Any]]:
+        metadata = instance.metadata
+        facts = [
+            fact("Variables n", metadata["variables"]),
+            fact("Clauses m", len(instance.clauses)),
+            fact("Ratio m/n", round(len(instance.clauses) / metadata["variables"], 3)),
+            fact("Formula", MODE_LABELS[metadata["mode"]]),
+        ]
+        if metadata["mode"] == "mixed":
+            facts.append(fact("SAT share", f"{metadata['sat_percent']:g}%"))
+            facts.append(fact("This formula", MODE_LABELS[metadata["selected_mode"]]))
+        facts.append(fact("Seed", metadata["seed"]))
+        return facts
+
+    def visual(self, instance: ProblemInstance) -> dict[str, Any]:
+        return {
+            "variables": instance.metadata["variables"],
+            "clauses": len(instance.clauses),
+            "ratio": len(instance.clauses) / instance.metadata["variables"],
+            "sample": instance.clauses[:12],
+        }

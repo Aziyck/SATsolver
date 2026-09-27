@@ -1,142 +1,120 @@
+"""
+Independent set of size k.
+
+Variable x(s, v) = "slot s of the set holds node v", numbered
+readable_pair_var(s, v, n). Using k slots turns "at least k nodes" into
+"exactly k distinct nodes", which is equivalent for this decision problem.
+
+Clauses:
+- each slot holds exactly one node;
+- a node fills at most one slot;
+- the two ends of an edge are never both chosen.
+"""
+
 from __future__ import annotations
 
-import random
+from typing import Any
 
-from problems.graph_coloring import edge_count, edge_count_from_average_degree, normalize_graph, parse_edge_list
+from problems.base import fact, register_problem
+from problems.encoding import comb2, readable_pair_var
+from problems.graph import Graph, GraphProblemSpec, expected_edges, graph_fields, validate_graph_params
 from sat_core.models import ProblemInstance
-from utils.general_utils import readable_pair_var
-from utils.graph_utils import generate_random_graph, generate_random_graph_exact_edges, graph_edges
+from sat_core.params import ParamError, ParamField
 
 
-Graph = dict[int, list[int]]
+TARGET_FIELD = ParamField(
+    "target",
+    "Target size k",
+    "int",
+    default=3,
+    minimum=1,
+    maximum=500,
+    sweepable=True,
+    short="k",
+)
 
 
-def independent_var(slot: int, node: int, node_count: int) -> int:
-    return readable_pair_var(slot, node, node_count)
+def slot_var(slot: int, node: int, nodes: int) -> int:
+    return readable_pair_var(slot, node, nodes)
 
 
-def decode_independent_set(solution: dict[int, bool], node_count: int, target_size: int) -> dict:
-    selected = []
-
-    for slot in range(1, target_size + 1):
-        for node in range(1, node_count + 1):
-            if solution.get(independent_var(slot, node, node_count)):
-                selected.append(node)
-                break
-
-    return {"selected": selected}
-
-
-def independent_set_problem(graph: Graph, target_size: int, name: str | None = None) -> ProblemInstance:
-    node_count = len(graph)
-    if node_count <= 0:
-        raise ValueError("Node count must be positive")
-    if target_size < 1 or target_size > node_count:
-        raise ValueError(f"Independent set target k must be between 1 and {node_count}")
+def slot_clauses(nodes: int, target: int) -> list[list[int]]:
+    """k slots, each with exactly one node, and no node in two slots."""
 
     clauses = []
+    for slot in range(1, target + 1):
+        clauses.append([slot_var(slot, node, nodes) for node in range(1, nodes + 1)])
+        for first in range(1, nodes + 1):
+            for second in range(first + 1, nodes + 1):
+                clauses.append([-slot_var(slot, first, nodes), -slot_var(slot, second, nodes)])
+    for node in range(1, nodes + 1):
+        for first in range(1, target + 1):
+            for second in range(first + 1, target + 1):
+                clauses.append([-slot_var(first, node, nodes), -slot_var(second, node, nodes)])
+    return clauses
 
-    for slot in range(1, target_size + 1):
-        clauses.append([independent_var(slot, node, node_count) for node in range(1, node_count + 1)])
-        for n1 in range(1, node_count + 1):
-            for n2 in range(n1 + 1, node_count + 1):
-                clauses.append([
-                    -independent_var(slot, n1, node_count),
-                    -independent_var(slot, n2, node_count),
-                ])
 
-    for node in range(1, node_count + 1):
-        for s1 in range(1, target_size + 1):
-            for s2 in range(s1 + 1, target_size + 1):
-                clauses.append([
-                    -independent_var(s1, node, node_count),
-                    -independent_var(s2, node, node_count),
-                ])
+def decode_selection(solution: dict[int, bool], nodes: int, target: int) -> dict[str, Any]:
+    selected = []
+    for slot in range(1, target + 1):
+        for node in range(1, nodes + 1):
+            if solution.get(slot_var(slot, node, nodes)):
+                selected.append(node)
+                break
+    return {"selected": sorted(selected)}
 
-    for node in range(1, node_count + 1):
-        for neighbour in graph[node]:
-            if node >= neighbour:
-                continue
-            for s1 in range(1, target_size + 1):
-                for s2 in range(1, target_size + 1):
-                    clauses.append([
-                        -independent_var(s1, node, node_count),
-                        -independent_var(s2, neighbour, node_count),
-                    ])
 
-    edges = edge_count(graph)
-    return ProblemInstance(
-        name=name or f"Independent Set n{node_count}_e{edges}_k{target_size}",
-        problem_type="Independent Set",
-        clauses=clauses,
-        metadata={"nodes": node_count, "edges": edges, "graph_edges": graph_edges(graph), "target": target_size},
-        decoder=lambda solution: decode_independent_set(solution, node_count, target_size),
+def validate_target(params: dict[str, Any]) -> None:
+    validate_graph_params(params)
+    if params["target"] > params["nodes"]:
+        raise ParamError({"target": f"k must be between 1 and the number of nodes ({params['nodes']})"})
+
+
+@register_problem
+class IndependentSet(GraphProblemSpec):
+    key = "independent_set"
+    title = "Independent Set"
+    summary = "Choose k nodes with no edge between any two of them."
+    description = (
+        "Variables x(s,v) mean slot s of the set holds node v. Each of the k slots holds exactly "
+        "one node, no node fills two slots, and the ends of an edge are never both chosen."
     )
+    image = "independent_set.jpg"
+    fields = graph_fields() + (TARGET_FIELD,)
 
+    def validate(self, params: dict[str, Any]) -> None:
+        validate_target(params)
 
-def manual_independent_set_problem(node_count: int, target_size: int, edge_text: str) -> ProblemInstance:
-    graph = normalize_graph(node_count, parse_edge_list(edge_text))
-    problem = independent_set_problem(graph, target_size, name=f"Independent Set manual n{node_count}_k{target_size}")
-    problem.metadata.update({"mode": "manual"})
-    return problem
+    def estimate(self, params: dict[str, Any]) -> dict[str, int]:
+        n, k = params["nodes"], params["target"]
+        clauses = k + k * comb2(n) + n * comb2(k) + expected_edges(params) * k * k
+        return {"variables": n * k, "clauses": int(clauses)}
 
+    def encode_graph(self, graph: Graph, params: dict[str, Any]) -> ProblemInstance:
+        nodes, target = graph.nodes, params["target"]
+        clauses = slot_clauses(nodes, target)
+        for u, v in graph.edges:
+            for first in range(1, target + 1):
+                for second in range(1, target + 1):
+                    clauses.append([-slot_var(first, u, nodes), -slot_var(second, v, nodes)])
+        return ProblemInstance(
+            name=self.title,
+            problem_type=self.key,
+            clauses=clauses,
+            metadata={"target": target},
+            decoder=lambda solution: decode_selection(solution, nodes, target),
+        )
 
-def random_independent_set_problem(
-    node_count: int,
-    probability: float,
-    target_size: int,
-    seed: int | None = None,
-) -> ProblemInstance:
-    if probability < 0 or probability > 1:
-        raise ValueError("Edge probability must be between 0 and 1")
+    def check(self, instance: ProblemInstance, decoded: Any) -> list[str]:
+        selected = decoded["selected"]
+        errors = []
+        if len(set(selected)) != instance.metadata["target"]:
+            errors.append(f"expected {instance.metadata['target']} distinct nodes, got {len(set(selected))}")
+        chosen = set(selected)
+        for u, v in self.graph_of(instance).edges:
+            if u in chosen and v in chosen:
+                errors.append(f"nodes {u} and {v} are adjacent")
+        return errors
 
-    rng = random.Random(seed) if seed is not None else random
-    graph = generate_random_graph(node_count, probability, rng=rng)
-    problem = independent_set_problem(graph, target_size, name=f"Independent Set n{node_count}_p{int(probability * 100)}_k{target_size}")
-    problem.metadata.update({"mode": "probability", "probability": probability, "seed": seed})
-    return problem
-
-
-def exact_edges_independent_set_problem(
-    node_count: int,
-    edges: int,
-    target_size: int,
-    seed: int | None = None,
-) -> ProblemInstance:
-    max_edges = node_count * (node_count - 1) // 2
-    if edges < 0:
-        raise ValueError("Edge count must not be negative")
-
-    rng = random.Random(seed) if seed is not None else random
-    graph = generate_random_graph_exact_edges(node_count, edges, rng=rng)
-    problem = independent_set_problem(graph, target_size, name=f"Independent Set n{node_count}_m{edges}_k{target_size}")
-    problem.metadata.update({
-        "mode": "exact_edges",
-        "requested_edges": edges,
-        "max_edges": max_edges,
-        "edge_request_clamped": edges > max_edges,
-        "seed": seed,
-    })
-    return problem
-
-
-def average_degree_independent_set_problem(
-    node_count: int,
-    average_degree: float,
-    target_size: int,
-    seed: int | None = None,
-) -> ProblemInstance:
-    if average_degree < 0:
-        raise ValueError("Average degree must not be negative")
-
-    requested_edges = round(node_count * average_degree / 2)
-    edges = edge_count_from_average_degree(node_count, average_degree)
-    problem = exact_edges_independent_set_problem(node_count, edges, target_size, seed=seed)
-    problem.name = f"Independent Set n{node_count}_d{average_degree:g}_k{target_size}"
-    problem.metadata.update({
-        "mode": "average_degree",
-        "average_degree": average_degree,
-        "requested_edges": requested_edges,
-        "edge_request_clamped": requested_edges > problem.metadata["max_edges"],
-    })
-    return problem
+    def describe(self, instance: ProblemInstance) -> list[dict[str, Any]]:
+        return [fact("Target k", instance.metadata["target"])] + super().describe(instance)

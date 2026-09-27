@@ -2,7 +2,7 @@ import unittest
 
 from sat_core.runtime import EVENT_LOG
 from sat_core.runtime import RunToken
-from sat_core.solver_runner import solve_clauses
+from sat_core.solver_registry import run_solver
 from solvers.walksat import _UnsatisfiedTracker, walksat
 
 
@@ -190,63 +190,43 @@ class WalkSATTests(unittest.TestCase):
         self.assertEqual(cancelled_stats["status"], "CANCELLED")
         self.assertEqual(timeout_stats["status"], "TIMEOUT")
 
-    def test_solver_runner_supports_walksat(self):
-        result = solve_clauses([[1]], "WalkSAT", logging_options={"random_seed": 3})
+    def test_run_solver_supports_walksat(self):
+        result = run_solver([[1]], "walksat", {"random_seed": 3})
 
-        self.assertEqual(result.solver, "WalkSAT")
+        self.assertEqual(result.solver, "walksat")
         self.assertEqual(result.status, "SAT")
         self.assertIn("flips", result.stats)
 
-    def test_solver_runner_maps_walksat_specific_options(self):
-        result = solve_clauses(
+    def test_run_solver_maps_walksat_options(self):
+        result = run_solver(
             [[1], [-1]],
-            "WalkSAT",
-            logging_options={
-                "random_seed": 1,
-                "walksat_random_seed": 9,
-                "walksat_max_tries": 2,
-                "walksat_max_flips": 3,
-                "walksat_noise": 0.25,
-                "walksat_selection_mode": "probsat",
-                "walksat_adaptive_noise": True,
-            },
+            "walksat",
+            {"random_seed": 9, "max_tries": 2, "max_flips": 3, "noise": 0.25, "adaptive_noise": True},
         )
 
         self.assertEqual(result.status, "UNKNOWN")
-        self.assertIn("tries=2", result.stats["solver_options"])
-        self.assertIn("flips=3", result.stats["solver_options"])
-        self.assertIn("noise=0.25", result.stats["solver_options"])
-        self.assertIn("strategy=probsat", result.stats["solver_options"])
-        self.assertIn("adaptive_noise=on", result.stats["solver_options"])
-        self.assertIn("seed=9", result.stats["solver_options"])
+        self.assertIsNone(result.solution)
+        self.assertEqual(result.stats["tries"], 2)
+        self.assertEqual(result.stats["flips"], 6)
+        self.assertEqual(result.stats["selection_mode"], "walksat")
+        self.assertTrue(result.stats["adaptive_noise"])
+        self.assertNotIn("best_assignment", result.stats)
+        self.assertNotIn("hard_clause_hits", result.stats)
 
-    def test_solver_runner_maps_probsat_specific_options(self):
-        result = solve_clauses(
-            [[1], [-1]],
-            "ProbSAT",
-            logging_options={
-                "random_seed": 1,
-                "walksat_random_seed": 9,
-                "walksat_max_tries": 2,
-                "walksat_max_flips": 3,
-                "walksat_noise": 0.25,
-                "probsat_random_seed": 11,
-                "probsat_max_tries": 4,
-                "probsat_max_flips": 5,
-                "probsat_noise": 0.15,
-                "probsat_adaptive_noise": True,
-            },
-        )
+    def test_run_solver_probsat_uses_probabilistic_selection(self):
+        result = run_solver([[1], [-1]], "ProbSAT", {"random_seed": 11, "max_tries": 4, "max_flips": 5, "noise": 0.15})
 
-        self.assertEqual(result.solver, "ProbSAT")
+        self.assertEqual(result.solver, "probsat")
         self.assertEqual(result.status, "UNKNOWN")
-        self.assertIn("tries=4", result.stats["solver_options"])
-        self.assertIn("flips=5", result.stats["solver_options"])
-        self.assertIn("noise=0.15", result.stats["solver_options"])
-        self.assertIn("strategy=probsat", result.stats["solver_options"])
-        self.assertIn("adaptive_noise=on", result.stats["solver_options"])
-        self.assertIn("seed=11", result.stats["solver_options"])
+        self.assertEqual(result.stats["tries"], 4)
+        self.assertEqual(result.stats["flips"], 20)
+        self.assertEqual(result.stats["selection_mode"], "probsat")
 
+    def test_run_solver_rejects_invalid_options(self):
+        with self.assertRaises(ValueError):
+            run_solver([[1]], "walksat", {"noise": 1.5})
+        with self.assertRaises(ValueError):
+            run_solver([[1]], "walksat", {"unknown": 1})
 
 if __name__ == "__main__":
     unittest.main()

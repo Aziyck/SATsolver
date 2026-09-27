@@ -1,7 +1,27 @@
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+venv/
+
+# App data (generated CNFs, job files, results database, exports)
 input/generated/
 output/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.tsbuildinfo
+
+# OS / editors
 .DS_Store
-venv
+Thumbs.db
+.idea/
+.vscode/

@@ -2,13 +2,13 @@ import unittest
 
 from solvers.cdcl import Clause, cdcl, clause_lbd, learned_clause_delete_key, learned_clauses_to_delete
 from solvers.dpll import dpll
-from problems.clique import clique_var
+from problems import build_problem
+from problems.encoding import color_var, sudoku_var
 from problems.hamiltonian_path import hamiltonian_var
-from problems.independent_set import independent_var
-from problems.n_queens import n_queens_problem, n_queens_var
+from problems.independent_set import slot_var
+from problems.n_queens import n_queens_var
+from problems.sudoku import sudoku_clauses
 from sat_core.dimacs import load_dimacs
-from utils.general_utils import color_var, sudoku_var
-from utils.sudoku_general import generate_sudoku_clauses
 
 
 def satisfies(clauses, model):
@@ -116,7 +116,7 @@ class CDCLTests(unittest.TestCase):
             self.assertTrue(satisfies(formula, cdcl_solution))
 
     def test_n_queens_sat_with_limited_conflicts(self):
-        problem = n_queens_problem(15)
+        problem = build_problem("n_queens", {"size": 15})
 
         solution, stats = cdcl(problem.clauses, max_conflicts=500, return_stats=True)
 
@@ -175,17 +175,16 @@ class CDCLTests(unittest.TestCase):
         self.assertIn("deleted_learned_clauses", stats)
         self.assertIn("avg_lbd", stats)
 
-    def test_encoder_split_and_sudoku_generation(self):
+    def test_readable_variable_numbering_and_sudoku_clauses(self):
         self.assertEqual(sudoku_var(1, 2, 3), 10203)
         self.assertEqual(n_queens_var(1, 1, 4), 101)
         self.assertEqual(color_var(2, 3, 10), 203)
         self.assertEqual(color_var(2, 101, 101), 2101)
         self.assertEqual(hamiltonian_var(1, 3, 10), 103)
-        self.assertEqual(clique_var(2, 3, 10), 203)
-        self.assertEqual(independent_var(2, 3, 10), 203)
+        self.assertEqual(slot_var(2, 3, 10), 203)
 
         grid = [[0] * 4 for _ in range(4)]
-        clauses = generate_sudoku_clauses(grid)
+        clauses = sudoku_clauses(grid)
 
         self.assertIn([sudoku_var(1, 1, 1), sudoku_var(1, 1, 2), sudoku_var(1, 1, 3), sudoku_var(1, 1, 4)], clauses)
 

@@ -1,311 +1,126 @@
 import unittest
 
-from sat_core.benchmark import (
-    run_clique_sweep,
-    run_graph_coloring_sweep,
-    run_graph_suite_sweep,
-    run_hamiltonian_path_sweep,
-    run_independent_set_sweep,
-    run_n_queens_sweep,
-    run_sudoku_sweep,
-)
-from sat_core.runtime import EVENT_CANCELLED, EVENT_LOG, EVENT_PROGRESS, EVENT_ROW, RunEvent, RunToken
-from sat_core.solver_runner import solve_clauses
+from sat_core.runtime import EVENT_LOG, EVENT_PROGRESS, RunEvent, RunToken
+from sat_core.solver_registry import all_solvers, get_solver, options_summary, run_solver
 
 
-class RuntimeTests(unittest.TestCase):
+def log_messages(events):
+    return [event.message for event in events if event.type == EVENT_LOG]
+
+
+class RunTokenTests(unittest.TestCase):
     def test_run_event_serializes(self):
-        event = RunEvent(EVENT_PROGRESS, "halfway", current=1, total=2)
-        data = event.as_dict()
+        data = RunEvent(EVENT_PROGRESS, "halfway", current=1, total=2).as_dict()
 
         self.assertEqual(data["type"], EVENT_PROGRESS)
         self.assertEqual(data["message"], "halfway")
-        self.assertEqual(data["current"], 1)
-        self.assertEqual(data["total"], 2)
+        self.assertEqual((data["current"], data["total"]), (1, 2))
         self.assertIn("created_at", data)
 
-    def test_benchmark_emits_row_and_progress_events(self):
-        events = []
+    def test_child_token_sees_parent_cancel_and_skip(self):
+        parent = RunToken()
+        child = RunToken(timeout_seconds=60, parent=parent)
+        self.assertFalse(child.is_cancelled())
 
-        rows = run_graph_coloring_sweep(
-            [3],
-            [0.2],
-            [2],
-            ["CDCL"],
-            repeats=1,
-            seed=1,
-            event_callback=events.append,
-        )
+        parent.skip()
+        self.assertTrue(child.skip_requested())
+        parent.clear_skip()
+        parent.cancel()
+        self.assertTrue(child.is_cancelled())
 
-        self.assertEqual(len(rows), 1)
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
+    def test_zero_timeout_expires_immediately(self):
+        self.assertTrue(RunToken(timeout_seconds=0).timed_out())
 
-    def test_exact_edge_benchmark_emits_rows(self):
-        rows = run_graph_coloring_sweep(
-            [4],
-            None,
-            [2],
-            ["CDCL"],
-            repeats=1,
-            edge_counts=[3],
-            generation_mode="exact_edges",
-        )
 
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].generation_mode, "exact_edges")
-        self.assertEqual(rows[0].edge_count, 3)
-
-    def test_average_degree_benchmark_emits_rows(self):
-        rows = run_graph_coloring_sweep(
-            [4],
-            None,
-            [2],
-            ["CDCL"],
-            repeats=1,
-            generation_mode="average_degree",
-            average_degrees=[2],
-        )
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].generation_mode, "average_degree")
-        self.assertEqual(rows[0].edge_count, 4)
-
-    def test_sudoku_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_sudoku_sweep([4], ["CDCL"], repeats=1, event_callback=events.append)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].problem_type, "Sudoku")
-        self.assertEqual(rows[0].detail, "size=4, givens=8")
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_sudoku_benchmark_rejects_unsupported_size(self):
+class RunSolverTests(unittest.TestCase):
+    def test_registry_lists_four_solvers(self):
+        self.assertEqual([spec.key for spec in all_solvers()], ["cdcl", "dpll", "walksat", "probsat"])
+        self.assertEqual(get_solver("CDCL").key, "cdcl")
+        self.assertEqual(get_solver("Prob SAT").key, "probsat")
         with self.assertRaises(ValueError):
-            run_sudoku_sweep([5], ["CDCL"], repeats=1)
+            get_solver("minisat")
 
-    def test_cancelled_sudoku_benchmark_before_start_returns_no_rows(self):
+    def test_every_solver_finds_a_model(self):
+        formula = [[1, 2], [-1, 2], [-2, 3]]
+        for spec in all_solvers():
+            with self.subTest(solver=spec.key):
+                result = run_solver(formula, spec.key, {"random_seed": 1} if spec.key != "dpll" else None)
+                self.assertEqual(result.status, "SAT")
+                self.assertTrue(result.solution[2] and result.solution[3])
+
+    def test_complete_solvers_prove_unsat(self):
+        for key in ("cdcl", "dpll"):
+            with self.subTest(solver=key):
+                self.assertEqual(run_solver([[1, 2], [1, -2], [-1, 2], [-1, -2]], key).status, "UNSAT")
+
+    def test_cancel_before_start(self):
+        for key in ("cdcl", "dpll", "walksat"):
+            token = RunToken()
+            token.cancel()
+            with self.subTest(solver=key):
+                self.assertEqual(run_solver([[1]], key, cancel_token=token).status, "CANCELLED")
+
+    def test_timeout_before_start(self):
         events = []
-        token = RunToken()
-        token.cancel()
-
-        rows = run_sudoku_sweep([4], ["CDCL"], repeats=1, event_callback=events.append, cancel_token=token)
-
-        self.assertEqual(rows, [])
-        self.assertTrue(any(event.type == EVENT_CANCELLED for event in events))
-
-    def test_n_queens_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_n_queens_sweep([4], ["CDCL"], repeats=1, event_callback=events.append)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].problem_type, "N-Queens")
-        self.assertEqual(rows[0].detail, "n=4")
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_hamiltonian_path_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_hamiltonian_path_sweep([3], [1.0], ["CDCL"], repeats=1, event_callback=events.append)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].problem_type, "Hamiltonian Path")
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_independent_set_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_independent_set_sweep([3], [0.0], [2], ["CDCL"], repeats=1, event_callback=events.append)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].problem_type, "Independent Set")
-        self.assertIn("k=2", rows[0].detail)
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_clique_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_clique_sweep([3], [1.0], [3], ["CDCL"], repeats=1, event_callback=events.append)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].problem_type, "Clique")
-        self.assertIn("k=3", rows[0].detail)
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_graph_suite_benchmark_emits_row_and_progress_events(self):
-        events = []
-
-        rows = run_graph_suite_sweep(
-            [3],
-            [1.0],
-            ["Clique", "Independent Set"],
-            ["CDCL"],
-            repeats=1,
-            target_sizes=[2],
-            event_callback=events.append,
-        )
-
-        self.assertEqual(len(rows), 2)
-        self.assertEqual({row.problem_type for row in rows}, {"Clique", "Independent Set"})
-        self.assertEqual(len({row.problem_metadata["shared_graph_id"] for row in rows}), 1)
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-        self.assertTrue(any(event.type == EVENT_PROGRESS for event in events))
-
-    def test_new_benchmarks_validate_inputs(self):
-        with self.assertRaises(ValueError):
-            run_n_queens_sweep([0], ["CDCL"], repeats=1)
-        with self.assertRaises(ValueError):
-            run_independent_set_sweep([2], [0.0], [3], ["CDCL"], repeats=1)
-        with self.assertRaises(ValueError):
-            run_clique_sweep([2], [1.0], [3], ["CDCL"], repeats=1)
-
-    def test_cancelled_n_queens_benchmark_before_start_returns_no_rows(self):
-        events = []
-        token = RunToken()
-        token.cancel()
-
-        rows = run_n_queens_sweep([4], ["CDCL"], repeats=1, event_callback=events.append, cancel_token=token)
-
-        self.assertEqual(rows, [])
-        self.assertTrue(any(event.type == EVENT_CANCELLED for event in events))
-
-    def test_benchmark_solver_logging_options_are_forwarded(self):
-        events = []
-
-        run_n_queens_sweep(
-            [4],
-            ["CDCL"],
-            repeats=1,
-            event_callback=events.append,
-            logging_options={"mode": "periodic", "progress_interval": 1},
-        )
-        messages = [event.message for event in events if event.type == EVENT_LOG]
-
-        self.assertTrue(any("CDCL progress" in message for message in messages))
-
-    def test_cancelled_benchmark_before_start_returns_no_rows(self):
-        events = []
-        token = RunToken()
-        token.cancel()
-
-        rows = run_graph_coloring_sweep(
-            [3],
-            [0.2],
-            [2],
-            ["CDCL"],
-            repeats=1,
-            event_callback=events.append,
-            cancel_token=token,
-        )
-
-        self.assertEqual(rows, [])
-        self.assertTrue(any(event.type == EVENT_CANCELLED for event in events))
-
-    def test_cdcl_cancelled_before_start(self):
-        token = RunToken()
-        token.cancel()
-
-        result = solve_clauses([[1]], "CDCL", cancel_token=token)
-
-        self.assertEqual(result.status, "CANCELLED")
-
-    def test_dpll_cancelled_before_start(self):
-        token = RunToken()
-        token.cancel()
-
-        result = solve_clauses([[1]], "DPLL", cancel_token=token)
-
-        self.assertEqual(result.status, "CANCELLED")
-
-    def test_walksat_cancelled_before_start(self):
-        token = RunToken()
-        token.cancel()
-
-        result = solve_clauses([[1]], "WalkSAT", cancel_token=token)
-
-        self.assertEqual(result.status, "CANCELLED")
-
-    def test_solver_timeout_before_start_returns_timeout(self):
-        events = []
-
-        result = solve_clauses([[1]], "CDCL", event_callback=events.append, timeout_seconds=0)
-        messages = [event.message for event in events if event.type == EVENT_LOG]
+        result = run_solver([[1]], "cdcl", timeout=0, event_callback=events.append)
 
         self.assertEqual(result.status, "TIMEOUT")
-        self.assertTrue(any("timed out" in message for message in messages))
+        self.assertTrue(any("timed out" in message for message in log_messages(events)))
 
-    def test_benchmark_timeout_records_row_and_continues(self):
-        events = []
-
-        rows = run_n_queens_sweep([4], ["CDCL"], repeats=1, event_callback=events.append, timeout_seconds=0)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].status, "TIMEOUT")
-        self.assertTrue(any(event.type == EVENT_ROW for event in events))
-
-    def test_solver_skip_before_start_returns_skipped(self):
+    def test_skip_before_start(self):
         token = RunToken()
         token.skip()
 
-        result = solve_clauses([[1]], "CDCL", cancel_token=token)
+        self.assertEqual(run_solver([[1]], "cdcl", cancel_token=token).status, "SKIPPED")
 
-        self.assertEqual(result.status, "SKIPPED")
-
-    def test_benchmark_skip_marks_current_case_and_continues(self):
-        token = RunToken()
-        token.skip()
-
-        rows = run_n_queens_sweep([4, 4], ["CDCL"], repeats=1, cancel_token=token)
-
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0].status, "SKIPPED")
-        self.assertEqual(rows[1].status, "SAT")
-
-    def test_cdcl_normal_logging_emits_start_finish_and_stats(self):
+    def test_normal_logging_reports_start_finish_and_stats(self):
         events = []
+        run_solver([[1]], "cdcl", event_callback=events.append)
+        messages = log_messages(events)
 
-        result = solve_clauses([[1]], "CDCL", event_callback=events.append)
-        messages = [event.message for event in events if event.type == EVENT_LOG]
-
-        self.assertEqual(result.status, "SAT")
         self.assertTrue(any("Solving with CDCL" in message for message in messages))
-        self.assertTrue(any("CDCL finished" in message for message in messages))
+        self.assertTrue(any("CDCL finished: SAT" in message for message in messages))
         self.assertTrue(any("CDCL stats" in message for message in messages))
 
-    def test_cdcl_periodic_logging_emits_progress(self):
+    def test_periodic_and_debug_logging(self):
         events = []
+        run_solver([[1, 2], [-1, 2]], "cdcl", log_level="periodic", progress_interval=1, event_callback=events.append)
+        self.assertTrue(any("CDCL progress" in message for message in log_messages(events)))
 
-        solve_clauses(
-            [[1, 2], [-1, 2]],
-            "CDCL",
-            event_callback=events.append,
-            logging_options={"mode": "periodic", "progress_interval": 1},
-        )
-        messages = [event.message for event in events if event.type == EVENT_LOG]
-
-        self.assertTrue(any("CDCL progress" in message for message in messages))
-
-    def test_dpll_debug_logging_emits_debug_messages(self):
         events = []
+        run_solver([[1, 2], [-1, 2]], "dpll", log_level="debug", progress_interval=1, event_callback=events.append)
+        self.assertTrue(any("DPLL debug" in message for message in log_messages(events)))
 
-        result = solve_clauses(
-            [[1, 2], [-1, 2]],
-            "DPLL",
-            event_callback=events.append,
-            logging_options={"mode": "debug", "progress_interval": 1, "verbose_limit": 5},
-        )
-        messages = [event.message for event in events if event.type == EVENT_LOG]
+        with self.assertRaises(ValueError):
+            run_solver([[1]], "cdcl", log_level="chatty")
 
-        self.assertEqual(result.status, "SAT")
-        self.assertTrue(any("DPLL debug" in message for message in messages))
-        self.assertTrue(any("DPLL stats" in message for message in messages))
+    def test_solver_exceptions_become_error_status(self):
+        # 1,500 independent 2-clauses need 1,500 nested DPLL decisions, deeper
+        # than Python's default recursion limit.
+        clauses = [[2 * i + 1, 2 * i + 2] for i in range(1500)]
+
+        result = run_solver(clauses, "dpll")
+
+        self.assertEqual(result.status, "ERROR")
+        self.assertIn("recursion limit", result.error)
+        self.assertEqual(run_solver(clauses, "cdcl").status, "SAT")
+
+    def test_cdcl_options_are_applied(self):
+        formula = [[1, 2], [-1, 2], [1, -2]]
+        for branching in ("vsids", "frequent", "moms", "dlis", "random"):
+            with self.subTest(branching=branching):
+                result = run_solver(formula, "cdcl", {"branching": branching, "random_seed": 3})
+                self.assertEqual(result.status, "SAT")
+
+        spec = get_solver("cdcl")
+        options = spec.parse_options({"branching": "moms", "restarts": True, "restart_interval": 5})
+        self.assertEqual(options_summary(spec, options), "branching=MOMS; restarts=on; restart_interval=5")
+        self.assertEqual(options_summary(spec, spec.default_options()), "defaults")
+
+    def test_public_stats_are_small_scalars(self):
+        result = run_solver([[1, 2], [-1, 2]], "walksat", {"random_seed": 2})
+
+        self.assertTrue(all(isinstance(value, (int, float, str, bool, type(None))) for value in result.stats.values()))
 
 
 if __name__ == "__main__":

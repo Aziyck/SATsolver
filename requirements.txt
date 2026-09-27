@@ -1,0 +1,3 @@
+# Runtime dependencies of the web app (the solvers and encoders are pure Python).
+fastapi>=0.110
+uvicorn[standard]>=0.29

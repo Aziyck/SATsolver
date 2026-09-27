@@ -1,61 +1,27 @@
-from problems.dimacs_problem import dimacs_problem_from_text
-from problems.clique import (
-    average_degree_clique_problem,
-    clique_problem,
-    clique_var,
-    exact_edges_clique_problem,
-    manual_clique_problem,
-    random_clique_problem,
-)
-from problems.graph_coloring import (
-    average_degree_graph_coloring_problem,
-    edge_count_from_average_degree,
-    exact_edges_graph_coloring_problem,
-    graph_coloring_problem,
-    random_graph_coloring_problem,
-)
-from problems.hamiltonian_path import (
-    average_degree_hamiltonian_path_problem,
-    exact_edges_hamiltonian_path_problem,
-    hamiltonian_path_problem,
-    manual_hamiltonian_path_problem,
-    random_hamiltonian_path_problem,
-)
-from problems.independent_set import (
-    average_degree_independent_set_problem,
-    exact_edges_independent_set_problem,
-    independent_set_problem,
-    manual_independent_set_problem,
-    random_independent_set_problem,
-)
-from problems.n_queens import n_queens_problem
-from problems.random_3sat import random_3sat_problem
-from problems.sudoku import sudoku_problem
+"""
+Problem encoders.
 
-__all__ = [
-    "average_degree_hamiltonian_path_problem",
-    "average_degree_independent_set_problem",
-    "average_degree_clique_problem",
-    "average_degree_graph_coloring_problem",
-    "clique_problem",
-    "clique_var",
-    "dimacs_problem_from_text",
-    "edge_count_from_average_degree",
-    "exact_edges_hamiltonian_path_problem",
-    "exact_edges_independent_set_problem",
-    "exact_edges_clique_problem",
-    "exact_edges_graph_coloring_problem",
-    "graph_coloring_problem",
-    "hamiltonian_path_problem",
-    "independent_set_problem",
-    "manual_clique_problem",
-    "manual_hamiltonian_path_problem",
-    "manual_independent_set_problem",
-    "n_queens_problem",
-    "random_hamiltonian_path_problem",
-    "random_independent_set_problem",
-    "random_clique_problem",
-    "random_graph_coloring_problem",
-    "random_3sat_problem",
-    "sudoku_problem",
-]
+Importing this package registers every problem. The import order below is
+the order problems appear in the UI. To add a problem, create a module with a
+@register_problem ProblemSpec subclass and import it here.
+"""
+
+from problems.base import ProblemSpec, all_problems, get_problem, register_problem
+from problems import sudoku  # noqa: F401  (registers the problem)
+from problems import n_queens  # noqa: F401
+from problems import graph_coloring  # noqa: F401
+from problems import hamiltonian_path  # noqa: F401
+from problems import independent_set  # noqa: F401
+from problems import clique  # noqa: F401
+from problems import random_3sat  # noqa: F401
+from problems import dimacs_input  # noqa: F401
+
+
+def build_problem(key: str, raw_params: dict | None = None):
+    """Validate raw parameters and build the CNF instance in one call."""
+
+    spec = get_problem(key)
+    return spec.build(spec.parse(raw_params))
+
+
+__all__ = ["ProblemSpec", "all_problems", "build_problem", "get_problem", "register_problem"]

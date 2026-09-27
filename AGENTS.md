@@ -227,6 +227,10 @@ A benchmark request is plain JSON (the same shape the presets use):
 4. Update the docs that describe what you changed (README, `docs/guide/`,
    this file).
 
+CI (`.github/workflows/ci.yml`) runs the same checks on every push to `main`
+and on pull requests: Python on Ubuntu (3.10, 3.13) and Windows (3.12), the
+frontend checks, then the end-to-end tests.
+
 ## Conventions
 
 - Python 3.10+, standard library `unittest`, no new runtime dependencies

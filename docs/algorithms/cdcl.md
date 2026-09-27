@@ -199,7 +199,7 @@ Run the tests:
 python -m unittest discover -s tests
 ```
 
-Run a small DPLL vs CDCL benchmark:
+Run every solver on the example files and a few generated instances:
 
 ```powershell
 python scripts/benchmark_cdcl.py

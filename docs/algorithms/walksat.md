@@ -82,14 +82,16 @@ The `noise` value controls how often the random choice is used. Randomness helps
 the solver escape unlucky local minima where every obvious greedy move looks
 bad.
 
-## Strategy Modes
+## WalkSAT and ProbSAT
 
-The default `Classic WalkSAT` strategy keeps the original random-vs-greedy
-choice.
+The app lists two local-search solvers that share this implementation:
 
-The `ProbSAT` strategy uses the same random-noise override, but its repair step
-chooses probabilistically from the variables in the unsatisfied clause. Variables
-with higher make and lower break receive more weight:
+- `WalkSAT` keeps the classic random-vs-greedy choice
+  (`selection_mode="walksat"`).
+- `ProbSAT` (`selection_mode="probsat"`) uses the same random-noise override,
+  but its repair step chooses probabilistically from the variables in the
+  unsatisfied clause. Variables with higher make and lower break receive more
+  weight:
 
 ```text
 weight = (make + 1) / ((break + 1) ^ 2)
@@ -115,19 +117,20 @@ adjustments when they occur.
 
 ## App Controls
 
-The app exposes WalkSAT controls in a compact `WalkSAT Options` group:
+Pick `WalkSAT` or `ProbSAT` as the solver. Both have the same options:
 
 - `Max tries`: number of random restarts. Default: `10`.
 - `Max flips`: maximum flips per try. Default: `10000`.
-- `Noise`: probability of making a random flip instead of a greedy repair
-  flip. Default: `0.5`.
-- `Strategy`: `Classic WalkSAT` or `ProbSAT`.
-- `Adaptive noise`: optional stagnation response that adjusts noise during the
-  run.
-- `Random seed`: optional seed for reproducible WalkSAT runs.
+- `Noise`: probability of making a random flip instead of a repair flip.
+  Default: `0.5`.
+- `Adaptive noise` (advanced): optional stagnation response that adjusts noise
+  during the run.
+- `Random seed` (advanced): optional seed for reproducible runs.
 
-The solve timeout still applies. A timeout returns `TIMEOUT`, while a normal
-budget exhaustion returns `UNKNOWN`.
+The time limit still applies. A timeout returns `TIMEOUT`, while a normal
+budget exhaustion returns `UNKNOWN`. In benchmarks, a limit rule such as
+"cap WalkSAT at 1 s" keeps local search from spending its whole budget on
+formulas that are unsatisfiable.
 
 ## Python Usage
 

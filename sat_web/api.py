@@ -338,7 +338,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for raw_id in jobs.split(","):
             if not raw_id.strip():
                 continue
-            job = job_or_404(request, int(raw_id))
+            try:
+                job_id = int(raw_id)
+            except ValueError:
+                raise HTTPException(400, f"Not a job id: {raw_id.strip()}") from None
+            job = job_or_404(request, job_id)
             labels.append(job.label)
             for row in await run_in_threadpool(manager_of(request).rows, job):
                 combined.append({**row, "run_label": job.label})

@@ -160,6 +160,7 @@ class JobTests(ApiTestCase):
         self.assertEqual(self.wait(rerun["id"])["row_count"], 4)
         combined = self.client.get("/api/export.csv", params={"jobs": f"{job['id']},{rerun['id']}"}).text
         self.assertEqual(len(combined.strip().splitlines()), 9)
+        self.assertEqual(self.client.get("/api/export.csv", params={"jobs": "1,x"}).status_code, 400)
 
     def test_cancel_a_running_job(self):
         job = self.submit(

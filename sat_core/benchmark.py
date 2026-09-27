@@ -560,7 +560,7 @@ def run_benchmark(
                     check_errors=check_errors,
                     stats=result.stats,
                     timeout=timeout,
-                    rule=rule_text,
+                    rule="skipped by user" if result.status == STATUS_SKIPPED else rule_text,
                     error=result.error,
                     decoded=_small(decoded),
                 )
@@ -605,8 +605,8 @@ BASE_COLUMNS = (
     "expected",
     "verified",
     "elapsed",
-    "variables",
-    "clauses",
+    "cnf_variables",
+    "cnf_clauses",
     "size_variables",
     "timeout",
     "rule",
@@ -622,7 +622,9 @@ def csv_columns(rows: Iterable[BenchmarkRow | dict[str, Any]]) -> tuple[list[str
         for name in params:
             if name not in param_names:
                 param_names.append(name)
-    columns = list(BASE_COLUMNS[:4]) + param_names + list(BASE_COLUMNS[4:]) + list(STAT_COLUMNS) + ["error"]
+    reserved = set(BASE_COLUMNS) | set(STAT_COLUMNS) | {"error"}
+    headers = [f"param_{name}" if name in reserved else name for name in param_names]
+    columns = list(BASE_COLUMNS[:4]) + headers + list(BASE_COLUMNS[4:]) + list(STAT_COLUMNS) + ["error"]
     return param_names, columns
 
 

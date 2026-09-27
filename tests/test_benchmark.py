@@ -244,6 +244,7 @@ class CsvTests(unittest.TestCase):
         self.assertEqual(len(table), 2)
         self.assertEqual(table[0]["run"], "J1")
         self.assertEqual(table[0]["variables"], "20")
+        self.assertEqual(table[0]["cnf_clauses"], "60")
         self.assertEqual(table[1]["ratio"], "4.0")
         self.assertEqual(table[0]["mode"], "planted")
         self.assertNotIn("sat_percent", table[0])

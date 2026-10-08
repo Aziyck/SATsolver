@@ -74,6 +74,7 @@ export interface BenchmarkRequest {
   log_level?: string;
   seed?: number | string | null;
   title?: string;
+  workers?: number;
 }
 
 export interface Preset {
@@ -93,7 +94,7 @@ export interface Catalog {
   solvers: SolverSpec[];
   presets: Preset[];
   log_levels: string[];
-  limits: { max_clauses: number; max_benchmark_runs: number };
+  limits: { max_clauses: number; max_benchmark_runs: number; max_workers: number };
   defaults: { solve_timeout: number; benchmark_timeout: number; benchmark_rules: Rule[] };
 }
 
@@ -227,6 +228,7 @@ export interface PlanSummary {
   total_clauses: number | null;
   sample: { problem: string; label: string; repeat: number; estimate: Estimate | null }[];
   seed: number;
+  workers: number;
 }
 
 export interface PreviewResponse {

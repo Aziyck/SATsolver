@@ -34,6 +34,7 @@ import csv
 from dataclasses import dataclass, field
 import io
 import json
+import os
 import time
 from typing import Any, Iterable
 
@@ -125,6 +126,8 @@ class BenchmarkPlan:
     seed: int
     title: str = ""
     normalized: dict[str, Any] = field(default_factory=dict)
+    # Cases solved at the same time (1 = one after another, the default).
+    workers: int = 1
 
     @property
     def total_runs(self) -> int:
@@ -146,6 +149,7 @@ class BenchmarkPlan:
                 for index, case in enumerate(self.cases[:sample])
             ],
             "seed": self.seed,
+            "workers": self.workers,
         }
 
 
@@ -254,6 +258,25 @@ def _parse_timeout(raw: Any) -> float | None:
     return timeout
 
 
+def max_workers() -> int:
+    """Parallel benchmark runs are capped at the number of CPU cores."""
+
+    return max(1, os.cpu_count() or 1)
+
+
+def _parse_workers(raw: Any) -> int:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return 1
+    try:
+        workers = int(raw)
+    except (TypeError, ValueError):
+        raise ParamError({"workers": "must be a whole number"}) from None
+    limit = max_workers()
+    if workers < 1 or workers > limit:
+        raise ParamError({"workers": f"must be between 1 and {limit} (the CPU cores of this machine)"})
+    return workers
+
+
 def _graph_signature(spec: ProblemSpec, params: dict[str, Any]) -> str:
     graph_values = {field.name: params.get(field.name) for field in spec.fields if field.group == "graph"}
     return json.dumps(graph_values, sort_keys=True, default=str)
@@ -302,6 +325,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
     except (TypeError, ValueError):
         raise ParamError({"seed": "must be a whole number"}) from None
 
+    workers = _parse_workers(raw.get("workers", 1))
     solvers = _parse_solvers(raw.get("solvers"))
     rules = _parse_rules(raw.get("rules"))
     timeout = _parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
@@ -366,6 +390,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
         "log_level": log_level,
         "seed": base_seed,
         "title": str(raw.get("title") or ""),
+        "workers": workers,
     }
     return BenchmarkPlan(
         problems=[spec.key for spec in specs],
@@ -378,6 +403,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
         seed=base_seed,
         title=str(raw.get("title") or ""),
         normalized=normalized,
+        workers=workers,
     )
 
 
@@ -455,12 +481,21 @@ def run_benchmark(
     event_callback=None,
     cancel_token: RunToken | None = None,
 ) -> list[BenchmarkRow]:
+    """
+    Run every case of the plan with every solver and return the rows.
+
+    With plan.workers == 1 the cases run one after another in this process.
+    With more workers they run in a process pool (sat_core.parallel); the
+    rows are the same, only their arrival order and the timings differ.
+    """
+
     rows: list[BenchmarkRow] = []
     total = plan.total_runs
+    workers_text = f", {plan.workers} cases at a time" if plan.workers > 1 else ""
     emit(
         event_callback,
         EVENT_PLAN,
-        f"Benchmark: {len(plan.cases)} cases x {len(plan.solvers)} solvers = {total} runs",
+        f"Benchmark: {len(plan.cases)} cases x {len(plan.solvers)} solvers = {total} runs{workers_text}",
         payload={"cases": len(plan.cases), "runs": total, "solvers": [solver.label for solver in plan.solvers]},
         current=0,
         total=total,
@@ -473,110 +508,133 @@ def run_benchmark(
         emit(event_callback, EVENT_ROW, payload={"row": row.to_dict()}, current=len(rows), total=total)
         emit(event_callback, EVENT_PROGRESS, f"{len(rows)}/{total} runs", current=len(rows), total=total)
 
-    for case in plan.cases:
+    if plan.workers > 1 and len(plan.cases) > 1:
+        from sat_core.parallel import run_cases_in_pool
+
+        finished = run_cases_in_pool(plan, add, event_callback, cancel_token)
+    else:
+        finished = True
+        for case in plan.cases:
+            if not run_case(plan, case, add, event_callback, cancel_token):
+                finished = False
+                break
+
+    if not finished:
+        emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=len(rows), total=total)
+    return rows
+
+
+def run_case(plan: BenchmarkPlan, case: BenchmarkCase, add, event_callback=None, cancel_token: RunToken | None = None) -> bool:
+    """
+    Encode one case once and run every solver of the plan on that CNF.
+
+    add(row) receives each finished row. Row indices are case.index *
+    len(plan.solvers) + solver position, so they do not depend on the order
+    in which cases finish. Returns False when the benchmark was cancelled.
+    """
+
+    if cancel_requested(cancel_token):
+        return False
+
+    spec = get_problem(case.problem)
+    prefix = f"[{case.index + 1}/{len(plan.cases)}]"
+    repeat_text = f" repeat {case.repeat}" if plan.repeats > 1 else ""
+    emit(event_callback, EVENT_LOG, f"{prefix} {spec.title}: {case.label}{repeat_text}")
+    first_index = case.index * len(plan.solvers)
+
+    try:
+        started = time.perf_counter()
+        instance = spec.build(case.params)
+        encode_seconds = time.perf_counter() - started
+    except Exception as exc:  # noqa: BLE001 - one bad case must not stop the sweep
+        message = str(exc) if isinstance(exc, ParamError) else f"{type(exc).__name__}: {exc}"
+        emit(event_callback, EVENT_LOG, f"   encoding failed: {message}")
+        for position, solver in enumerate(plan.solvers):
+            add(_row(case, None, spec, solver, first_index + position, status=STATUS_ERROR, error=f"Encoding failed: {message}"))
+        return True
+
+    emit(
+        event_callback,
+        EVENT_LOG,
+        f"   {instance.variable_count} variables, {instance.clause_count} clauses (encoded in {encode_seconds:.3f}s)",
+    )
+
+    def skip_rest(position: int) -> None:
+        remaining = plan.solvers[position:]
+        if remaining:
+            emit(event_callback, EVENT_LOG, "   skip requested: remaining runs of this case are SKIPPED")
+        for offset, skipped in enumerate(remaining):
+            add(_row(case, instance, spec, skipped, first_index + position + offset, status=STATUS_SKIPPED, rule="skipped by user"))
+        if cancel_token is not None:
+            cancel_token.clear_skip()
+
+    for position, solver in enumerate(plan.solvers):
+        index = first_index + position
         if cancel_requested(cancel_token):
-            emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=len(rows), total=total)
-            return rows
+            return False
 
-        spec = get_problem(case.problem)
-        prefix = f"[{case.index + 1}/{len(plan.cases)}]"
-        repeat_text = f" repeat {case.repeat}" if plan.repeats > 1 else ""
-        emit(event_callback, EVENT_LOG, f"{prefix} {spec.title}: {case.label}{repeat_text}")
+        if skip_requested(cancel_token):
+            skip_rest(position)
+            return True
 
-        try:
-            started = time.perf_counter()
-            instance = spec.build(case.params)
-            encode_seconds = time.perf_counter() - started
-        except Exception as exc:  # noqa: BLE001 - one bad case must not stop the sweep
-            message = str(exc) if isinstance(exc, ParamError) else f"{type(exc).__name__}: {exc}"
-            emit(event_callback, EVENT_LOG, f"   encoding failed: {message}")
-            for solver in plan.solvers:
-                add(_row(case, None, spec, solver, len(rows), status=STATUS_ERROR, error=f"Encoding failed: {message}"))
+        skip, timeout, rule_text = limits_for(plan, solver.solver, instance.size_variables)
+        if skip:
+            emit(event_callback, EVENT_LOG, f"   {solver.label}: skipped ({rule_text})")
+            add(_row(case, instance, spec, solver, index, status=STATUS_SKIPPED, rule=rule_text, timeout=timeout))
             continue
 
-        emit(
-            event_callback,
-            EVENT_LOG,
-            f"   {instance.variable_count} variables, {instance.clause_count} clauses (encoded in {encode_seconds:.3f}s)",
+        result = run_solver(
+            instance.clauses,
+            solver.solver,
+            solver.options,
+            timeout=timeout,
+            log_level=plan.log_level,
+            event_callback=event_callback,
+            cancel_token=cancel_token,
+            label=solver.label,
+        )
+        if result.status == STATUS_CANCELLED:
+            return False
+
+        verified = None
+        check_errors: list[str] = []
+        decoded = None
+        if result.status == STATUS_SAT:
+            verified = check_assignment(instance.clauses, result.solution)
+            if not verified:
+                check_errors.append("the model does not satisfy every clause")
+            try:
+                decoded = spec.decode(instance, result.solution)
+                if decoded is not None:
+                    check_errors.extend(spec.check(instance, decoded))
+            except Exception as exc:  # noqa: BLE001
+                check_errors.append(f"decoding failed: {exc}")
+            verified = verified and not check_errors
+
+        add(
+            _row(
+                case,
+                instance,
+                spec,
+                solver,
+                index,
+                status=result.status,
+                elapsed=result.elapsed,
+                verified=verified,
+                check_errors=check_errors,
+                stats=result.stats,
+                timeout=timeout,
+                rule="skipped by user" if result.status == STATUS_SKIPPED else rule_text,
+                error=result.error,
+                decoded=_small(decoded),
+            )
         )
 
-        for position, solver in enumerate(plan.solvers):
-            if cancel_requested(cancel_token):
-                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled.", current=len(rows), total=total)
-                return rows
+        if result.status == STATUS_SKIPPED:
+            skip_rest(position + 1)
+            return True
 
-            if skip_requested(cancel_token):
-                emit(event_callback, EVENT_LOG, "   skip requested: remaining runs of this case are SKIPPED")
-                for skipped in plan.solvers[position:]:
-                    add(_row(case, instance, spec, skipped, len(rows), status=STATUS_SKIPPED, rule="skipped by user"))
-                cancel_token.clear_skip()
-                break
-
-            skip, timeout, rule_text = limits_for(plan, solver.solver, instance.size_variables)
-            if skip:
-                emit(event_callback, EVENT_LOG, f"   {solver.label}: skipped ({rule_text})")
-                add(_row(case, instance, spec, solver, len(rows), status=STATUS_SKIPPED, rule=rule_text, timeout=timeout))
-                continue
-
-            result = run_solver(
-                instance.clauses,
-                solver.solver,
-                solver.options,
-                timeout=timeout,
-                log_level=plan.log_level,
-                event_callback=event_callback,
-                cancel_token=cancel_token,
-                label=solver.label,
-            )
-            if result.status == STATUS_CANCELLED:
-                emit(event_callback, EVENT_CANCELLED, "Benchmark cancelled during a solver run.", current=len(rows), total=total)
-                return rows
-
-            verified = None
-            check_errors: list[str] = []
-            decoded = None
-            if result.status == STATUS_SAT:
-                verified = check_assignment(instance.clauses, result.solution)
-                if not verified:
-                    check_errors.append("the model does not satisfy every clause")
-                try:
-                    decoded = spec.decode(instance, result.solution)
-                    if decoded is not None:
-                        check_errors.extend(spec.check(instance, decoded))
-                except Exception as exc:  # noqa: BLE001
-                    check_errors.append(f"decoding failed: {exc}")
-                verified = verified and not check_errors
-
-            add(
-                _row(
-                    case,
-                    instance,
-                    spec,
-                    solver,
-                    len(rows),
-                    status=result.status,
-                    elapsed=result.elapsed,
-                    verified=verified,
-                    check_errors=check_errors,
-                    stats=result.stats,
-                    timeout=timeout,
-                    rule="skipped by user" if result.status == STATUS_SKIPPED else rule_text,
-                    error=result.error,
-                    decoded=_small(decoded),
-                )
-            )
-
-            if result.status == STATUS_SKIPPED:
-                remaining = plan.solvers[position + 1:]
-                if remaining:
-                    emit(event_callback, EVENT_LOG, "   skip requested: remaining runs of this case are SKIPPED")
-                for skipped in remaining:
-                    add(_row(case, instance, spec, skipped, len(rows), status=STATUS_SKIPPED, rule="skipped by user"))
-                if cancel_token is not None:
-                    cancel_token.clear_skip()
-                break
-
-    return rows
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES, ProblemSpec
-from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, parse_request, rows_to_csv
+from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, rows_to_csv
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload
 from sat_core.params import ParamError
@@ -158,7 +158,7 @@ def catalog() -> dict[str, Any]:
         "solvers": [spec.to_dict() for spec in all_solvers()],
         "presets": [preset.to_dict() for preset in all_presets()],
         "log_levels": list(LOG_LEVELS),
-        "limits": {"max_clauses": MAX_CLAUSES, "max_benchmark_runs": MAX_BENCHMARK_RUNS},
+        "limits": {"max_clauses": MAX_CLAUSES, "max_benchmark_runs": MAX_BENCHMARK_RUNS, "max_workers": max_workers()},
         "defaults": {
             "solve_timeout": DEFAULT_SOLVE_TIMEOUT,
             "benchmark_timeout": DEFAULT_TIMEOUT,

@@ -220,5 +220,8 @@ def execute_job(kind: str, request: dict[str, Any], workdir: str | None, emit_ev
 def run_job(kind: str, request: dict[str, Any], workdir: str | None, event_queue, cancel_event, skip_event) -> None:
     """Process target: bridge execute_job to a multiprocessing queue."""
 
+    from sat_core.parallel import exit_when_parent_dies
+
+    exit_when_parent_dies()
     token = RunToken(cancel_event, skip_event=skip_event)
     execute_job(kind, request, workdir, event_queue.put, token)

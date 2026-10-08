@@ -185,6 +185,7 @@ describe("benchmark drafts", () => {
       timeout: null,
       rules: [{ solver: "dpll", action: "cap", min_variables: 200, seconds: 10 }],
       seed: 7,
+      workers: 3,
     });
     const request = requestFromDraft(catalog, draft);
     expect(request.segments).toEqual([{ mode: ["gnp"], p: "0.1, 0.2" }]);
@@ -192,5 +193,8 @@ describe("benchmark drafts", () => {
     expect(request.timeout).toBeNull();
     expect(request.repeats).toBe(2);
     expect(request.seed).toBe(7);
+    expect(request.workers).toBe(3);
+    // Drafts stored before the setting existed run one case at a time.
+    expect(requestFromDraft(catalog, { ...draft, workers: undefined as unknown as number }).workers).toBe(1);
   });
 });

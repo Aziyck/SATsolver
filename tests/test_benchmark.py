@@ -248,6 +248,62 @@ class RunTests(unittest.TestCase):
         self.assertTrue(any(event.type == EVENT_CANCELLED for event in events))
 
 
+class ParallelTests(unittest.TestCase):
+    """workers > 1 runs cases in a process pool; the rows must not change."""
+
+    def test_parallel_rows_match_sequential_rows(self):
+        raw = request(
+            problems=["random_3sat"],
+            segments=[{"variables": "20, 30", "ratio": "3, 5", "mode": "random", "seed": "1..2"}],
+            solvers=["cdcl", "dpll"],
+        )
+        sequential = run_benchmark(parse_request(raw))
+        parallel = run_benchmark(parse_request({**raw, "workers": 2}))
+
+        def key(rows):
+            return sorted((row.index, row.case_index, row.solver, row.status, row.clauses, row.verified) for row in rows)
+
+        self.assertEqual(len(parallel), 16)
+        self.assertEqual(key(parallel), key(sequential))
+
+    def test_cancel_stops_a_parallel_benchmark(self):
+        token = RunToken()
+        events = []
+
+        def on_event(event):
+            events.append(event)
+            if event.type == EVENT_ROW:
+                token.cancel()
+
+        raw = request(segments=[{"size": "4..30"}], solvers=["cdcl"], workers=2)
+        rows = run_benchmark(parse_request(raw), event_callback=on_event, cancel_token=token)
+
+        self.assertLess(len(rows), 27)
+        self.assertEqual(events[-1].type, EVENT_CANCELLED)
+
+    def test_skip_only_affects_cases_already_running(self):
+        from multiprocessing import get_context
+
+        from sat_core.parallel import CaseToken
+
+        context = get_context("spawn")
+        generation = context.Value("q", 0)
+        running = CaseToken(context.Event(), generation)
+        generation.value += 1
+        started_later = CaseToken(context.Event(), generation)
+
+        self.assertTrue(running.skip_requested())
+        self.assertFalse(started_later.skip_requested())
+        running.clear_skip()
+        self.assertFalse(running.skip_requested())
+
+    def test_workers_are_validated(self):
+        with self.assertRaises(ParamError) as context:
+            parse_request(request(workers=0))
+        self.assertIn("workers", context.exception.errors)
+        self.assertEqual(parse_request(request()).workers, 1)
+
+
 class CsvTests(unittest.TestCase):
     def test_one_format_with_parameter_columns(self):
         rows = run_benchmark(parse_request(request(problems=["random_3sat"], segments=[{"variables": 20, "ratio": "3, 4", "seed": 1}])))

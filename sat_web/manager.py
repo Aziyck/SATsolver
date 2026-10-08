@@ -305,7 +305,11 @@ class JobManager:
         job.process = self.context.Process(
             target=run_job,
             args=(job.kind, job.request, str(job.workdir), event_queue, job.cancel_event, job.skip_event),
-            daemon=True,
+            # Not a daemon: a benchmark job may start its own worker pool,
+            # which daemon processes are not allowed to do. Jobs end with the
+            # server anyway: shutdown() stops them, and each job watches its
+            # parent (sat_core.parallel.exit_when_parent_dies).
+            daemon=False,
         )
         job.status = "running"
         job.started_at = now_iso()

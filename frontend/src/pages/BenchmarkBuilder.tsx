@@ -175,6 +175,7 @@ export default function BenchmarkBuilder() {
                     </Text>
                     <Text size="sm" c="dimmed">
                       {formatCount(plan.data.cases)} cases x {plan.data.solvers.length} solver{plan.data.solvers.length === 1 ? "" : "s"}
+                      {plan.data.workers > 1 ? `, ${plan.data.workers} cases at a time` : ""}
                     </Text>
                   </div>
                   {plan.data.largest ? (
@@ -487,6 +488,26 @@ function SettingsCard({
       <Text size="xs" c="dimmed" mt="xs">
         Repeat 1 uses each case's own seed, so any row can be reproduced on the Solve page; later repeats derive fresh seeds.
       </Text>
+
+      <Divider my="md" />
+      <Group align="flex-start" gap="md" wrap="nowrap">
+        <NumberInput
+          label="Parallel cases"
+          description={`1 to ${catalog.limits.max_workers} (CPU cores)`}
+          min={1}
+          max={catalog.limits.max_workers}
+          allowDecimal={false}
+          value={draft.workers ?? 1}
+          onChange={(workers) => onChange({ workers })}
+          error={errors.workers}
+          w={170}
+        />
+        <Text size="xs" c="dimmed" mt={28}>
+          1 solves the cases one after another and gives the cleanest timings. Higher values solve that many cases at the same time in
+          separate processes: the benchmark finishes sooner, but runs compete for the CPU, so individual times get noisier. Every solver
+          still runs on the same formula for each case.
+        </Text>
+      </Group>
 
       <Divider my="md" />
       <Group justify="space-between" mb="xs">

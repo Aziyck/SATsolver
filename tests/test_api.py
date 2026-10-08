@@ -175,6 +175,34 @@ class JobTests(ApiTestCase):
         self.client.post(f"/api/jobs/{job['id']}/cancel")
         self.assertEqual(self.wait(job["id"], timeout=15)["status"], "cancelled")
 
+    def test_parallel_benchmark_job_runs_and_cancels(self):
+        job = self.submit(
+            "benchmark",
+            {"problems": ["n_queens"], "segments": [{"size": "4..9"}], "solvers": ["cdcl", "dpll"], "workers": 2},
+        )
+        detail = self.wait(job["id"])
+        self.assertEqual(detail["status"], "done")
+        rows = self.client.get(f"/api/jobs/{job['id']}/rows").json()["rows"]
+        self.assertEqual(sorted(row["index"] for row in rows), list(range(12)))
+
+        slow = self.submit(
+            "benchmark",
+            {
+                "problems": ["random_3sat"],
+                "segments": [{"variables": 250, "ratio": 4.26, "mode": "random", "seed": "1..20"}],
+                "solvers": ["dpll"],
+                "timeout": None,
+                "rules": [],
+                "workers": 2,
+            },
+        )
+        deadline = time.monotonic() + 30
+        while self.client.get(f"/api/jobs/{slow['id']}").json()["status"] != "running" and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(1.5)  # let the workers start solving
+        self.client.post(f"/api/jobs/{slow['id']}/cancel")
+        self.assertEqual(self.wait(slow["id"], timeout=15)["status"], "cancelled")
+
     def test_queue_respects_parallel_limit_and_clear(self):
         jobs = [self.submit("solve", {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}) for _ in range(3)]
         statuses = [job["status"] for job in self.client.get("/api/jobs").json()["jobs"]]

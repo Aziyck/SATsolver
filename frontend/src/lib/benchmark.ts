@@ -18,6 +18,8 @@ export interface BenchmarkDraft {
   seed: number | string;
   logLevel: string;
   rules: Rule[];
+  /** Cases solved at the same time; 1 runs them one after another. */
+  workers: number | string;
 }
 
 let nextId = 1;
@@ -79,6 +81,7 @@ export function emptyDraft(catalog: Catalog, problem = "random_3sat"): Benchmark
     seed: 1,
     logLevel: "normal",
     rules: catalog.defaults.benchmark_rules.map((rule) => ({ ...rule })),
+    workers: 1,
   };
 }
 
@@ -112,6 +115,7 @@ export function draftFromRequest(catalog: Catalog, request: BenchmarkRequest): B
     seed: request.seed ?? "",
     logLevel: request.log_level ?? "normal",
     rules: (request.rules ?? []).map((rule) => ({ ...rule })),
+    workers: request.workers ?? 1,
   };
 }
 
@@ -133,5 +137,7 @@ export function requestFromDraft(catalog: Catalog, draft: BenchmarkDraft): Bench
     rules: draft.rules,
     log_level: draft.logLevel,
     seed: draft.seed === "" ? null : draft.seed,
+    // Drafts saved before this setting existed have no workers value.
+    workers: Number(draft.workers ?? 1) || 1,
   };
 }

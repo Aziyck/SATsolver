@@ -1,6 +1,7 @@
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Card,
   Grid,
@@ -12,17 +13,17 @@ import {
   Title,
   Tooltip,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useElementSize, useHotkeys } from "@mantine/hooks";
 import { IconArrowLeft, IconCirclePlus, IconDice5, IconFileCode, IconPlayerPlay } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
 import { useCatalog, useCreateJob, useJob } from "../api/queries";
 import type { JobDetail, ProblemSpec, SolverSpec } from "../api/types";
 import { EstimateBadge } from "../components/Display";
-import { ParamForm } from "../components/fields/ParamForm";
+import { CompactHelp, ParamForm } from "../components/fields/ParamForm";
 import { JobCard } from "../components/JobsDrawer";
 import { ProblemCards, ProblemInfo } from "../components/ProblemPicker";
 import { SolveResultPanel } from "../components/SolveResultPanel";
@@ -32,6 +33,8 @@ import { GraphView } from "../components/views/GraphView";
 import { edgesAsText, formatEdges, parseEdges, toggleEdge } from "../lib/edges";
 import { defaultValues, visibleValues, type Values } from "../lib/params";
 import { usePersistentState } from "../lib/storage";
+
+const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "Cmd+Enter" : "Ctrl+Enter";
 
 function initialSolverSettings(solvers: SolverSpec[], timeout: number): SolverSettings {
   return {
@@ -90,6 +93,7 @@ export default function SolvePage() {
   const errors = { ...previewErrors, ...submitErrors };
 
   const createJob = useCreateJob();
+  const resultColumn = useRef<HTMLDivElement>(null);
   const submit = (kind: "solve" | "generate") => {
     if (!problem) return;
     const body =
@@ -110,6 +114,10 @@ export default function SolvePage() {
           setSubmitErrors({});
           setSearch({ job: String(job.id) });
           setView("result");
+          // One column (phones, narrow windows): the result is below the form, so bring it into view.
+          if (window.matchMedia("(max-width: 61.99em)").matches) {
+            window.setTimeout(() => resultColumn.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+          }
         },
         onError: (error) => setSubmitErrors(error instanceof ApiError ? { ...error.errors, _: Object.keys(error.errors).length ? "" : error.message } : { _: String(error) }),
       },
@@ -147,6 +155,10 @@ export default function SolvePage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [editJobId, editJob.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ctrl/Cmd+Enter solves from anywhere on the page, including inside inputs.
+  useHotkeys([["mod+Enter", () => problem && !createJob.isPending && !preview.data?.too_large && submit("solve")]], []);
+  const { ref: barRef, height: barHeight } = useElementSize();
+
   const jobs = useLive((state) => state.jobs);
   const recent = useMemo(
     () => sortedJobs(jobs).filter((job) => job.kind !== "benchmark" && (!problem || job.problems[0] === problem.key)).slice(0, 6),
@@ -177,53 +189,66 @@ export default function SolvePage() {
 
   const selectedJob = view === "result" ? jobParam : null;
 
+  const solverTitle = catalog.solvers.find((solver) => solver.key === settings.solver)?.title ?? settings.solver;
+
   return (
-    <Stack gap="md">
-      <Group justify="space-between" wrap="nowrap">
-        <Group gap="xs" wrap="nowrap">
-          <Button variant="subtle" px={6} onClick={() => navigate("/solve")} aria-label="All problems" leftSection={<IconArrowLeft size={16} />}>
-            Problems
-          </Button>
-          <Title order={2}>{problem.title}</Title>
-          <ProblemInfo problem={problem} />
+    <Stack gap="md" style={{ "--wz-actionbar-height": `${barHeight}px` } as CSSProperties}>
+      {/* Title and actions stay at the top while the form scrolls. */}
+      <div className="wz-actionbar">
+        <Group ref={barRef} justify="space-between" gap="xs">
+          <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+            <Button variant="subtle" px={6} onClick={() => navigate("/solve")} aria-label="All problems" leftSection={<IconArrowLeft size={16} />}>
+              Problems
+            </Button>
+            <Title order={2} lineClamp={1}>
+              {problem.title}
+            </Title>
+            <ProblemInfo problem={problem} />
+          </Group>
+          <Group gap="xs" wrap="nowrap">
+            <Box visibleFrom="sm">
+              <EstimateBadge estimate={preview.data?.estimate} tooLarge={preview.data?.too_large} maxClauses={catalog.limits.max_clauses} />
+            </Box>
+            <Tooltip label="Only build the CNF formula, without solving it">
+              <Button variant="default" leftSection={<IconFileCode size={16} />} onClick={() => submit("generate")} disabled={preview.data?.too_large}>
+                Encode only
+              </Button>
+            </Tooltip>
+            <Tooltip label={`Run ${solverTitle} (${SHORTCUT})`}>
+              <Button leftSection={<IconPlayerPlay size={16} />} onClick={() => submit("solve")} loading={createJob.isPending} disabled={preview.data?.too_large}>
+                Solve
+              </Button>
+            </Tooltip>
+          </Group>
         </Group>
-      </Group>
+      </div>
       <Text c="dimmed" mt={-8}>
         {problem.summary}
       </Text>
+      {errors._ ? <Alert color="red">{errors._}</Alert> : null}
 
       <Grid gutter="lg">
         <Grid.Col span={{ base: 12, md: 5 }}>
-          <Stack gap="md">
-            <Card>
-              <Group justify="space-between" mb="sm">
-                <Text fw={650}>Input</Text>
-                <EstimateBadge estimate={preview.data?.estimate} tooLarge={preview.data?.too_large} maxClauses={catalog.limits.max_clauses} />
-              </Group>
-              <ParamForm fields={problem.fields} values={values} onChange={setValue} errors={errors} />
-            </Card>
-            <Card>
-              <Text fw={650} mb="sm">
-                Solver
-              </Text>
-              <SolverPanel solvers={catalog.solvers} settings={settings} onChange={setSettings} errors={submitErrors} />
-            </Card>
-            {errors._ ? <Alert color="red">{errors._}</Alert> : null}
-            <Group grow>
-              <Button size="md" leftSection={<IconPlayerPlay size={18} />} onClick={() => submit("solve")} loading={createJob.isPending} disabled={preview.data?.too_large}>
-                Solve
-              </Button>
-              <Tooltip label="Only build the CNF formula, without solving it">
-                <Button size="md" variant="default" leftSection={<IconFileCode size={18} />} onClick={() => submit("generate")} disabled={preview.data?.too_large}>
-                  Encode only
-                </Button>
-              </Tooltip>
-            </Group>
-          </Stack>
+          <CompactHelp.Provider value>
+            <Stack gap="md">
+              <Card>
+                <Text fw={650} mb="sm">
+                  Input
+                </Text>
+                <ParamForm fields={problem.fields} values={values} onChange={setValue} errors={errors} />
+              </Card>
+              <Card>
+                <Text fw={650} mb="sm">
+                  Solver
+                </Text>
+                <SolverPanel solvers={catalog.solvers} settings={settings} onChange={setSettings} errors={submitErrors} />
+              </Card>
+            </Stack>
+          </CompactHelp.Provider>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, md: 7 }}>
-          <Stack gap="md" className="wz-sticky">
+          <Stack gap="md" className="wz-pinned" ref={resultColumn} style={{ scrollMarginTop: "calc(var(--app-shell-header-height, 60px) + var(--wz-actionbar-height, 40px) + 32px)" }}>
             <SegmentedControl
               value={view}
               onChange={(next) => setView(next as "preview" | "result")}

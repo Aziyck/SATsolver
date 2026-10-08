@@ -101,6 +101,19 @@ limit). **Log detail** controls how much the solver writes to the log:
 - **Encode only** builds the CNF without solving, so you can inspect or
   download it.
 
+Both buttons sit in the bar with the problem's title, which stays at the
+top while you scroll. **Ctrl+Enter** (Cmd+Enter on a Mac) solves from any
+field. The bar also shows the size of the CNF formula.
+
+On a wide window the preview and result column stays on screen while the
+form scrolls. When the result is taller than the window, that column
+scrolls on its own. On a phone the result comes after the form, and the
+page scrolls down to it when you press Solve.
+
+To keep the form short, the explanation of each option is behind the small
+(i) next to its name: hover over it to read it. The benchmark builder shows
+the explanations under the fields instead.
+
 Both run in the background as a *job* (labelled J1, J2, ...). You can keep
 working, start other jobs or leave the page; up to one job per CPU core runs
 at a time and the rest queue.

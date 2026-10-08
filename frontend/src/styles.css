@@ -225,3 +225,48 @@ body {
   text-decoration: underline dotted var(--wz-muted);
   text-underline-offset: 3px;
 }
+
+/* Compact forms (Solve page): help text in a tooltip next to the label */
+.wz-label-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wz-help-icon {
+  display: inline-flex;
+  color: var(--wz-muted);
+  cursor: help;
+}
+
+/* Solve page: title and Solve/Encode buttons stay under the app header. */
+.wz-actionbar {
+  position: sticky;
+  top: var(--app-shell-header-height, 60px);
+  z-index: 50;
+  margin: calc(var(--mantine-spacing-lg) * -1) calc(var(--mantine-spacing-lg) * -1) 0;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-lg);
+  background: var(--wz-page);
+  border-bottom: 1px solid var(--wz-hairline);
+}
+
+/* Solve page, two columns: the result column stays in view while the form
+   scrolls, and scrolls on its own only when it is taller than the window. */
+@media (min-width: 62em) {
+  .wz-pinned {
+    --wz-pinned-top: calc(
+      var(--app-shell-header-height, 60px) + var(--wz-actionbar-height, 40px) + 2 * var(--mantine-spacing-sm) + 1px +
+        var(--mantine-spacing-md)
+    );
+    position: sticky;
+    top: var(--wz-pinned-top);
+    max-height: calc(100vh - var(--wz-pinned-top) - var(--mantine-spacing-md));
+    overflow-y: auto;
+    /* room for card shadows and the scrollbar */
+    padding: 2px 6px 2px 2px;
+    margin: -2px -6px -2px -2px;
+  }
+  /* a capped flex column would squeeze its cards instead of scrolling them */
+  .wz-pinned > * {
+    flex-shrink: 0;
+  }
+}

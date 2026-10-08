@@ -9,6 +9,7 @@ import {
   NumberInput,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -16,8 +17,8 @@ import {
   TextInput,
   Tooltip,
 } from "@mantine/core";
-import { IconArrowBackUp, IconDice5, IconFileUpload, IconRestore, IconTrash } from "@tabler/icons-react";
-import { useState, type ReactNode } from "react";
+import { IconArrowBackUp, IconDice5, IconFileUpload, IconInfoCircle, IconRestore, IconTrash } from "@tabler/icons-react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Field } from "../../api/types";
 import { edgesAsText, parseEdges } from "../../lib/edges";
 import { formatCount } from "../../lib/format";
@@ -40,6 +41,7 @@ export interface ParamFormProps {
 
 export function ParamForm({ fields, values, onChange, errors = {}, sweep = false, hide = [], resettable = false }: ParamFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const compact = useContext(CompactHelp);
   const visible = fields.filter((field) => isVisible(field, values) && !hide.includes(field.name));
   const basic = visible.filter((field) => !field.advanced);
   const advanced = visible.filter((field) => field.advanced);
@@ -55,9 +57,36 @@ export function ParamForm({ fields, values, onChange, errors = {}, sweep = false
     );
   };
 
+  // Compact mode puts consecutive short fields (plain numbers, switches) two per row.
+  const layout = (list: Field[]) => {
+    if (!compact) return list.map(render);
+    const blocks: ReactNode[] = [];
+    let run: Field[] = [];
+    const flush = () => {
+      if (run.length === 1) blocks.push(render(run[0]));
+      else if (run.length) {
+        blocks.push(
+          <SimpleGrid key={`pair-${run[0].name}`} cols={2} spacing="sm" verticalSpacing="sm">
+            {run.map(render)}
+          </SimpleGrid>,
+        );
+      }
+      run = [];
+    };
+    for (const field of list) {
+      if (isShortField(field)) run.push(field);
+      else {
+        flush();
+        blocks.push(render(field));
+      }
+    }
+    flush();
+    return blocks;
+  };
+
   return (
     <Stack gap="sm">
-      {basic.map(render)}
+      {layout(basic)}
       {advanced.length ? (
         <>
           <Button variant="subtle" size="compact-sm" onClick={() => setShowAdvanced((open) => !open)} style={{ alignSelf: "flex-start" }}>
@@ -65,7 +94,7 @@ export function ParamForm({ fields, values, onChange, errors = {}, sweep = false
             {advancedChanged && !showAdvanced ? ` - ${advancedChanged} changed` : ""}
           </Button>
           <Collapse in={showAdvanced}>
-            <Stack gap="sm">{advanced.map(render)}</Stack>
+            <Stack gap="sm">{layout(advanced)}</Stack>
           </Collapse>
         </>
       ) : null}
@@ -103,6 +132,40 @@ export function ResetToDefaults({ fields, values, onReset, size = "xs" }: { fiel
   );
 }
 
+/**
+ * Compact mode (the Solve page): help text moves from a line under each field
+ * into an info icon with a tooltip next to the label, so the form fits on
+ * screen. The benchmark builder keeps the help inline.
+ */
+export const CompactHelp = createContext(false);
+
+/** Fields narrow enough to share a row in compact mode. */
+function isShortField(field: Field): boolean {
+  return (isNumericKind(field) && !field.choices.length) || field.kind === "bool";
+}
+
+/** The help line under a field, or nothing in compact mode. */
+export function useHelpLine() {
+  const compact = useContext(CompactHelp);
+  return (help?: string | null) => (compact || !help ? undefined : help);
+}
+
+/** A field label; in compact mode it carries the help as a tooltip. */
+export function FieldLabel({ text, help }: { text: string; help?: string | null }) {
+  const compact = useContext(CompactHelp);
+  if (!compact || !help) return <>{text}</>;
+  return (
+    <span className="wz-label-help">
+      {text}
+      <Tooltip label={help} multiline maw={320} withArrow openDelay={150}>
+        <span className="wz-help-icon" aria-hidden>
+          <IconInfoCircle size={14} />
+        </span>
+      </Tooltip>
+    </span>
+  );
+}
+
 function withUnit(field: Field): string {
   return field.unit ? `${field.label} (${field.unit})` : field.label;
 }
@@ -123,6 +186,7 @@ export function ParamInput({
   sweep: boolean;
 }) {
   const set = (next: unknown) => onChange(field.name, next);
+  const helpLine = useHelpLine();
 
   if (sweep && field.sweepable && (isNumericKind(field) || field.kind === "choice" || field.kind === "cnf")) {
     return <SweepInput field={field} value={value} onChange={set} error={error} />;
@@ -132,14 +196,14 @@ export function ParamInput({
     case "choice":
       return <ChoiceInput field={field} value={value} onChange={set} error={error} />;
     case "bool":
-      return <Switch label={field.label} description={field.help} checked={Boolean(value)} onChange={(event) => set(event.currentTarget.checked)} />;
+      return <Switch label={<FieldLabel text={field.label} help={field.help} />} description={helpLine(field.help)} checked={Boolean(value)} onChange={(event) => set(event.currentTarget.checked)} />;
     case "int":
     case "float":
       if (field.choices.length) return <ChoiceInput field={field} value={value} onChange={(next) => set(Number(next))} error={error} />;
       return (
         <NumberInput
-          label={withUnit(field)}
-          description={field.help}
+          label={<FieldLabel text={withUnit(field)} help={field.help} />}
+          description={helpLine(field.help)}
           value={value as number | string}
           onChange={set}
           min={field.min ?? undefined}
@@ -154,8 +218,8 @@ export function ParamInput({
     case "seed":
       return (
         <NumberInput
-          label={field.label}
-          description={field.help}
+          label={<FieldLabel text={field.label} help={field.help} />}
+          description={helpLine(field.help)}
           value={(value ?? "") as number | string}
           onChange={(next) => set(next === "" ? null : next)}
           min={0}
@@ -173,7 +237,7 @@ export function ParamInput({
         />
       );
     case "text":
-      return <Textarea label={field.label} description={field.help} value={String(value ?? "")} onChange={(event) => set(event.currentTarget.value)} autosize minRows={2} error={error} />;
+      return <Textarea label={<FieldLabel text={field.label} help={field.help} />} description={helpLine(field.help)} value={String(value ?? "")} onChange={(event) => set(event.currentTarget.value)} autosize minRows={2} error={error} />;
     case "edges":
       return <EdgesInput field={field} value={value} onChange={set} error={error} />;
     case "sudoku_grid":
@@ -185,12 +249,14 @@ export function ParamInput({
 
 function ChoiceInput({ field, value, onChange, error }: { field: Field; value: unknown; onChange: (value: unknown) => void; error?: string }) {
   const current = field.choices.find((choice) => choice.value === String(value));
+  const help = current?.help || field.help;
+  const helpLine = useHelpLine();
   const labelLength = field.choices.reduce((sum, choice) => sum + choice.label.length, 0);
   if (field.choices.length <= 4 && labelLength <= 36) {
     return (
       <Stack gap={4}>
         <Text size="sm" fw={500}>
-          {field.label}
+          <FieldLabel text={field.label} help={help} />
         </Text>
         <SegmentedControl
           fullWidth
@@ -199,9 +265,9 @@ function ChoiceInput({ field, value, onChange, error }: { field: Field; value: u
           data={field.choices.map((choice) => ({ value: choice.value, label: choice.label }))}
           aria-label={field.label}
         />
-        {current?.help || field.help ? (
+        {helpLine(help) ? (
           <Text size="xs" c="dimmed">
-            {current?.help || field.help}
+            {help}
           </Text>
         ) : null}
         {error ? (
@@ -214,8 +280,8 @@ function ChoiceInput({ field, value, onChange, error }: { field: Field; value: u
   }
   return (
     <Select
-      label={field.label}
-      description={current?.help || field.help}
+      label={<FieldLabel text={field.label} help={help} />}
+      description={helpLine(help)}
       data={field.choices.map((choice) => ({ value: choice.value, label: choice.label }))}
       value={String(value)}
       onChange={(next) => next !== null && onChange(next)}
@@ -228,10 +294,11 @@ function ChoiceInput({ field, value, onChange, error }: { field: Field; value: u
 function EdgesInput({ field, value, onChange, error }: { field: Field; value: unknown; onChange: (value: unknown) => void; error?: string }) {
   const text = edgesAsText(value);
   const parsed = parseEdges(text);
+  const helpLine = useHelpLine();
   return (
     <Textarea
-      label={field.label}
-      description={field.help}
+      label={<FieldLabel text={field.label} help={field.help} />}
+      description={helpLine(field.help)}
       value={text}
       onChange={(event) => onChange(event.currentTarget.value)}
       autosize
@@ -263,6 +330,7 @@ function SudokuGridInput({
   error?: string;
 }) {
   const grid = asGrid(value, size);
+  const helpLine = useHelpLine();
   const [pasteText, setPasteText] = useState("");
   const loadText = (text: string) => {
     const puzzle = parsePuzzle(text);
@@ -276,7 +344,7 @@ function SudokuGridInput({
     <Stack gap={6}>
       <Group justify="space-between">
         <Text size="sm" fw={500}>
-          {field.label}
+          <FieldLabel text={field.label} help={field.help} />
         </Text>
         <Button variant="subtle" size="compact-xs" leftSection={<IconTrash size={12} />} onClick={() => onChange(emptyGrid(size))}>
           Clear
@@ -295,9 +363,11 @@ function SudokuGridInput({
           aria-label="Paste a puzzle"
         />
       ) : null}
-      <Text size="xs" c={error ? "red" : "dimmed"}>
-        {error || field.help}
-      </Text>
+      {error || helpLine(field.help) ? (
+        <Text size="xs" c={error ? "red" : "dimmed"}>
+          {error || field.help}
+        </Text>
+      ) : null}
     </Stack>
   );
 }
@@ -320,11 +390,12 @@ function readFiles(files: File[], onLoad: (items: CnfValue[]) => void) {
 function CnfInput({ field, value, onChange, error }: { field: Field; value: unknown; onChange: (value: unknown) => void; error?: string }) {
   const cnf = asCnf(value);
   const lines = cnf.text.split("\n").length;
+  const helpLine = useHelpLine();
   return (
     <Stack gap={6}>
       <Group justify="space-between">
-        <Text size="sm" fw={500}>
-          {field.label}
+        <Text size="sm" fw={500} component="div">
+          <FieldLabel text={field.label} help={field.help} />
           {cnf.name ? (
             <Badge ml="xs" variant="light" size="sm">
               {cnf.name}
@@ -350,9 +421,11 @@ function CnfInput({ field, value, onChange, error }: { field: Field; value: unkn
         error={error}
         aria-label="DIMACS text"
       />
-      <Text size="xs" c="dimmed">
-        {field.help}
-      </Text>
+      {helpLine(field.help) ? (
+        <Text size="xs" c="dimmed">
+          {field.help}
+        </Text>
+      ) : null}
     </Stack>
   );
 }

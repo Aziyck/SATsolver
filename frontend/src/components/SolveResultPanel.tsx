@@ -94,8 +94,9 @@ export function SolveResultPanel({
   return (
     <Card>
       <Stack gap="md">
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Stack gap={4} style={{ minWidth: 0 }}>
+        <Group justify="space-between" align="flex-start">
+          {/* the title takes the free width; on a narrow screen the buttons wrap below it */}
+          <Stack gap={4} style={{ minWidth: 0, flex: "1 1 220px" }}>
             <Group gap="xs">
               <Text c="dimmed" size="sm" fw={600}>
                 {job.label}

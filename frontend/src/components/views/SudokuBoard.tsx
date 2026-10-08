@@ -9,6 +9,14 @@ function cellSizeFor(size: number): number {
   return 22;
 }
 
+/** The editable grid uses smaller cells than the answer board, so the form stays short. */
+function editorCellSizeFor(size: number): number {
+  if (size <= 4) return 44;
+  if (size <= 9) return 32;
+  if (size <= 16) return 24;
+  return 20;
+}
+
 function cellFlags(size: number, r: number, c: number) {
   const box = boxSize(size);
   return {
@@ -70,7 +78,7 @@ export function SudokuEditor({
   onPastePuzzle?: (text: string) => boolean;
 }) {
   const size = value.length;
-  const cell = cellSizeFor(size);
+  const cell = editorCellSizeFor(size);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const conflicts = conflictCells(value);
 

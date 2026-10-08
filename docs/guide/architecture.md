@@ -189,7 +189,8 @@ already arrived. Two mechanisms make the result correct regardless of order:
   keeps job summaries and streamed logs in a small zustand store.
 - **Forms**: `components/fields/ParamForm.tsx` renders any field list, and
   the same values feed `POST /api/problems/{key}/preview` (debounced) for the
-  live preview and size estimate.
+  live preview and size estimate. Inside a `CompactHelp` provider (the Solve
+  page) it shows help as tooltips and puts short numeric fields two per row.
 - **Defaults and settings**: `lib/params.ts` compares values with field
   defaults (`isDefaultValue`, `changedFields`) and prints them readably
   (`displayValue`). `ParamForm` uses them for the reset buttons;

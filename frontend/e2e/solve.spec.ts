@@ -91,3 +91,13 @@ test("solver options reset to their defaults and show up in the job's settings",
   await expect(row).toContainText("changed");
   await expect(row).toContainText("0.567");
 });
+
+test("Ctrl+Enter solves from inside a field, and the Solve button stays in view", async ({ page }) => {
+  await page.goto("/solve/random_3sat");
+  await page.getByRole("textbox", { name: "Variables n" }).click();
+  await page.keyboard.press("Control+Enter");
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
+
+  await page.mouse.wheel(0, 2000);
+  await expect(page.getByRole("button", { name: "Solve", exact: true })).toBeInViewport();
+});

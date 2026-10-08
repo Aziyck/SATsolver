@@ -1,7 +1,7 @@
 import { Group, NumberInput, SegmentedControl, Select, Stack, Text } from "@mantine/core";
 import { defaultValues, type Values } from "../lib/params";
 import type { SolverSpec } from "../api/types";
-import { ParamForm, ResetToDefaults } from "./fields/ParamForm";
+import { FieldLabel, ParamForm, ResetToDefaults, useHelpLine } from "./fields/ParamForm";
 
 export interface SolverSettings {
   solver: string;
@@ -28,6 +28,7 @@ export function SolverPanel({
   errors: Record<string, string>;
 }) {
   const spec = solvers.find((solver) => solver.key === settings.solver) ?? solvers[0];
+  const helpLine = useHelpLine();
   const options = settings.options[spec.key] ?? {};
   const optionErrors = Object.fromEntries(
     Object.entries(errors)
@@ -44,6 +45,25 @@ export function SolverPanel({
         data={solvers.map((solver) => ({ value: solver.key, label: solver.title }))}
         aria-label="Solver"
       />
+      <Group grow align="flex-start">
+        <NumberInput
+          label={<FieldLabel text="Time limit (s)" help="The run stops with TIMEOUT after this long. Blank means no limit." />}
+          description={helpLine("Blank means no limit")}
+          value={settings.timeout}
+          onChange={(timeout) => onChange({ ...settings, timeout })}
+          min={0}
+          step={5}
+          error={errors.timeout}
+        />
+        <Select
+          label={<FieldLabel text="Log detail" help="What the solver writes to the log. Progress and Debug slow the solver down." />}
+          description={helpLine("What the solver writes to the log")}
+          value={settings.logLevel}
+          onChange={(logLevel) => logLevel && onChange({ ...settings, logLevel })}
+          data={Object.entries(LOG_LABELS).map(([value, label]) => ({ value, label: label.split(":")[0] }))}
+          allowDeselect={false}
+        />
+      </Group>
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
         <Text size="sm" c="dimmed">
           {spec.summary}
@@ -63,25 +83,6 @@ export function SolverPanel({
           onChange={(name, value) => onChange({ ...settings, options: { ...settings.options, [spec.key]: { ...options, [name]: value } } })}
         />
       ) : null}
-      <Group grow align="flex-start">
-        <NumberInput
-          label="Time limit (s)"
-          description="Blank means no limit"
-          value={settings.timeout}
-          onChange={(timeout) => onChange({ ...settings, timeout })}
-          min={0}
-          step={5}
-          error={errors.timeout}
-        />
-        <Select
-          label="Log detail"
-          description="What the solver writes to the log"
-          value={settings.logLevel}
-          onChange={(logLevel) => logLevel && onChange({ ...settings, logLevel })}
-          data={Object.entries(LOG_LABELS).map(([value, label]) => ({ value, label: label.split(":")[0] }))}
-          allowDeselect={false}
-        />
-      </Group>
     </Stack>
   );
 }

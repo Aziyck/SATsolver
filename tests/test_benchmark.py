@@ -1,6 +1,8 @@
 import csv
+import dataclasses
 import io
 import unittest
+from unittest import mock
 
 from sat_core.benchmark import (
     DPLL_FALLBACK_RULE,
@@ -9,7 +11,9 @@ from sat_core.benchmark import (
     rows_to_csv,
     run_benchmark,
 )
+from sat_core import solver_registry
 from sat_core.params import ParamError
+from sat_core.solver_registry import get_solver
 from sat_core.presets import all_presets, get_preset
 from sat_core.runtime import EVENT_CANCELLED, EVENT_PLAN, EVENT_PROGRESS, EVENT_ROW, RunToken
 
@@ -194,16 +198,24 @@ class RunTests(unittest.TestCase):
 
     def test_solver_errors_do_not_stop_the_benchmark(self):
         big_chain = {"cnf": {"name": "deep.cnf", "text": " 0\n".join(f"{2 * i + 1} {2 * i + 2}" for i in range(1500)) + " 0\n"}}
-        rows = run_benchmark(
-            parse_request(
-                request(
-                    problems=["dimacs"],
-                    segments=[{"cnf": [big_chain["cnf"], {"name": "small.cnf", "text": "1 0\n"}]}],
-                    solvers=["dpll", "cdcl"],
-                    timeout=None,
-                )
+        plan = parse_request(
+            request(
+                problems=["dimacs"],
+                segments=[{"cnf": [big_chain["cnf"], {"name": "small.cnf", "text": "1 0\n"}]}],
+                solvers=["dpll", "cdcl"],
+                timeout=None,
             )
         )
+        # DPLL fails on the first case only.
+        real = get_solver("dpll")
+
+        def flaky(clauses, *args):
+            if len(clauses) > 1:
+                raise RecursionError("maximum recursion depth exceeded")
+            return real.runner(clauses, *args)
+
+        with mock.patch.dict(solver_registry._SOLVERS, {"dpll": dataclasses.replace(real, runner=flaky)}):
+            rows = run_benchmark(plan)
 
         self.assertEqual([row.status for row in rows], ["ERROR", "SAT", "SAT", "SAT"])
         self.assertIn("recursion", rows[0].error)

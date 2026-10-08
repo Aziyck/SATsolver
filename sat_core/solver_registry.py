@@ -110,15 +110,43 @@ CDCL_FIELDS = (
         ),
         help="Value tried first for a decision; phase saving reuses the last value afterwards.",
     ),
-    ParamField("restarts", "Restarts", "bool", default=False, help="Restart the search every N conflicts, keeping learned clauses."),
+    ParamField(
+        "restarts",
+        "Restarts",
+        "bool",
+        default=True,
+        help="Now and then drop all decisions and start again, keeping learned clauses and scores.",
+    ),
+    ParamField(
+        "restart_strategy",
+        "Restart schedule",
+        "choice",
+        default="luby",
+        choices=(
+            Choice("luby", "Luby", "Restart after 1, 1, 2, 1, 1, 2, 4, ... times the interval: mostly short runs, a few long ones."),
+            Choice("fixed", "Fixed", "Restart after the same number of conflicts every time."),
+        ),
+        show_if=(("restarts", (True,)),),
+        advanced=True,
+    ),
     ParamField(
         "restart_interval",
-        "Restart every",
+        "Restart interval",
         "int",
         default=100,
         minimum=1,
         unit="conflicts",
+        help="Conflicts per restart (the unit of the Luby schedule).",
         show_if=(("restarts", (True,)),),
+        advanced=True,
+    ),
+    ParamField(
+        "clause_deletion",
+        "Clean up learned clauses",
+        "bool",
+        default=True,
+        help="Periodically delete half of the weak learned clauses (high LBD, long, unused) so propagation stays fast.",
+        advanced=True,
     ),
     ParamField(
         "learned_limit",
@@ -127,8 +155,9 @@ CDCL_FIELDS = (
         default=None,
         optional=True,
         minimum=1,
-        placeholder="no limit",
-        help="Delete weak learned clauses (high LBD, long, unused) above this size.",
+        placeholder="automatic",
+        help="A fixed cap instead of the automatic cleanup: when exceeded, the weakest clauses are deleted down to half of it.",
+        show_if=(("clause_deletion", (True,)),),
         advanced=True,
     ),
     ParamField(
@@ -190,8 +219,11 @@ def _run_cdcl(clauses, options, log_options, event_callback, token):
         {
             "branching": CDCL_BRANCHING[options["branching"]],
             "initial_phase": CDCL_PHASES[options["phase"]],
-            "restart_interval": options["restart_interval"] if options["restarts"] else None,
-            "learned_clause_limit": options["learned_limit"],
+            "restarts": options["restarts"],
+            "restart_strategy": options["restart_strategy"],
+            "restart_interval": options["restart_interval"],
+            "clause_deletion": options["clause_deletion"],
+            "learned_clause_limit": options["learned_limit"] if options["clause_deletion"] else None,
             "random_seed": options["random_seed"],
         }
     )
@@ -277,8 +309,8 @@ register_solver(
         summary="Complete. Learns clauses from conflicts and backjumps; the strongest default.",
         description=(
             "Conflict-Driven Clause Learning: unit propagation with watched literals, First-UIP "
-            "conflict analysis, learned clauses, non-chronological backjumping, optional restarts "
-            "and learned-clause deletion. Proves both SAT and UNSAT."
+            "conflict analysis, learned clauses, non-chronological backjumping, VSIDS decisions, "
+            "Luby restarts and periodic learned-clause cleanup. Proves both SAT and UNSAT."
         ),
         fields=CDCL_FIELDS,
         runner=_run_cdcl,
@@ -290,11 +322,12 @@ register_solver(
         key="dpll",
         title="DPLL",
         complete=True,
-        summary="Complete. The classic recursive backtracking baseline.",
+        summary="Complete. The classic backtracking baseline, without learning.",
         description=(
-            "Davis-Putnam-Logemann-Loveland: unit propagation plus recursive branching on a "
-            "variable from a shortest clause, with chronological backtracking. Proves SAT and "
-            "UNSAT, but is much slower than CDCL on hard formulas."
+            "Davis-Putnam-Logemann-Loveland: unit propagation plus branching on a variable from a "
+            "shortest clause, with chronological backtracking (True first, then False). Proves "
+            "SAT and UNSAT, but is much slower than CDCL on hard formulas because it never learns "
+            "from a conflict."
         ),
         fields=(),
         runner=_run_dpll,
@@ -346,6 +379,8 @@ _STATS_SUMMARY_KEYS = (
     ("deleted_learned_clauses", "deleted learned"),
     ("avg_lbd", "avg LBD"),
     ("restarts", "restarts"),
+    ("reductions", "cleanups"),
+    ("max_depth", "max depth"),
     ("tries", "tries"),
     ("flips", "flips"),
     ("best_unsatisfied", "best unsatisfied"),

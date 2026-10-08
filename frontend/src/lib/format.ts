@@ -49,6 +49,8 @@ export function statLabel(key: string): string {
     deleted_learned_clauses: "Deleted learned clauses",
     avg_lbd: "Average LBD",
     restarts: "Restarts",
+    reductions: "Clause cleanups",
+    max_depth: "Max decision depth",
     tries: "Tries",
     flips: "Flips",
     best_unsatisfied: "Best unsatisfied",

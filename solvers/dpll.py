@@ -1,10 +1,25 @@
 """
-Complete DPLL SAT solver.
+Complete DPLL SAT solver (iterative).
 
-The procedure searches the space of partial truth assignments for a CNF
-formula. At each node it first applies unit propagation, then chooses an
-unassigned variable and recursively explores the two possible truth values.
-Unlike local-search solvers, DPLL can prove both SAT and UNSAT.
+DPLL searches the space of partial truth assignments for a CNF formula. It
+repeatedly applies unit propagation, then chooses an unassigned variable,
+tries True first and, if that branch fails, False. When both values of the
+most recent decision have failed, it backtracks chronologically to the
+decision before. Unlike local-search solvers, DPLL can prove both SAT and
+UNSAT.
+
+This version makes exactly the same decisions as the original recursive one
+(kept in legacy/dpll_recursive.py) but works differently inside:
+
+- an explicit decision stack replaces recursion, so deep searches cannot hit
+  Python's recursion limit;
+- the formula is never copied. Instead every clause keeps two counters (how
+  many of its literals are true, how many are false), updated when a literal
+  is assigned and restored when it is unassigned. A clause with no true
+  literal and one free literal is unit; with no free literal it is a
+  conflict.
+
+docs/algorithms/dpll.md walks through an example.
 """
 
 from __future__ import annotations
@@ -14,71 +29,37 @@ import time
 from sat_core.runtime import EVENT_LOG, cancellation_status, emit, stop_requested
 
 
-def _unit_propagate(clauses, assignment):
-    """
-    Apply the unit-clause rule until no unit clause remains.
-
-    Mathematically, if a clause has only one literal left, every satisfying
-    extension of the current partial assignment must make that literal true.
-    The function returns a simplified formula, or None when a contradiction is
-    found.
-    """
-    changed = True
-
-    while changed:
-        changed = False
-
-        for clause in clauses:
-            if len(clause) != 1:
-                continue
-
-            lit = clause[0]
-            var = abs(lit)
-            value = lit > 0
-
-            if var in assignment:
-                if assignment[var] != value:
-                    return None
-                continue
-
-            assignment[var] = value
-            changed = True
-            new_clauses = []
-
-            # Simplify the CNF under the forced literal:
-            # satisfied clauses disappear, and the opposite literal is removed
-            # from clauses where it is now false.
-            for current in clauses:
-                if lit in current:
-                    continue
-
-                if -lit in current:
-                    new_clause = [item for item in current if item != -lit]
-                    if not new_clause:
-                        return None
-                    new_clauses.append(new_clause)
-                else:
-                    new_clauses.append(current)
-
-            clauses = new_clauses
-            break
-
-    return clauses, assignment
+# Cancel/timeout checks happen every CHECK_EVERY clause updates (see cdcl.py).
+CHECK_EVERY = 2048
 
 
-def _choose_variable_small_clause(clauses, assignment):
-    """
-    Branch on an unassigned variable from a shortest remaining clause.
-
-    Short clauses are closer to becoming unit or conflicting, so this simple
-    heuristic often exposes contradictions earlier than an arbitrary choice.
-    """
-    for clause in sorted(clauses, key=len):
+def _normalise_formula(clauses):
+    """Drop zeros, repeated literals and tautologies; collect the variables."""
+    clean_clauses = []
+    variables = set()
+    has_empty_clause = False
+    for clause in clauses:
+        seen = set()
+        clean = []
+        tautology = False
         for lit in clause:
-            var = abs(lit)
-            if var not in assignment:
-                return var
-    return None
+            lit = int(lit)
+            if lit == 0:
+                continue
+            variables.add(abs(lit))
+            if -lit in seen:
+                tautology = True
+                continue
+            if lit not in seen:
+                seen.add(lit)
+                clean.append(lit)
+        if tautology:
+            continue
+        if clean:
+            clean_clauses.append(clean)
+        else:
+            has_empty_clause = True
+    return clean_clauses, sorted(variables), has_empty_clause
 
 
 def dpll(
@@ -89,35 +70,29 @@ def dpll(
     return_stats=False,
     event_callback=None,
     logging_options=None,
-    _stats=None,
-    _started=None,
-    _level=0,
 ):
     """
-    Recursive DPLL SAT solver.
+    Iterative DPLL SAT solver.
 
-    clauses is a CNF formula represented as a list of clauses, and assignment
-    is the current partial model. The recursion corresponds to a binary search
-    tree whose levels are decisions on variables.
+    clauses is a CNF formula (a list of lists of non-zero ints). assignment
+    may fix some variables up front. choose_var_fn(remaining_clauses,
+    assignment) can replace the built-in branching rule; it receives the
+    simplified formula (satisfied clauses removed, false literals dropped).
 
     Return:
     - dict {variable: True/False} if SAT
     - None if UNSAT
     - (solution, stats) when return_stats=True
     """
-    top_call = _stats is None
-    if _stats is None:
-        _stats = {
-            "status": "UNKNOWN",
-            "decisions": 0,
-            "propagations": 0,
-            "conflicts": 0,
-            "elapsed": 0.0,
-            "_verbose_emitted": 0,
-            "_last_progress_work": 0,
-        }
-    if _started is None:
-        _started = time.perf_counter()
+    started = time.perf_counter()
+    stats = {
+        "status": "UNKNOWN",
+        "decisions": 0,
+        "propagations": 0,
+        "conflicts": 0,
+        "max_depth": 0,
+        "elapsed": 0.0,
+    }
 
     logging_options = logging_options or {}
     log_mode = logging_options.get("mode", "normal")
@@ -132,140 +107,228 @@ def dpll(
 
     progress_interval = positive_int(logging_options.get("progress_interval"), 100)
     verbose_limit = positive_int(logging_options.get("verbose_limit"), 120)
-
-    def public_stats():
-        return {key: value for key, value in _stats.items() if not key.startswith("_")}
+    verbose_emitted = 0
+    last_progress_work = 0
 
     def finish(solution, status):
-        if status in ("CANCELLED", "TIMEOUT", "SKIPPED") or top_call:
-            _stats["status"] = status
-        if top_call:
-            _stats["elapsed"] = time.perf_counter() - _started
-            if return_stats:
-                return solution, public_stats()
+        stats["status"] = status
+        stats["elapsed"] = time.perf_counter() - started
+        if return_stats:
+            return solution, stats
         return solution
 
     def log_debug(message):
-        if log_mode != "debug" or _stats["_verbose_emitted"] >= verbose_limit:
+        nonlocal verbose_emitted
+        if log_mode != "debug" or verbose_emitted >= verbose_limit:
             return
-        _stats["_verbose_emitted"] += 1
-        emit(event_callback, EVENT_LOG, f"      DPLL debug: level {_level}: {message}")
+        verbose_emitted += 1
+        emit(event_callback, EVENT_LOG, f"      DPLL debug: level {len(decisions)}: {message}")
 
-    def log_progress(force=False):
+    def log_progress():
+        nonlocal last_progress_work
         if log_mode not in ("periodic", "debug"):
             return
-
-        work = _stats["decisions"] + _stats["conflicts"] + _stats["propagations"]
-        if not force and work - _stats["_last_progress_work"] < progress_interval:
+        work = stats["decisions"] + stats["conflicts"] + stats["propagations"]
+        if work - last_progress_work < progress_interval:
             return
-
-        _stats["_last_progress_work"] = work
+        last_progress_work = work
         emit(
             event_callback,
             EVENT_LOG,
             (
                 "      DPLL progress: "
-                f"decisions={_stats['decisions']}, "
-                f"conflicts={_stats['conflicts']}, "
-                f"propagations={_stats['propagations']}"
+                f"decisions={stats['decisions']}, "
+                f"conflicts={stats['conflicts']}, "
+                f"propagations={stats['propagations']}, "
+                f"depth={len(decisions)}"
             ),
         )
 
     if stop_requested(cancel_token):
         return finish(None, cancellation_status(cancel_token))
 
-    if assignment is None:
-        assignment = {}
-
-    choose_var_fn = choose_var_fn or _choose_variable_small_clause
-
-    # First close the current branch under all logically forced assignments.
-    # A conflict here means the branch cannot be extended to a model.
-    before_propagation = len(assignment)
-    result = _unit_propagate(clauses, assignment.copy())
-
-    if result is None:
-        _stats["conflicts"] += 1
-        log_debug("conflict during unit propagation")
-        log_progress()
+    formula, variables, has_empty_clause = _normalise_formula(clauses)
+    if has_empty_clause:
         return finish(None, "UNSAT")
 
-    if stop_requested(cancel_token):
-        return finish(None, cancellation_status(cancel_token))
+    max_var = max(variables, default=0)
+    for var in (assignment or {}):
+        max_var = max(max_var, abs(int(var)))
 
-    clauses, assignment = result
-    propagated = max(0, len(assignment) - before_propagation)
-    if propagated:
-        _stats["propagations"] += propagated
-        log_debug(f"unit propagation assigned {propagated} variable(s)")
-        log_progress()
+    # values[var]: None (free), True or False.
+    values = [None] * (max_var + 1)
+    # Occurrence lists: occurs[offset + lit] = indices of clauses containing lit.
+    offset = max_var
+    occurs = [[] for _ in range(2 * max_var + 1)]
+    for index, clause in enumerate(formula):
+        for lit in clause:
+            occurs[offset + lit].append(index)
+    lengths = [len(clause) for clause in formula]
+    true_count = [0] * len(formula)
+    false_count = [0] * len(formula)
 
-    if not clauses:
-        return finish(assignment, "SAT")
+    # The trail lists assigned literals in order. Literals before qhead have
+    # had their effect on the clause counters applied.
+    trail = []
+    qhead = 0
+    # One entry per open decision: [variable, value tried, trail position,
+    # whether the second value is being tried].
+    decisions = []
+    countdown = CHECK_EVERY
 
-    var = choose_var_fn(clauses, assignment)
-    if var is None:
-        return finish(assignment, "SAT")
+    def assign(lit, forced):
+        var = abs(lit)
+        values[var] = lit > 0
+        trail.append(lit)
+        if forced:
+            stats["propagations"] += 1
 
-    # No more forced moves are available, so DPLL makes a decision and tries
-    # both truth values. Chronological backtracking happens through recursion:
-    # if the first branch fails, control returns here and the second is tried.
-    _stats["decisions"] += 1
-    log_debug(f"choose variable {var}")
-    log_progress()
+    def propagate():
+        """
+        Apply every pending assignment to the clause counters.
 
-    for value in (True, False):
-        if stop_requested(cancel_token):
+        Each new true literal satisfies the clauses containing it; each new
+        false literal shrinks the clauses containing its negation. A shrunk
+        clause with nothing true and one free literal forces that literal
+        (unit propagation); with nothing free it is a conflict.
+        Returns "conflict", "cancelled" or None.
+        """
+        nonlocal qhead, countdown
+        while qhead < len(trail):
+            lit = trail[qhead]
+            qhead += 1
+            for index in occurs[offset + lit]:
+                true_count[index] += 1
+            conflict = False
+            for index in occurs[offset - lit]:
+                false_count[index] += 1
+                countdown -= 1
+                if countdown <= 0:
+                    countdown = CHECK_EVERY
+                    if stop_requested(cancel_token):
+                        return "cancelled"
+                if conflict or true_count[index]:
+                    continue
+                free = lengths[index] - false_count[index]
+                if free == 0:
+                    # Keep updating the counters of this literal so that
+                    # undo() can reverse them uniformly, then report.
+                    conflict = True
+                elif free == 1:
+                    for other in formula[index]:
+                        if values[abs(other)] is None:
+                            assign(other, forced=True)
+                            break
+            if conflict:
+                return "conflict"
+        return None
+
+    def undo(position):
+        """Unassign every literal from trail[position:] and restore the counters."""
+        nonlocal qhead
+        for index in range(len(trail) - 1, position - 1, -1):
+            lit = trail[index]
+            if index < qhead:
+                for clause_index in occurs[offset + lit]:
+                    true_count[clause_index] -= 1
+                for clause_index in occurs[offset - lit]:
+                    false_count[clause_index] -= 1
+            values[abs(lit)] = None
+        del trail[position:]
+        qhead = min(qhead, position)
+
+    def choose_variable():
+        """
+        Small-clause rule: a free variable from a shortest remaining clause.
+
+        Short clauses are closest to becoming unit or conflicting, so branching
+        on them tends to expose contradictions early. Ties go to the earliest
+        clause and, inside it, the earliest free literal, exactly like the
+        recursive version.
+        """
+        if choose_var_fn is not None:
+            return choose_var_fn(remaining_clauses(), current_assignment())
+        best = None
+        best_length = None
+        for index, clause in enumerate(formula):
+            if true_count[index]:
+                continue
+            length = lengths[index] - false_count[index]
+            if best_length is None or length < best_length:
+                best, best_length = index, length
+                if length <= 2:
+                    break  # nothing shorter can remain after propagation
+        if best is None:
+            return None
+        for lit in formula[best]:
+            if values[abs(lit)] is None:
+                return abs(lit)
+        return None
+
+    def remaining_clauses():
+        return [
+            [lit for lit in clause if values[abs(lit)] is None]
+            for index, clause in enumerate(formula)
+            if not true_count[index]
+        ]
+
+    def current_assignment():
+        return {var: values[var] for var in range(1, max_var + 1) if values[var] is not None}
+
+    # Variables fixed by the caller are facts before the first decision.
+    for var, value in (assignment or {}).items():
+        var = abs(int(var))
+        if values[var] is None:
+            assign(var if value else -var, forced=False)
+        elif values[var] != bool(value):
+            return finish(None, "UNSAT")
+    # Input unit clauses are forced from the start.
+    for clause in formula:
+        if len(clause) == 1:
+            lit = clause[0]
+            if values[abs(lit)] is None:
+                assign(lit, forced=True)
+            elif values[abs(lit)] != (lit > 0):
+                stats["conflicts"] += 1
+                return finish(None, "UNSAT")
+
+    while True:
+        outcome = propagate()
+        if outcome == "cancelled":
             return finish(None, cancellation_status(cancel_token))
 
-        new_assignment = assignment.copy()
-        new_assignment[var] = value
-        log_debug(f"try {var}={value}")
-
-        lit = var if value else -var
-        new_clauses = []
-        branch_conflict = False
-
-        # Simplify the formula under the decision literal before recursing.
-        # Producing an empty clause is exactly a falsified CNF constraint.
-        for clause in clauses:
-            if lit in clause:
-                continue
-
-            if -lit in clause:
-                new_clause = [item for item in clause if item != -lit]
-
-                if not new_clause:
-                    branch_conflict = True
-                    _stats["conflicts"] += 1
-                    log_debug(f"empty clause after {var}={value}")
-                    log_progress()
+        if outcome == "conflict":
+            stats["conflicts"] += 1
+            log_debug("conflict")
+            log_progress()
+            # Chronological backtracking: undo the most recent decision whose
+            # second value has not been tried yet, and try it.
+            while decisions:
+                var, value, position, flipped = decisions.pop()
+                undo(position)
+                if not flipped:
+                    log_debug(f"backtrack: try {var}={not value}")
+                    decisions.append([var, not value, position, True])
+                    assign(var if not value else -var, forced=False)
                     break
-
-                new_clauses.append(new_clause)
+                log_debug(f"both values of {var} failed")
             else:
-                new_clauses.append(clause)
+                # Every decision has been tried both ways.
+                return finish(None, "UNSAT")
+            continue
 
-        if not branch_conflict:
-            result = dpll(
-                new_clauses,
-                new_assignment,
-                choose_var_fn,
-                cancel_token=cancel_token,
-                return_stats=False,
-                event_callback=event_callback,
-                logging_options=logging_options,
-                _stats=_stats,
-                _started=_started,
-                _level=_level + 1,
-            )
+        var = choose_variable()
+        if var is None:
+            # No clause is left unsatisfied. Variables that are still free can
+            # take any value; they get True, like CDCL's default phase.
+            solution = {v: values[v] if values[v] is not None else True for v in variables}
+            for v in (assignment or {}):
+                solution[abs(int(v))] = values[abs(int(v))]
+            return finish(solution, "SAT")
 
-            if stop_requested(cancel_token):
-                return finish(None, cancellation_status(cancel_token))
-
-            if result is not None:
-                return finish(result, "SAT")
-
-        log_debug(f"backtrack on {var}={value}")
-
-    return finish(None, "UNSAT")
+        stats["decisions"] += 1
+        decisions.append([var, True, len(trail), False])
+        stats["max_depth"] = max(stats["max_depth"], len(decisions))
+        log_debug(f"choose variable {var}, try {var}=True")
+        log_progress()
+        assign(var, forced=False)

@@ -1,7 +1,23 @@
+import contextlib
+import dataclasses
 import unittest
+from unittest import mock
 
 from sat_core.runtime import EVENT_LOG, EVENT_PROGRESS, RunEvent, RunToken
+from sat_core import solver_registry
 from sat_core.solver_registry import all_solvers, get_solver, options_summary, run_solver
+
+
+@contextlib.contextmanager
+def failing_solver(key):
+    """Temporarily replace a solver by one that raises, to test the ERROR path."""
+
+    def boom(*_args):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    broken = dataclasses.replace(get_solver(key), runner=boom)
+    with mock.patch.dict(solver_registry._SOLVERS, {key: broken}):
+        yield
 
 
 def log_messages(events):
@@ -95,14 +111,21 @@ class RunSolverTests(unittest.TestCase):
             run_solver([[1]], "cdcl", log_level="chatty")
 
     def test_solver_exceptions_become_error_status(self):
-        # 1,500 independent 2-clauses need 1,500 nested DPLL decisions, deeper
-        # than Python's default recursion limit.
+        with failing_solver("dpll"):
+            result = run_solver([[1, 2]], "dpll")
+
+        self.assertEqual(result.status, "ERROR")
+        self.assertIn("recursion limit", result.error)
+
+    def test_dpll_has_no_recursion_limit(self):
+        # 1,500 independent 2-clauses need 1,500 nested decisions; the old
+        # recursive DPLL failed here, the iterative one does not.
         clauses = [[2 * i + 1, 2 * i + 2] for i in range(1500)]
 
         result = run_solver(clauses, "dpll")
 
-        self.assertEqual(result.status, "ERROR")
-        self.assertIn("recursion limit", result.error)
+        self.assertEqual(result.status, "SAT")
+        self.assertEqual(result.stats["max_depth"], 1500)
         self.assertEqual(run_solver(clauses, "cdcl").status, "SAT")
 
     def test_cdcl_options_are_applied(self):
@@ -113,8 +136,8 @@ class RunSolverTests(unittest.TestCase):
                 self.assertEqual(result.status, "SAT")
 
         spec = get_solver("cdcl")
-        options = spec.parse_options({"branching": "moms", "restarts": True, "restart_interval": 5})
-        self.assertEqual(options_summary(spec, options), "branching=MOMS; restarts=on; restart_interval=5")
+        options = spec.parse_options({"branching": "moms", "restarts": False, "restart_interval": 5})
+        self.assertEqual(options_summary(spec, options), "branching=MOMS; restarts=off")
         self.assertEqual(options_summary(spec, spec.default_options()), "defaults")
 
     def test_public_stats_are_small_scalars(self):

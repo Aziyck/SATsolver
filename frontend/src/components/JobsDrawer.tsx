@@ -8,9 +8,10 @@ import type { JobSummary } from "../api/types";
 import { formatSeconds, formatTime } from "../lib/format";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
 
+/** Where a job opens: benchmarks have their results page, solves and encodings the job page. */
 export function jobPath(job: Pick<JobSummary, "id" | "kind" | "problems">): string {
   if (job.kind === "benchmark") return `/benchmarks/${job.id}`;
-  return `/solve/${job.problems[0] ?? ""}?job=${job.id}`;
+  return `/jobs/${job.id}`;
 }
 
 export function jobProgress(job: JobSummary): number | null {

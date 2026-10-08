@@ -4,6 +4,7 @@ import {
   IconCircleCheck,
   IconDownload,
   IconEdit,
+  IconExternalLink,
   IconFileCode,
   IconListDetails,
   IconPlayerStop,
@@ -12,7 +13,8 @@ import {
   IconTable,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { urls } from "../api/client";
 import { useJob, useJobActions, useProblem } from "../api/queries";
 import type { JobDetail } from "../api/types";
@@ -30,23 +32,44 @@ function useTicker(active: boolean) {
   }, [active]);
 }
 
+/**
+ * The result of a solve or encode job.
+ *
+ * layout="panel" is the compact version on the Solve page (with a link to the
+ * full page); layout="page" is the full-width job page (/jobs/:id), which
+ * opens on the live log while the job runs and switches to the answer when it
+ * finishes, unless the user picked a tab.
+ */
 export function SolveResultPanel({
   jobId,
   onEdit,
   onOpenAs,
   onDeleted,
+  layout = "panel",
 }: {
   jobId: number;
   onEdit: (job: JobDetail) => void;
   onOpenAs: (problem: string, params: Record<string, unknown>) => void;
   onDeleted: () => void;
+  layout?: "panel" | "page";
 }) {
   const { data: job, isLoading, isError } = useJob(jobId);
   const problem = useProblem(job?.problems[0]);
   const actions = useJobActions();
+  const navigate = useNavigate();
   const active = job ? isActive(job.status) : false;
   useTicker(active);
+  const isPage = layout === "page";
   const [tab, setTab] = useState<string | null>("answer");
+  const userPickedTab = useRef(false);
+  useEffect(() => {
+    if (!isPage || !job || userPickedTab.current) return;
+    setTab(active ? "log" : "answer");
+  }, [isPage, active, job?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickTab = (value: string | null) => {
+    userPickedTab.current = true;
+    setTab(value);
+  };
 
   if (isLoading) return <Loader />;
   if (isError || !job) {
@@ -74,11 +97,18 @@ export function SolveResultPanel({
               </Text>
               <JobStatusBadge status={job.status} />
             </Group>
-            <Title order={4} lineClamp={2}>
+            <Title order={isPage ? 2 : 4} lineClamp={2}>
               {instance?.name ?? job.title}
             </Title>
           </Stack>
           <Group gap={6} wrap="nowrap">
+            {!isPage ? (
+              <Tooltip label="Open this job on its own page, with a large live log">
+                <Button variant="default" size="xs" leftSection={<IconExternalLink size={14} />} onClick={() => navigate(`/jobs/${job.id}`)}>
+                  Full page
+                </Button>
+              </Tooltip>
+            ) : null}
             {active ? (
               <Button color="red" variant="light" size="xs" leftSection={<IconPlayerStop size={14} />} onClick={() => actions.cancel.mutate(job.id)}>
                 Stop
@@ -220,7 +250,7 @@ export function SolveResultPanel({
           </Alert>
         ) : null}
 
-        <Tabs value={tab} onChange={setTab} keepMounted={false}>
+        <Tabs value={tab} onChange={pickTab} keepMounted={false}>
           <Tabs.List>
             <Tabs.Tab value="answer" leftSection={<IconSparkles size={14} />}>
               {result?.decoded ? "Answer" : "Input"}
@@ -261,7 +291,7 @@ export function SolveResultPanel({
             )}
           </Tabs.Panel>
           <Tabs.Panel value="instance" pt="md">
-            {instance?.cnf_file ? <CnfViewer jobId={job.id} /> : null}
+            {instance?.cnf_file ? <CnfViewer jobId={job.id} height={isPage ? 560 : 360} /> : null}
           </Tabs.Panel>
           <Tabs.Panel value="stats" pt="md">
             {result ? (
@@ -284,7 +314,7 @@ export function SolveResultPanel({
             ) : null}
           </Tabs.Panel>
           <Tabs.Panel value="log" pt="md">
-            <LogViewer jobId={job.id} initial={job.logs} />
+            <LogViewer jobId={job.id} initial={job.logs} height={isPage ? 560 : 280} />
           </Tabs.Panel>
         </Tabs>
       </Stack>

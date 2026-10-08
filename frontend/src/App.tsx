@@ -30,6 +30,7 @@ const BenchmarksPage = lazy(() => import("./pages/BenchmarksPage"));
 const BenchmarkBuilder = lazy(() => import("./pages/BenchmarkBuilder"));
 const BenchmarkResults = lazy(() => import("./pages/BenchmarkResults"));
 const JobsPage = lazy(() => import("./pages/JobsPage"));
+const JobPage = lazy(() => import("./pages/JobPage"));
 const LearnPage = lazy(() => import("./pages/LearnPage"));
 
 const NAV = [
@@ -167,6 +168,7 @@ export default function App() {
               <Route path="/benchmarks/new" element={<BenchmarkBuilder />} />
               <Route path="/benchmarks/:id" element={<BenchmarkResults />} />
               <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/jobs/:id" element={<JobPage />} />
               <Route path="/learn" element={<LearnPage />} />
               <Route path="/learn/:topic" element={<LearnPage />} />
               <Route

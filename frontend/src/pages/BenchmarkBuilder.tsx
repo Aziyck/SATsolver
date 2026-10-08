@@ -500,7 +500,7 @@ function SettingsCard({
           value={draft.workers ?? 1}
           onChange={(workers) => onChange({ workers })}
           error={errors.workers}
-          w={170}
+          style={{ flex: "0 0 190px" }}
         />
         <Text size="xs" c="dimmed" mt={28}>
           1 solves the cases one after another and gives the cleanest timings. Higher values solve that many cases at the same time in

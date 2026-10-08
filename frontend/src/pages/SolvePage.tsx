@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
-import { useCatalog, useCreateJob } from "../api/queries";
+import { useCatalog, useCreateJob, useJob } from "../api/queries";
 import type { JobDetail, ProblemSpec, SolverSpec } from "../api/types";
 import { EstimateBadge } from "../components/Display";
 import { ParamForm } from "../components/fields/ParamForm";
@@ -137,6 +137,15 @@ export default function SolvePage() {
     navigate(`/solve/${key}`);
     setView("preview");
   };
+
+  // "Edit" on the full job page (/jobs/:id) sends the job id as router state.
+  const editJobId = (location.state as { editJob?: number } | null)?.editJob ?? null;
+  const editJob = useJob(editJobId);
+  useEffect(() => {
+    if (!editJobId || !editJob.data) return;
+    editFromJob(editJob.data);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [editJobId, editJob.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const jobs = useLive((state) => state.jobs);
   const recent = useMemo(

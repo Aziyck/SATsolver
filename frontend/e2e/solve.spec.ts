@@ -53,3 +53,22 @@ test("invalid input shows a field error instead of starting a job", async ({ pag
   await expect(page.getByText(/line 2/i).first()).toBeVisible();
   await expect(page).not.toHaveURL(/job=/);
 });
+
+test("a solve job has a full page with the log", async ({ page }) => {
+  await page.goto("/solve/n_queens");
+  await page.getByRole("button", { name: "Solve", exact: true }).click();
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Full page" }).click();
+  await expect(page).toHaveURL(/\/jobs\/\d+$/);
+  await page.getByRole("tab", { name: /Log/ }).click();
+  await expect(page.getByText(/Job done/)).toBeVisible();
+
+  // The Jobs list opens the same page, and Edit goes back to the form.
+  await page.goto("/jobs");
+  await page.getByRole("row").filter({ hasText: "N-Queens" }).first().click();
+  await expect(page).toHaveURL(/\/jobs\/\d+$/);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page).toHaveURL(/\/solve\/n_queens$/);
+  await expect(page.getByRole("button", { name: "Solve", exact: true })).toBeVisible();
+});

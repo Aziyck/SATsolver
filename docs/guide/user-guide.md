@@ -289,3 +289,11 @@ jobs that were running when the server stopped are marked *interrupted*.
 DIMACS files exported by WizSAT start with a `c wizsat {...}` comment that
 records the problem and its parameters. Other tools ignore comments, so the
 files stay standard.
+
+## If a page shows an error
+
+The Solve page and the benchmark builder remember unsent form values in your
+browser, and each browser keeps its own copy. If a page shows "This page hit
+an error" every time, a remembered form may no longer fit the current
+version. **Clear saved forms and reload** forgets those form values only:
+your jobs and benchmarks are stored by the server and stay.

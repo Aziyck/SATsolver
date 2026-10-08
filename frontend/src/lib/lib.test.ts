@@ -6,7 +6,7 @@ import { formatSeconds } from "./format";
 import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
 import { aggregate, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
 import { learnLink } from "./learn";
-import { conflictCells, parsePuzzle } from "./sudoku";
+import { conflictCells, parsePuzzle, sudokuSize } from "./sudoku";
 
 function field(partial: Partial<Field> & Pick<Field, "name" | "kind">): Field {
   return {
@@ -131,6 +131,19 @@ describe("edges", () => {
 });
 
 describe("sudoku helpers", () => {
+  it("only ever picks a valid board size", () => {
+    expect(sudokuSize(16)).toBe(16);
+    expect(sudokuSize("4")).toBe(4);
+    expect(sudokuSize("4, 9, 16")).toBe(4);
+    expect(sudokuSize(["16", "25"])).toBe(16);
+    for (const odd of [3, "5", "", null, undefined, "4..9", "abc"]) expect(sudokuSize(odd)).toBe(9);
+  });
+
+  it("finds conflicts without crashing on boards that are not square sizes", () => {
+    expect(() => conflictCells([[1, 1, 0], [0, 0, 0], [0, 0, 0]])).not.toThrow();
+    expect(conflictCells([[1, 1, 0], [0, 0, 0], [0, 0, 0]])).toEqual(new Set(["0,0", "0,1"]));
+  });
+
   it("parses pasted puzzles and finds conflicts", () => {
     const grid = parsePuzzle("1..4\n.4..\n..2.\n3..1")!;
     expect(grid[0]).toEqual([1, 0, 0, 4]);

@@ -22,6 +22,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useCatalog } from "./api/queries";
 import { useLive } from "./api/live";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { JobsDrawer } from "./components/JobsDrawer";
 import { isActive } from "./lib/status";
 
@@ -153,39 +154,41 @@ export default function App() {
             <Loader />
           </Center>
         ) : (
-          <Suspense
-            fallback={
-              <Center h="60vh">
-                <Loader />
-              </Center>
-            }
-          >
-            <Routes>
-              <Route path="/" element={<Navigate to="/solve" replace />} />
-              <Route path="/solve" element={<SolvePage />} />
-              <Route path="/solve/:problem" element={<SolvePage />} />
-              <Route path="/benchmarks" element={<BenchmarksPage />} />
-              <Route path="/benchmarks/new" element={<BenchmarkBuilder />} />
-              <Route path="/benchmarks/:id" element={<BenchmarkResults />} />
-              <Route path="/jobs" element={<JobsPage />} />
-              <Route path="/jobs/:id" element={<JobPage />} />
-              <Route path="/learn" element={<LearnPage />} />
-              <Route path="/learn/:topic" element={<LearnPage />} />
-              <Route
-                path="*"
-                element={
-                  <Center h="50vh">
-                    <Stack align="center">
-                      <Title order={3}>Page not found</Title>
-                      <Text component={Link} to="/solve" c="wizard">
-                        Back to Solve
-                      </Text>
-                    </Stack>
-                  </Center>
-                }
-              />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary resetKey={location.pathname}>
+            <Suspense
+              fallback={
+                <Center h="60vh">
+                  <Loader />
+                </Center>
+              }
+            >
+              <Routes>
+                <Route path="/" element={<Navigate to="/solve" replace />} />
+                <Route path="/solve" element={<SolvePage />} />
+                <Route path="/solve/:problem" element={<SolvePage />} />
+                <Route path="/benchmarks" element={<BenchmarksPage />} />
+                <Route path="/benchmarks/new" element={<BenchmarkBuilder />} />
+                <Route path="/benchmarks/:id" element={<BenchmarkResults />} />
+                <Route path="/jobs" element={<JobsPage />} />
+                <Route path="/jobs/:id" element={<JobPage />} />
+                <Route path="/learn" element={<LearnPage />} />
+                <Route path="/learn/:topic" element={<LearnPage />} />
+                <Route
+                  path="*"
+                  element={
+                    <Center h="50vh">
+                      <Stack align="center">
+                        <Title order={3}>Page not found</Title>
+                        <Text component={Link} to="/solve" c="wizard">
+                          Back to Solve
+                        </Text>
+                      </Stack>
+                    </Center>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         )}
       </AppShell.Main>
     </AppShell>

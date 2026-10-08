@@ -22,7 +22,7 @@ import type { Field } from "../../api/types";
 import { edgesAsText, parseEdges } from "../../lib/edges";
 import { formatCount } from "../../lib/format";
 import { changedFields, cloneValue, displayValue, isDefaultValue, isNumericKind, isVisible, parseNumberList, type Values } from "../../lib/params";
-import { asGrid, emptyGrid, parsePuzzle } from "../../lib/sudoku";
+import { asGrid, emptyGrid, parsePuzzle, sudokuSize } from "../../lib/sudoku";
 import { SudokuEditor } from "../views/SudokuBoard";
 
 export interface ParamFormProps {
@@ -177,7 +177,7 @@ export function ParamInput({
     case "edges":
       return <EdgesInput field={field} value={value} onChange={set} error={error} />;
     case "sudoku_grid":
-      return <SudokuGridInput field={field} value={value} size={Number(values.size) || 9} onChange={set} error={error} />;
+      return <SudokuGridInput field={field} value={value} size={sudokuSize(values.size)} onChange={set} error={error} />;
     case "cnf":
       return <CnfInput field={field} value={value} onChange={set} error={error} />;
   }

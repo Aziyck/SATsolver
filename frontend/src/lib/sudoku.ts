@@ -4,6 +4,23 @@ export function emptyGrid(size: number): Grid {
   return Array.from({ length: size }, () => Array.from({ length: size }, () => 0));
 }
 
+/** Board sizes the Sudoku problem accepts (SUDOKU_SIZES in problems/sudoku.py). */
+export const SUDOKU_SIZES = [4, 9, 16, 25];
+
+/**
+ * The board size for a form's "size" value: a number, "9", a swept "4, 9" or
+ * a list. The first valid size wins; anything else (blank, a size being typed,
+ * a stale saved draft) gives 9, so the editor never draws an impossible board.
+ */
+export function sudokuSize(value: unknown): number {
+  const items = Array.isArray(value) ? value : String(value ?? "").split(/[\s,]+/);
+  for (const item of items) {
+    const size = Number(item);
+    if (SUDOKU_SIZES.includes(size)) return size;
+  }
+  return 9;
+}
+
 export function boxSize(size: number): number {
   return Math.round(Math.sqrt(size));
 }
@@ -43,7 +60,7 @@ export function conflictCells(grid: Grid): Set<string> {
   const check = (cells: [number, number][]) => {
     const seen = new Map<number, [number, number][]>();
     for (const [r, c] of cells) {
-      const value = grid[r][c];
+      const value = grid[r]?.[c];
       if (!value) continue;
       seen.set(value, [...(seen.get(value) ?? []), [r, c]]);
     }
@@ -54,6 +71,8 @@ export function conflictCells(grid: Grid): Set<string> {
   for (let i = 0; i < size; i += 1) {
     check(Array.from({ length: size }, (_, c) => [i, c] as [number, number]));
     check(Array.from({ length: size }, (_, r) => [r, i] as [number, number]));
+    // Boxes only exist when the size is a square (4, 9, 16, 25).
+    if (box * box !== size) continue;
     const top = Math.floor(i / box) * box;
     const left = (i % box) * box;
     check(Array.from({ length: size }, (_, k) => [top + Math.floor(k / box), left + (k % box)] as [number, number]));

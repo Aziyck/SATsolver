@@ -104,7 +104,10 @@ case labels and the web forms. Kinds: `int`, `float`, `bool`, `choice`,
   them as `422 {"message", "errors"}` and the forms show them per field.
 
 The frontend never hard-codes a problem's fields. Adding or changing a field
-in Python is enough for the form, the preview and the benchmark builder.
+in Python is enough for the form, the preview, the benchmark builder, the
+reset-to-default buttons and the Settings/Setup tables on job pages. Those
+tables print `help` next to the value used, so write help that says what the
+option does, not just its name.
 
 ## Adding a problem
 
@@ -142,9 +145,14 @@ Full walkthrough: `docs/guide/adding-a-problem.md`. Checklist:
    fields and a runner that maps the options to your solver's arguments.
    `complete=False` for solvers that cannot prove UNSAT (they report
    `UNKNOWN`).
-3. Add tests (`tests/test_<solver>.py`), add complete solvers to
-   `tests/test_solver_agreement.py` (checks against brute force), and make
-   sure `python scripts/benchmark_cdcl.py` runs it.
+3. Add tests (`tests/test_<solver>.py`), add the solver to
+   `tests/test_solver_agreement.py` (complete solvers must agree with brute
+   force; incomplete ones must find every model and never claim one for an
+   UNSAT formula), and make sure `python scripts/benchmark_cdcl.py` runs it.
+   Incomplete solvers spend their whole budget on UNSAT formulas, so tests
+   pass a small `max_tries`/`max_flips`.
+4. Give every new stat key a label and a one-line explanation in `STATS`
+   (`frontend/src/lib/format.ts`); the stats tables show it on hover.
 
 Keep the `dpll()`, `cdcl()` and `walksat()` signatures backward compatible
 unless the registry, tests and docs change with them. The recursive DPLL
@@ -153,7 +161,10 @@ that `solvers/dpll.py` replaced is archived in `legacy/dpll_recursive.py`.
 Solver hot loops are performance-sensitive (`docs/guide/performance.md`):
 check the cancel token every few thousand steps, not on every step; avoid
 scanning all clauses or variables per conflict or decision; measure with
-`scripts/solver_timings.py` before and after.
+`scripts/solver_timings.py` before and after. Encoders number variables
+sparsely (Sudoku goes past 90,000), so a solver that keeps per-variable
+arrays should renumber the variables 1..n internally and map the model back
+(see `solvers/walksat.py`).
 
 ## Statuses
 
@@ -202,7 +213,12 @@ A benchmark request is plain JSON (the same shape the presets use):
   in a process pool (`sat_core/parallel.py`). A case is the unit of work and
   row indices are `case.index * len(solvers) + position`, so parallel and
   sequential runs give identical rows. Code inside `run_case` must therefore
-  work in a worker process too (no globals set by the job process).
+  work in a worker process too (no globals set by the job process). The
+  frontend relies on the same formula to find a row's solver entry
+  (`entryForRow` in `components/BenchmarkSetup.tsx`).
+- Workers are `spawn` processes, which re-import the main module: a script
+  that runs a parallel benchmark must be a file with an
+  `if __name__ == "__main__":` guard (piping it into `python -` fails).
 - One CSV format for all problems: base columns, one column per parameter,
   solver statistics.
 

@@ -18,3 +18,28 @@
 - Playwright is pinned in `frontend/package.json`; if the environment has
   preinstalled browsers, keep the pin matching them instead of downloading new
   ones.
+- To check a UI change by eye: start the server on a temp data dir, create
+  jobs with `curl -X POST localhost:<port>/api/jobs` (same body as the UI),
+  and screenshot with a small Playwright script that imports
+  `frontend/node_modules/playwright/index.mjs`. Mantine's SegmentedControl
+  and Switch hide their inputs: click `label[for$="-<value>"]`, or the
+  switch role with `{ force: true }`.
+- A push to `main` starts two workflows: "CI" (the tests) and "pages build
+  and deployment". Check "CI".
+
+## Long-running work
+
+Benchmarks, `scripts/solver_timings.py`, local-search runs on UNSAT
+formulas, the e2e suite and waiting for CI take minutes. Don't block on them:
+
+- Waiting only: run the command with Bash `run_in_background` (or an
+  `until` loop that exits when the condition holds). It costs nothing while
+  it waits, and you are notified when it ends.
+- Waiting plus judgment (read the output, rerun a failure once, summarise a
+  large table): hand it to a background subagent on a cheaper model. Give it
+  the exact command, the data dir and the port, and ask for a short report
+  (statuses and times per case, failures with their message), not the raw
+  log. Keep working on something else meanwhile.
+- Timings you will report must run alone: builds, test suites or a second
+  benchmark running at the same time make them noisy. Run them as the only
+  heavy job, with `workers` at 1.

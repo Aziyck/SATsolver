@@ -249,7 +249,11 @@ def my_solver(clauses, *, return_stats=False, event_callback=None, cancel_token=
   `TIMEOUT`, `CANCELLED`, `SKIPPED` (from `cancellation_status`), or
   `UNKNOWN` for an incomplete solver that gave up.
 - Numeric stats (`decisions`, `conflicts`, `propagations`, `flips`, ...)
-  appear in the UI and the CSV; use the existing names where they fit.
+  appear in the UI and the CSV; use the existing names where they fit. For a
+  new name, add a label and a one-line explanation to `STATS` in
+  `frontend/src/lib/format.ts`.
+- If you keep arrays indexed by variable, renumber the variables 1..n first:
+  the encoders' readable numbers are sparse (see `solvers/walksat.py`).
 - Check `stop_requested(cancel_token)` often enough (every few thousand
   steps) that cancel and timeouts react within a fraction of a second.
 
@@ -288,13 +292,19 @@ register_solver(
 `run_solver()` wraps the runner: it applies the time limit, turns exceptions
 into `ERROR` results, fills in SAT/UNSAT/UNKNOWN from `complete` when the
 stats carry no status, and keeps only scalar stats. The solver now appears in
-the Solve page, the benchmark builder, limit rules and the API.
+the Solve page, the benchmark builder, limit rules and the API, and its
+options in the job Settings and benchmark Setup tables (with their `help`
+text), with reset-to-default buttons in the forms.
 
 ### 3. Test it
 
 - Add `tests/test_<name>.py`: small SAT and UNSAT formulas, a formula with
   unit clauses and duplicates, cancellation (a token cancelled up front
   returns `CANCELLED`), and a timeout.
+- Add it to `tests/test_solver_agreement.py`: a complete solver must agree
+  with brute force on random small formulas; an incomplete one must find a
+  model of every satisfiable one and return `UNKNOWN` for the rest (give it a
+  small budget there, or the UNSAT cases take long).
 - `python scripts/benchmark_cdcl.py` runs every registered solver on the
   example files; check that yours appears and agrees with CDCL.
 

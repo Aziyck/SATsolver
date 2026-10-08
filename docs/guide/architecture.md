@@ -190,6 +190,13 @@ already arrived. Two mechanisms make the result correct regardless of order:
 - **Forms**: `components/fields/ParamForm.tsx` renders any field list, and
   the same values feed `POST /api/problems/{key}/preview` (debounced) for the
   live preview and size estimate.
+- **Defaults and settings**: `lib/params.ts` compares values with field
+  defaults (`isDefaultValue`, `changedFields`) and prints them readably
+  (`displayValue`). `ParamForm` uses them for the reset buttons;
+  `components/SolverSettingsTable.tsx` for the Settings tab of a solve job,
+  the Setup tab of a benchmark (`components/BenchmarkSetup.tsx`) and the run
+  drawer. Statistics get their labels and explanations from `STATS` in
+  `lib/format.ts`.
 - **Answers**: `components/views/ProblemViews.tsx` picks a renderer by the
   problem's `result_view`: Sudoku board, chessboard, graph (Cytoscape) or
   assignment grid.

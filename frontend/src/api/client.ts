@@ -74,6 +74,7 @@ export const api = {
   rerun: (id: number) => post<JobSummary>(`/api/jobs/${id}/rerun`),
   remove: (id: number) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
   clear: (kinds?: JobKind[]) => post<{ deleted: number[] }>("/api/jobs/clear", { kinds: kinds ?? null }),
+  resetNumbering: () => post<void>("/api/jobs/reset-numbering"),
   cnf: (id: number, offset: number, limit: number) =>
     request<{ offset: number; lines: string[]; total: number }>(`/api/jobs/${id}/cnf?offset=${offset}&limit=${limit}`),
   rowCase: (id: number, index: number) => request<RowCase>(`/api/jobs/${id}/rows/${index}/case`),

@@ -162,6 +162,12 @@ export function applyEvents(events: LiveEvent[], queryClient: QueryClient) {
         queryClient.removeQueries({ queryKey: ["job", event.job_id] });
         queryClient.removeQueries({ queryKey: ["rows", event.job_id] });
         break;
+      case "numbering_reset":
+        // Job numbers start again at 1: nothing cached under an old number may survive.
+        queryClient.removeQueries({ queryKey: ["job"] });
+        queryClient.removeQueries({ queryKey: ["rows"] });
+        queryClient.removeQueries({ queryKey: ["case"] });
+        break;
       case "resync":
         void queryClient.invalidateQueries();
         break;

@@ -76,5 +76,6 @@ export function useJobActions() {
     onSuccess: (data) => data.deleted.forEach((id) => removeJob(id)),
     onError: notifyError("Could not clear jobs"),
   });
-  return { cancel, skip, rerun, remove, clear };
+  const resetNumbering = useMutation({ mutationFn: api.resetNumbering, onError: notifyError("Could not restart the numbering") });
+  return { cancel, skip, rerun, remove, clear, resetNumbering };
 }

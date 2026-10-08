@@ -495,6 +495,22 @@ class JobManager:
         shutil.rmtree(job.workdir, ignore_errors=True)
         self.publish({"type": "deleted", "job_id": job_id})
 
+    def reset_numbering(self) -> None:
+        """Start job numbers from J1 again; refused while any job exists."""
+
+        with self.lock:
+            if self.jobs:
+                raise RuntimeError("Delete every job first: numbers restart only when the job list is empty.")
+            # Leftover folders (a delete that could not remove its folder)
+            # would otherwise end up inside the new J1, J2, ...
+            if self.settings.jobs_dir.is_dir():
+                for child in self.settings.jobs_dir.iterdir():
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=True)
+            if not self.store.reset_numbering():
+                raise RuntimeError("A job was started meanwhile; numbers were not reset.")
+        self.publish({"type": "numbering_reset"})
+
     def clear_finished(self, kinds: list[str] | None = None) -> list[int]:
         with self.lock:
             ids = [

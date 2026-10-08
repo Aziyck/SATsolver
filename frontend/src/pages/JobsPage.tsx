@@ -1,5 +1,6 @@
-import { ActionIcon, Button, Card, Group, Progress, SegmentedControl, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { IconPlayerStop, IconSearch, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Button, Card, Group, Popover, Progress, SegmentedControl, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { IconListNumbers, IconPlayerStop, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sortedJobs, useLive } from "../api/live";
@@ -23,6 +24,7 @@ export default function JobsPage() {
     [jobs, kind, query],
   );
   const finished = list.filter((job) => !isActive(job.status)).length;
+  const total = Object.keys(jobs).length;
 
   return (
     <Stack gap="md">
@@ -31,15 +33,18 @@ export default function JobsPage() {
           <Title order={2}>Jobs</Title>
           <Text c="dimmed">Every solve, encoding and benchmark, newest first. Results are kept until you delete them.</Text>
         </div>
-        <Button
-          variant="default"
-          color="red"
-          leftSection={<IconTrash size={16} />}
-          disabled={!finished}
-          onClick={() => actions.clear.mutate(kind === "all" ? undefined : [kind])}
-        >
-          Delete finished ({finished})
-        </Button>
+        <Group gap="xs">
+          <RestartNumbering disabled={total > 0} onConfirm={() => actions.resetNumbering.mutate(undefined, { onSuccess: () => notifications.show({ title: "Numbering restarted", message: "The next job will be J1." }) })} />
+          <Button
+            variant="default"
+            color="red"
+            leftSection={<IconTrash size={16} />}
+            disabled={!finished}
+            onClick={() => actions.clear.mutate(kind === "all" ? undefined : [kind])}
+          >
+            Delete finished ({finished})
+          </Button>
+        </Group>
       </Group>
       <Group gap="sm">
         <SegmentedControl
@@ -132,5 +137,54 @@ export default function JobsPage() {
         ) : null}
       </Card>
     </Stack>
+  );
+}
+
+/**
+ * Job numbers never come back on their own (a deleted J12 stays unused), so
+ * links and notes can't end up pointing at the wrong run. Once every job is
+ * deleted there is nothing left to confuse, and numbering may start at J1.
+ */
+function RestartNumbering({ disabled, onConfirm }: { disabled: boolean; onConfirm: () => void }) {
+  const [opened, setOpened] = useState(false);
+  if (disabled) {
+    return (
+      <Tooltip label="Job numbers can restart at J1 once every job is deleted" multiline maw={260}>
+        <Button variant="subtle" leftSection={<IconListNumbers size={16} />} data-disabled onClick={(event) => event.preventDefault()}>
+          Restart numbering
+        </Button>
+      </Tooltip>
+    );
+  }
+  return (
+    <Popover opened={opened} onChange={setOpened} width={300} position="bottom-end" withArrow shadow="md">
+      <Popover.Target>
+        <Button variant="subtle" leftSection={<IconListNumbers size={16} />} onClick={() => setOpened((open) => !open)}>
+          Restart numbering
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs">
+          <Text size="sm">The next job becomes J1.</Text>
+          <Text size="xs" c="dimmed">
+            Old CSV exports, links or notes that mention a job number (say J3) will then match a different, new job.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button size="xs" variant="default" onClick={() => setOpened(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="xs"
+              onClick={() => {
+                setOpened(false);
+                onConfirm();
+              }}
+            >
+              Restart at J1
+            </Button>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   );
 }

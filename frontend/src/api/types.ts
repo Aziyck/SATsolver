@@ -252,6 +252,7 @@ export type LiveEvent =
   | { type: "result"; job_id: number; result: SolveResult }
   | { type: "row"; job_id: number; row: BenchmarkRow }
   | { type: "deleted"; job_id: number }
+  | { type: "numbering_reset" }
   | { type: "resync" };
 
 export type ServerMessage =

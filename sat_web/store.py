@@ -147,3 +147,21 @@ class Store:
     def delete_job(self, job_id: int) -> None:
         self._execute("DELETE FROM rows WHERE job_id = ?", (job_id,))
         self._execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+
+    def reset_numbering(self) -> bool:
+        """
+        Make the next job J1 again, but only while there are no jobs at all.
+
+        AUTOINCREMENT never reuses an id on its own, so a deleted job's number
+        cannot come back while any job exists. The check and the reset run
+        under one lock, so a job inserted concurrently either comes first (and
+        the reset is refused) or gets id 1.
+        """
+        with self._lock:
+            if self._closed:
+                return False
+            if self._db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]:
+                return False
+            self._db.execute("DELETE FROM rows")
+            self._db.execute("DELETE FROM sqlite_sequence WHERE name = 'jobs'")
+            return True

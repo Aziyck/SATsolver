@@ -213,6 +213,38 @@ class JobTests(ApiTestCase):
         deleted = self.client.post("/api/jobs/clear", json={}).json()["deleted"]
         self.assertEqual(sorted(deleted), sorted(job["id"] for job in jobs))
 
+    def test_numbering_restarts_only_when_no_jobs_are_left(self):
+        request = {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"}
+        first = self.submit("solve", request)
+        second = self.submit("solve", request)
+        self.assertEqual(second["id"], first["id"] + 1)
+        self.wait(first["id"])
+        self.wait(second["id"])
+
+        # Deleting the newest job does not hand its number out again.
+        self.client.delete(f"/api/jobs/{second['id']}")
+        self.assertEqual(self.submit("solve", request)["id"], second["id"] + 1)
+
+        # Refused while any job exists.
+        response = self.client.post("/api/jobs/reset-numbering")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Delete every job first", response.json()["detail"])
+
+        for job in self.client.get("/api/jobs").json()["jobs"]:
+            self.wait(job["id"])
+        self.client.post("/api/jobs/clear", json={})
+        leftover = Path(self.folder.name) / "jobs" / "1"
+        leftover.mkdir(parents=True, exist_ok=True)
+        (leftover / "instance.cnf").write_text("stale")
+
+        self.assertEqual(self.client.post("/api/jobs/reset-numbering").status_code, 204)
+        restarted = self.submit("solve", request)
+        self.assertEqual(restarted["id"], 1)
+        self.assertEqual(restarted["label"], "J1")
+        detail = self.wait(1)
+        self.assertEqual(detail["result"]["status"], "SAT")
+        self.assertNotEqual((leftover / "instance.cnf").read_text(), "stale")
+
     def test_websocket_streams_job_events(self):
         with self.client.websocket_connect("/api/ws") as socket:
             hello = socket.receive_json()

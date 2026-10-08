@@ -303,6 +303,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         deleted = await run_in_threadpool(manager_of(request).clear_finished, body.kinds)
         return {"deleted": deleted}
 
+    @app.post("/api/jobs/reset-numbering", status_code=204)
+    async def reset_numbering(request: Request) -> Response:
+        try:
+            await run_in_threadpool(manager_of(request).reset_numbering)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from None
+        return Response(status_code=204)
+
     @app.get("/api/jobs/{job_id}/files/{name}")
     async def download_file(request: Request, job_id: int, name: str) -> FileResponse:
         job = job_or_404(request, job_id)

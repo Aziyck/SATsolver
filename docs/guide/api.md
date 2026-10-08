@@ -230,6 +230,7 @@ Benchmark rows: `{"job_id", "label", "rows": [BenchmarkRow, ...]}`. A row has
 | `POST /api/jobs/{id}/rerun` -> 201 | submit the same request as a new job |
 | `DELETE /api/jobs/{id}` -> 204 | delete a finished job and its files (409 while it runs) |
 | `POST /api/jobs/clear` | body `{"kinds": ["solve", ...]}` or `{}`: delete all finished jobs of those kinds; returns `{"deleted": [ids]}` |
+| `POST /api/jobs/reset-numbering` -> 204 | make the next job J1 again; 409 while any job exists (ids are otherwise never reused) |
 
 Cancel, skip and rerun return a job summary.
 
@@ -270,6 +271,7 @@ and then batches of events:
 | `{"type": "result", "job_id", "result": {...}}` | a solve job has its answer |
 | `{"type": "row", "job_id", "row": BenchmarkRow}` | a benchmark run finished |
 | `{"type": "deleted", "job_id"}` | a job was deleted |
+| `{"type": "numbering_reset"}` | job numbers restart at 1; drop anything cached by job id |
 | `{"type": "resync"}` | this client fell behind and events were dropped; fetch the state again |
 
 The socket is read-only; actions go through the REST endpoints. After a

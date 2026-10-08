@@ -279,6 +279,14 @@ open it: benchmarks on their results page, solves and encodings on their job
 page. **Delete finished** removes all finished jobs and their
 files. Running jobs can be cancelled from the Jobs drawer.
 
+Job numbers are never reused while jobs exist: delete J12, and the next job
+is still J13. That way a link, a CSV export or a note that says "J12" can
+never end up meaning a different run. Once every job is deleted, **Restart
+numbering** makes the next job J1 again. Old exports and notes that mention
+job numbers will then match the new jobs with those numbers. To keep the old
+runs and still start at J1, start the app with a fresh data folder instead
+(`WIZSAT_DATA_DIR=output/thesis-final python -m sat_web`).
+
 Jobs and benchmark rows are stored in `output/wizsat.db` (SQLite) and job
 files (the CNF and the model) in `output/jobs/<id>/`. They survive restarts;
 jobs that were running when the server stopped are marked *interrupted*.

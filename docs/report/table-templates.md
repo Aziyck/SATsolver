@@ -34,7 +34,7 @@
 | DPLL | `solvers/dpll.py` | yes | SAT, UNSAT, TIMEOUT, CANCELLED, ERROR | none (small-clause heuristic) |
 | CDCL | `solvers/cdcl.py` | yes | SAT, UNSAT, TIMEOUT, CANCELLED | branching, phase, restarts (Luby/fixed), learned-clause clean-up, seed |
 | WalkSAT | `solvers/walksat.py` | no | SAT, UNKNOWN, TIMEOUT, CANCELLED | tries, flips, noise, adaptive noise, seed |
-| ProbSAT | `solvers/walksat.py` (`selection_mode="probsat"`) | no | SAT, UNKNOWN, TIMEOUT, CANCELLED | tries, flips, noise, adaptive noise, seed |
+| ProbSAT | `solvers/walksat.py` (`selection_mode="probsat"`) | no | SAT, UNKNOWN, TIMEOUT, CANCELLED | tries, flips, cb, seed |
 
 Any run in a benchmark can also be `SKIPPED` by a limit rule or by the user.
 
@@ -75,7 +75,7 @@ x value, and the CSV has every run.
 |---|---|---|
 | CDCL is faster than DPLL on instances with many conflicts | TODO | learned clauses prevent repeating the same conflicts |
 | WalkSAT finds some SAT instances quickly | TODO | local search can be efficient without a complete proof |
-| ProbSAT differs from classic WalkSAT on random formulas | TODO | probabilistic selection changes the search trajectory |
+| ProbSAT differs from classic WalkSAT on random formulas | TODO | sampling by break instead of free/noise/greedy moves changes the search trajectory |
 | Random 3-SAT is hardest near ratio 4.26 | TODO | the SAT/UNSAT phase transition |
 | UNKNOWN is not equivalent to UNSAT | TODO | WalkSAT/ProbSAT build no proof of unsatisfiability |
 

@@ -136,8 +136,9 @@ Clique vs Independent Set*.
    runs every solver on the same CNF for each case.
 3. For CDCL, record the branching heuristic, initial phase, restart schedule
    and learned-clause clean-up. Keep *Parallel cases* at 1 for timed runs.
-4. For WalkSAT/ProbSAT, record max tries, max flips, noise, adaptive noise
-   and seed.
+4. For WalkSAT, record max tries, max flips, noise, adaptive noise and seed;
+   for ProbSAT, max tries, max flips, cb and seed. The Setup tab of a
+   benchmark lists every option each solver ran with.
 5. Keep `UNSAT` and `UNKNOWN` apart.
 6. Never compare a WalkSAT `UNKNOWN` with a CDCL `UNSAT` as if they meant the
    same thing.

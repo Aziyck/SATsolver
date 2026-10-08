@@ -16,12 +16,12 @@ import {
   TextInput,
   Tooltip,
 } from "@mantine/core";
-import { IconDice5, IconFileUpload, IconTrash } from "@tabler/icons-react";
-import { useState } from "react";
+import { IconArrowBackUp, IconDice5, IconFileUpload, IconRestore, IconTrash } from "@tabler/icons-react";
+import { useState, type ReactNode } from "react";
 import type { Field } from "../../api/types";
 import { edgesAsText, parseEdges } from "../../lib/edges";
 import { formatCount } from "../../lib/format";
-import { isNumericKind, isVisible, parseNumberList, type Values } from "../../lib/params";
+import { changedFields, cloneValue, displayValue, isDefaultValue, isNumericKind, isVisible, parseNumberList, type Values } from "../../lib/params";
 import { asGrid, emptyGrid, parsePuzzle } from "../../lib/sudoku";
 import { SudokuEditor } from "../views/SudokuBoard";
 
@@ -34,34 +34,72 @@ export interface ParamFormProps {
   sweep?: boolean;
   /** Field names rendered elsewhere by the parent (e.g. an interactive editor). */
   hide?: string[];
+  /** Show a reset button on every field that differs from its default. */
+  resettable?: boolean;
 }
 
-export function ParamForm({ fields, values, onChange, errors = {}, sweep = false, hide = [] }: ParamFormProps) {
+export function ParamForm({ fields, values, onChange, errors = {}, sweep = false, hide = [], resettable = false }: ParamFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const visible = fields.filter((field) => isVisible(field, values) && !hide.includes(field.name));
   const basic = visible.filter((field) => !field.advanced);
   const advanced = visible.filter((field) => field.advanced);
+  const advancedChanged = resettable ? advanced.filter((field) => !isDefaultValue(field, values[field.name])).length : 0;
+
+  const render = (field: Field) => {
+    const input = <ParamInput key={field.name} field={field} value={values[field.name]} values={values} onChange={onChange} error={errors[field.name]} sweep={sweep} />;
+    if (!resettable) return input;
+    return (
+      <ResettableField key={field.name} field={field} value={values[field.name]} onReset={() => onChange(field.name, cloneValue(field.default))}>
+        {input}
+      </ResettableField>
+    );
+  };
 
   return (
     <Stack gap="sm">
-      {basic.map((field) => (
-        <ParamInput key={field.name} field={field} value={values[field.name]} values={values} onChange={onChange} error={errors[field.name]} sweep={sweep} />
-      ))}
+      {basic.map(render)}
       {advanced.length ? (
         <>
           <Button variant="subtle" size="compact-sm" onClick={() => setShowAdvanced((open) => !open)} style={{ alignSelf: "flex-start" }}>
             {showAdvanced ? "Hide advanced options" : `Advanced options (${advanced.length})`}
+            {advancedChanged && !showAdvanced ? ` - ${advancedChanged} changed` : ""}
           </Button>
           <Collapse in={showAdvanced}>
-            <Stack gap="sm">
-              {advanced.map((field) => (
-                <ParamInput key={field.name} field={field} value={values[field.name]} values={values} onChange={onChange} error={errors[field.name]} sweep={sweep} />
-              ))}
-            </Stack>
+            <Stack gap="sm">{advanced.map(render)}</Stack>
           </Collapse>
         </>
       ) : null}
     </Stack>
+  );
+}
+
+/** Wraps a field with a small "back to default" button when its value was changed. */
+function ResettableField({ field, value, onReset, children }: { field: Field; value: unknown; onReset: () => void; children: ReactNode }) {
+  const changed = !isDefaultValue(field, value);
+  return (
+    <div className="wz-field">
+      {children}
+      {changed ? (
+        <Tooltip label={`Back to the default: ${displayValue(field, field.default)}`}>
+          <ActionIcon className="wz-field-reset" variant="subtle" size="sm" onClick={onReset} aria-label={`Reset ${field.label} to its default`}>
+            <IconArrowBackUp size={15} />
+          </ActionIcon>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
+/** "Reset 3 changed options" for a whole option set; hidden when everything is at its default. */
+export function ResetToDefaults({ fields, values, onReset, size = "xs" }: { fields: Field[]; values: Values; onReset: () => void; size?: "xs" | "compact-xs" }) {
+  const changed = changedFields(fields, values);
+  if (!changed.length) return null;
+  return (
+    <Tooltip label={`Changed: ${changed.map((field) => field.label).join(", ")}`} multiline maw={320}>
+      <Button variant="subtle" size={size} leftSection={<IconRestore size={14} />} onClick={onReset} style={{ flexShrink: 0 }}>
+        Reset {changed.length} changed option{changed.length === 1 ? "" : "s"}
+      </Button>
+    </Tooltip>
   );
 }
 

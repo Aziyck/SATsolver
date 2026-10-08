@@ -253,36 +253,44 @@ data structure.
 - **Theory**: local search for SAT. Start from a random assignment and flip
   variables of unsatisfied clauses, either at random or greedily. If no
   solution is found within the budget, nothing can be concluded about `UNSAT`.
-- **Practice**: the solver
-  1. normalises the formula;
+- **Practice**: the solver (WalkSAT/SKC)
+  1. normalises the formula and renumbers the variables compactly;
   2. draws a random initial assignment;
-  3. picks an unsatisfied clause;
-  4. with probability `noise` flips a random variable of that clause;
-  5. otherwise flips the variable with the best estimated effect;
-  6. repeats; after `max_flips` flips it restarts (a new *try*).
+  3. picks an unsatisfied clause at random;
+  4. flips a variable of that clause with break 0 if there is one (a free
+     move);
+  5. otherwise, with probability `noise` (default 0.567), flips a random
+     variable of that clause, else the one with the smallest break;
+  6. repeats; after `max_flips` flips (default 100,000) it restarts (a new
+     *try*).
 - **Complexity**: no completeness guarantee; the work is bounded by
-  `max_tries * max_flips`.
+  `max_tries * max_flips`. One flip costs time proportional to the number of
+  occurrences of the flipped variable.
 - **Input / output**: CNF and `max_tries`, `max_flips`, `noise`,
   `adaptive_noise`, seed; a model if found, otherwise `None` with status
   `UNKNOWN`.
 - **Example**: if `(x1 or not x2 or x3)` is unsatisfied, one of its variables
-  is flipped, which satisfies that clause and may break others.
+  is flipped, which satisfies that clause and may break others; the break
+  count says how many.
 - **Type**: incomplete local-search heuristic.
 
-**Auxiliary structure** (`_UnsatisfiedTracker`): keeps, incrementally, the
-number of true literals per clause, the occurrence lists and the set of
-unsatisfied clauses, and computes the *make* and *break* counts of a flip.
-After a flip only the clauses containing that variable are updated, instead
-of re-evaluating the whole formula.
+**Auxiliary structure** (`LocalSearchState`): keeps, incrementally, the
+number of true literals per clause, the sum of the variable numbers of those
+literals, the break count of every variable and the list of unsatisfied
+clauses. When a clause has exactly one true literal, the sum is that
+literal's variable (the clause's critical variable), so break counts are
+updated without scanning the clause. After a flip only the clauses
+containing that variable are updated.
 
 ## 2.5 ProbSAT
 
 - **Where**: `solvers/walksat.py` with `selection_mode="probsat"`;
   registered as its own solver `probsat`.
-- **Theory**: instead of a greedy or uniformly random choice inside the
-  selected clause, each variable is drawn with probability proportional to a
-  weight that rewards repairs and penalises breaks:
-  `weight = (make + 1) / ((break + 1) ^ 2)`.
+- **Theory** (Balint and Schoening, 2012): every variable of the selected
+  clause is drawn with probability proportional to `f(break)`, with
+  `f(b) = (0.9 + b) ^ -2.06` for 3-SAT and `f(b) = cb ^ -b` for longer
+  clauses (`cb` from 3.0 to 5.4 by clause length). There is no noise
+  parameter; an advanced option overrides `cb`.
 - **Type**: incomplete stochastic local search.
 
 ---
@@ -413,8 +421,8 @@ givens.
 | Restarts | `cdcl`, `luby` | return to level 0 after a Luby-sequence number of conflicts, keeping learned clauses | heuristic |
 | Noise | `walksat` | with probability `noise` flip at random, otherwise greedily | exploration vs exploitation |
 | Adaptive noise | `walksat` | raise the noise when the search stagnates, lower it on progress | adaptive heuristic |
-| Greedy flip score | `walksat`, `_UnsatisfiedTracker.flip_effect` | estimate make/break of each candidate flip | local optimisation |
-| ProbSAT weights | `walksat` with `probsat` | probabilistic choice by `(make+1)/(break+1)^2` | stochastic heuristic |
+| Break counts | `walksat`, `LocalSearchState.flip` | keep the break of every variable up to date | local optimisation |
+| ProbSAT weights | `walksat` with `probsat`, `probsat_weights` | probabilistic choice by `f(break)` | stochastic heuristic |
 | Planted assignment | `random_3sat` | keep only clauses satisfied by a hidden assignment | constructive generation |
 | Forced UNSAT core | `random_3sat`, `unsat_core` | all 8 sign patterns over 3 variables | exact logical construction |
 
@@ -434,7 +442,7 @@ correctness.
 | `trail`, `trail_lim` | `cdcl` | chronological stack of assignments and level boundaries |
 | `levels`, `reasons` | `cdcl` | decision level and reason clause of each variable |
 | `activity` | `cdcl` | VSIDS-like scores |
-| `_UnsatisfiedTracker` | `solvers/walksat.py` | incremental unsatisfied-clause bookkeeping |
+| `LocalSearchState` | `solvers/walksat.py` | incremental break counts and unsatisfied clauses |
 | `Graph` | `problems/graph.py` | node count and edge list, with adjacency |
 | `ParamField` | `sat_core/params.py` | declarative parameter: kind, range, sweeps, visibility |
 | `ProblemInstance` | `sat_core/models.py` | CNF, metadata, decoder |
@@ -638,6 +646,6 @@ heuristics on theoretically hard problems.
 | Main algorithms | DPLL, CDCL, WalkSAT, ProbSAT |
 | Auxiliary algorithms | unit propagation, `G(n,p)` / `G(n,m)` / `G(n,d)` graph generation, Sudoku generation, deterministic seeding |
 | Reductions to SAT | Sudoku, graph coloring, N-Queens, Hamiltonian path, independent set, clique |
-| Heuristics | small-clause, most frequent, VSIDS-like, MOMS, DLIS, random, saved phase, polarity based, random phase, restarts, greedy flip, noise, adaptive noise, ProbSAT weights |
+| Heuristics | small-clause, most frequent, VSIDS-like, MOMS, DLIS, random, saved phase, polarity based, random phase, restarts, free and greedy flips, noise, adaptive noise, ProbSAT weights |
 | Optimisations | watched literals, clause learning, non-chronological backjumping, learned-clause deletion, incremental unsatisfied-clause tracking |
 | Checks | parameter validation, tautology elimination, empty-clause detection, exactly-one constraints, model verification, answer checks, expected-status checks, size guard |

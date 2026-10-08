@@ -72,3 +72,22 @@ test("a solve job has a full page with the log", async ({ page }) => {
   await expect(page).toHaveURL(/\/solve\/n_queens$/);
   await expect(page.getByRole("button", { name: "Solve", exact: true })).toBeVisible();
 });
+
+test("solver options reset to their defaults and show up in the job's settings", async ({ page }) => {
+  await page.goto("/solve/n_queens");
+  await page.locator('label[for$="-walksat"]').click();
+  const noise = page.getByRole("textbox", { name: "Noise" });
+  await noise.fill("0.3");
+  await page.getByRole("button", { name: "Reset 1 changed option" }).click();
+  await expect(noise).toHaveValue("0.567");
+  await expect(page.getByRole("button", { name: /Reset \d+ changed/ })).toHaveCount(0);
+
+  await noise.fill("0.3");
+  await page.getByRole("button", { name: "Solve", exact: true }).click();
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Settings" }).click();
+  const row = page.getByRole("row", { name: /^Noise / });
+  await expect(row).toContainText("0.3");
+  await expect(row).toContainText("changed");
+  await expect(row).toContainText("0.567");
+});

@@ -13,7 +13,6 @@ import {
   SimpleGrid,
   Stack,
   Switch,
-  Table,
   Tabs,
   Text,
   TextInput,
@@ -30,6 +29,7 @@ import {
   IconCopy,
   IconDownload,
   IconListDetails,
+  IconSettings,
   IconPlayerSkipForward,
   IconPlayerStop,
   IconRefresh,
@@ -45,7 +45,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, urls } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
 import { useCatalog, useJob, useJobActions, useRows } from "../api/queries";
-import type { BenchmarkRow, Catalog } from "../api/types";
+import type { BenchmarkRequest, BenchmarkRow, Catalog } from "../api/types";
 import {
   AggregateTable,
   CASE_X,
@@ -54,10 +54,12 @@ import {
   StatusShareChart,
   type ChartSettings,
 } from "../components/charts/BenchmarkCharts";
+import { BenchmarkSetup, entryForRow } from "../components/BenchmarkSetup";
 import { FactsList, LogViewer, StatTile } from "../components/Display";
+import { SolverSettingsTable, StatsTable } from "../components/SolverSettingsTable";
 import { AnswerView } from "../components/views/ProblemViews";
 import { draftFromRequest } from "../lib/benchmark";
-import { duration, formatCount, formatSeconds, formatStat, statLabel } from "../lib/format";
+import { duration, formatCount, formatSeconds, formatStat } from "../lib/format";
 import { formatValue } from "../lib/params";
 import { METRICS, statusCounts, suspiciousRows, varyingParams, type Aggregate, type Metric } from "../lib/stats";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
@@ -236,6 +238,9 @@ export default function BenchmarkResults() {
           <Tabs.Tab value="runs" leftSection={<IconTable size={16} />}>
             Runs ({formatCount(rows.length)})
           </Tabs.Tab>
+          <Tabs.Tab value="setup" leftSection={<IconSettings size={16} />}>
+            Setup
+          </Tabs.Tab>
           <Tabs.Tab value="log" leftSection={<IconListDetails size={16} />}>
             Log
           </Tabs.Tab>
@@ -246,12 +251,15 @@ export default function BenchmarkResults() {
         <Tabs.Panel value="runs" pt="md">
           {rows.length ? <RunsTable rows={rows} catalog={catalog} showRun={comparing} showProblem={suite} onSelect={setSelectedRow} /> : <EmptyRows active={active} />}
         </Tabs.Panel>
+        <Tabs.Panel value="setup" pt="md">
+          <BenchmarkSetup request={job.request} catalog={catalog} />
+        </Tabs.Panel>
         <Tabs.Panel value="log" pt="md">
           <LogViewer jobId={jobId} initial={job.logs} height={480} />
         </Tabs.Panel>
       </Tabs>
 
-      <RowDrawer row={selectedRow} jobId={jobId} catalog={catalog} onClose={() => setSelectedRow(null)} />
+      <RowDrawer row={selectedRow} jobId={jobId} request={job.request} catalog={catalog} onClose={() => setSelectedRow(null)} />
     </Stack>
   );
 }
@@ -544,7 +552,7 @@ function Cell({ children, right = false }: { children: ReactNode; right?: boolea
   );
 }
 
-function RowDrawer({ row, jobId, catalog, onClose }: { row: BenchmarkRow | null; jobId: number; catalog: Catalog; onClose: () => void }) {
+function RowDrawer({ row, jobId, request, catalog, onClose }: { row: BenchmarkRow | null; jobId: number; request: BenchmarkRequest; catalog: Catalog; onClose: () => void }) {
   const navigate = useNavigate();
   const own = row !== null && (row.run_label === undefined || row.run_label === `J${jobId}`);
   const sourceJob = row?.run_label ? Number(row.run_label.slice(1)) : jobId;
@@ -555,6 +563,8 @@ function RowDrawer({ row, jobId, catalog, onClose }: { row: BenchmarkRow | null;
     staleTime: Infinity,
   });
   const problem = catalog.problems.find((item) => item.key === row?.problem);
+  const solverSpec = catalog.solvers.find((item) => item.key === row?.solver);
+  const entry = row && own ? entryForRow(request, row.index) : undefined;
 
   return (
     <Drawer opened={row !== null} onClose={onClose} position="right" size="xl" title={row ? <Text fw={650}>{row.case_label}</Text> : null}>
@@ -598,17 +608,20 @@ function RowDrawer({ row, jobId, catalog, onClose }: { row: BenchmarkRow | null;
               { label: "Time limit", value: row.timeout === null ? "none" : formatSeconds(row.timeout) },
             ]}
           />
-          {Object.keys(row.stats).length ? (
-            <Table striped withTableBorder className="wz-num" fz="sm">
-              <Table.Tbody>
-                {Object.entries(row.stats).map(([key, value]) => (
-                  <Table.Tr key={key}>
-                    <Table.Td>{statLabel(key)}</Table.Td>
-                    <Table.Td ta="right">{formatStat(value)}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+          {Object.keys(row.stats).length ? <StatsTable stats={row.stats} /> : null}
+          {solverSpec ? (
+            <Paper withBorder p="md" radius="md">
+              <Text fw={600} size="sm" mb="xs">
+                Solver settings
+              </Text>
+              {entry && entry.solver === row.solver ? (
+                <SolverSettingsTable spec={solverSpec} options={entry.options} />
+              ) : (
+                <Text size="sm" c="dimmed">
+                  This run belongs to {row.run_label}; open that benchmark's Setup tab for its settings.
+                </Text>
+              )}
+            </Paper>
           ) : null}
           <Group gap="xs">
             <Button

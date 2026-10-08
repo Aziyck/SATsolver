@@ -337,35 +337,43 @@ budget is exhausted the status is `UNKNOWN`.
 
 Starting from a random complete assignment, it repeats:
 
-1. pick an unsatisfied clause;
-2. pick a variable from that clause;
+1. pick an unsatisfied clause at random;
+2. pick a variable from that clause: one with break 0 if there is one (a
+   free move), otherwise a random one with probability `noise`, otherwise one
+   with the smallest break (the SKC variant of Selman, Kautz and Cohen);
 3. flip it;
-4. update the set of unsatisfied clauses incrementally;
+4. update the unsatisfied clauses and the break counts incrementally;
 5. stop at SAT, timeout, cancellation, or when the budget runs out.
 
-`_UnsatisfiedTracker` keeps occurrence lists, the number of true literals per
-clause and the list of unsatisfied clauses, so a flip only touches the
-clauses that contain the flipped variable.
+The break of a variable is the number of true clauses that would become false
+if it were flipped. `LocalSearchState` keeps it up to date: for every clause
+it stores the number of true literals and the sum of their variable numbers,
+and when only one literal is true that sum names the variable that keeps the
+clause true. A flip only touches the clauses that contain the flipped
+variable.
 
-Options: `max_tries` (random restarts), `max_flips` (per try), `noise` (the
-probability of a random pick), `adaptive_noise` (raise the noise when the
-search stagnates) and a seed.
+Options: `max_tries` (random restarts, default 10), `max_flips` (per try,
+default 100,000), `noise` (default 0.567), `adaptive_noise` (raise the noise
+when the search stagnates) and a seed.
 
-Statistics: tries, flips, best number of unsatisfied clauses, final noise and
-the reason for stopping.
+Statistics: tries, flips, best number of unsatisfied clauses, the number of
+free, random and greedy flips, final noise and the reason for stopping.
 
 ### 2.5.4 ProbSAT
 
-ProbSAT is registered as its own solver in the application; internally it is
-the WalkSAT implementation with `selection_mode="probsat"`. Instead of a
-greedy choice, the variable to flip is drawn at random with a weight that
-favours variables that repair many clauses and break few:
+ProbSAT (Balint and Schoening, 2012) is registered as its own solver; it
+shares the implementation and the incremental break counts with WalkSAT
+(`selection_mode="probsat"`). It has no noise parameter: every variable of
+the chosen clause is drawn with probability proportional to a weight that
+falls steeply with its break:
 
 ```text
-weight = (make + 1) / ((break + 1) ^ 2)
+f(break) = (0.9 + break) ^ -2.06      3-SAT
+f(break) = cb ^ -break                longer clauses, cb = 3.0 .. 5.4
 ```
 
-The search stays stochastic but is steered towards promising moves.
+The search stays stochastic: bad moves remain possible, which is how ProbSAT
+escapes local minima. An advanced option overrides `cb`.
 
 ### Technical notes
 

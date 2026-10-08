@@ -206,3 +206,22 @@ body {
   position: sticky;
   top: calc(var(--app-shell-header-height, 56px) + 16px);
 }
+
+/* Solver options: reset-to-default button in the top-right corner of a field */
+.wz-field {
+  position: relative;
+}
+.wz-field-reset {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  z-index: 1;
+}
+.wz-settings tr.wz-changed td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-primary-color-filled);
+}
+.wz-explained {
+  cursor: help;
+  text-decoration: underline dotted var(--wz-muted);
+  text-underline-offset: 3px;
+}

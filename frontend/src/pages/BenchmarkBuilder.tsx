@@ -27,7 +27,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useCatalog, useCreateJob } from "../api/queries";
 import type { Catalog, Rule } from "../api/types";
-import { ParamInput } from "../components/fields/ParamForm";
 import {
   draftFromRequest,
   emptyDraft,
@@ -41,7 +40,7 @@ import {
 import { formatCount } from "../lib/format";
 import { defaultValues, errorsUnder } from "../lib/params";
 import { usePersistentState } from "../lib/storage";
-import { ParamForm } from "../components/fields/ParamForm";
+import { ParamForm, ParamInput, ResetToDefaults } from "../components/fields/ParamForm";
 
 export const DRAFT_KEY = "wizsat.benchmark.draft";
 
@@ -412,20 +411,29 @@ function SolversCard({
                     aria-label="Solver label"
                   />
                 </Group>
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  onClick={() => onChange({ solvers: draft.solvers.filter((item) => item.id !== entry.id) })}
-                  aria-label={`Remove ${spec.title}`}
-                  disabled={draft.solvers.length === 1}
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
+                <Group gap={4} wrap="nowrap">
+                  <ResetToDefaults
+                    fields={spec.fields}
+                    values={{ ...defaultValues(spec.fields), ...entry.options }}
+                    onReset={() => setEntry({ options: defaultValues(spec.fields) })}
+                    size="compact-xs"
+                  />
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    onClick={() => onChange({ solvers: draft.solvers.filter((item) => item.id !== entry.id) })}
+                    aria-label={`Remove ${spec.title}`}
+                    disabled={draft.solvers.length === 1}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Group>
               </Group>
               {spec.fields.length ? (
                 <ParamForm
                   fields={spec.fields}
-                  values={entry.options}
+                  values={{ ...defaultValues(spec.fields), ...entry.options }}
+                  resettable
                   errors={errorsUnder(errors, `solvers.${index}.options`)}
                   onChange={(name, value) => setEntry({ options: { ...entry.options, [name]: value } })}
                 />

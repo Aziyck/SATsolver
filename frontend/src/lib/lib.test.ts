@@ -3,7 +3,7 @@ import type { BenchmarkRow, Catalog, Field } from "../api/types";
 import { draftFromRequest, isVisibleSweep, requestFromDraft, sweepValue } from "./benchmark";
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
-import { defaultValues, isVisible, parseNumberList, visibleValues } from "./params";
+import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
 import { aggregate, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
 import { learnLink } from "./learn";
 import { conflictCells, parsePuzzle } from "./sudoku";
@@ -75,6 +75,45 @@ describe("field visibility", () => {
     expect(sweepValue(P, 0.3)).toBe("0.3");
     expect(sweepValue(P, [0.1, 0.2])).toBe("0.1, 0.2");
     expect(sweepValue(MODE, "gnp, manual")).toEqual(["gnp", "manual"]);
+  });
+});
+
+describe("defaults and display", () => {
+  const noise = field({ name: "noise", kind: "float", default: 0.567 });
+  const cb = field({ name: "cb", kind: "float", default: null, placeholder: "automatic" });
+  const restarts = field({ name: "restarts", kind: "bool", default: true });
+  const strategy = field({
+    name: "strategy",
+    kind: "choice",
+    default: "luby",
+    choices: [
+      { value: "luby", label: "Luby sequence", help: "" },
+      { value: "fixed", label: "Fixed interval", help: "" },
+    ],
+  });
+  const timeout = field({ name: "timeout", kind: "float", default: 30, unit: "s" });
+
+  it("treats blanks alike and compares numbers by value", () => {
+    expect(isDefaultValue(noise, 0.567)).toBe(true);
+    expect(isDefaultValue(noise, "0.567")).toBe(true);
+    expect(isDefaultValue(noise, 0.5)).toBe(false);
+    expect(isDefaultValue(cb, "")).toBe(true);
+    expect(isDefaultValue(cb, undefined)).toBe(true);
+    expect(isDefaultValue(cb, 3)).toBe(false);
+    expect(isDefaultValue(restarts, false)).toBe(false);
+  });
+
+  it("lists only the changed fields", () => {
+    const changed = changedFields([noise, cb, restarts], { noise: 0.4, cb: null, restarts: true });
+    expect(changed.map((item) => item.name)).toEqual(["noise"]);
+  });
+
+  it("says values the way a person would", () => {
+    expect(displayValue(cb, null)).toBe("automatic");
+    expect(displayValue(restarts, false)).toBe("Off");
+    expect(displayValue(strategy, "fixed")).toBe("Fixed interval");
+    expect(displayValue(timeout, 30)).toBe("30 s");
+    expect(displayValue(field({ name: "flips", kind: "int" }), 100000)).toBe("100,000");
   });
 });
 

@@ -279,9 +279,10 @@ print(rows_to_csv(rows))
 2. Fix the benchmark seed (and use seed ranges in the grids) so the formulas
    can be regenerated.
 3. Record solver options: for CDCL the branching heuristic, phase, restart
-   schedule and learned-clause clean-up; for WalkSAT/ProbSAT the tries,
-   flips, noise and seed. Solver labels (named after the options unless you
-   set one) carry them into the CSV.
+   schedule and learned-clause clean-up; for WalkSAT the tries, flips, noise
+   and seed; for ProbSAT the tries, flips, cb and seed. Solver labels (named
+   after the options unless you set one) carry them into the CSV, and the
+   results page's **Setup** tab lists every option of every solver.
 4. Keep **Parallel cases** at 1 for the runs whose timings you report.
 5. Report SAT, UNSAT, UNKNOWN and TIMEOUT counts separately.
 6. Prefer medians, and show how many runs each point summarises (the table

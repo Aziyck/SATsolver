@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Group, Loader, Progress, SimpleGrid, Stack, Table, Tabs, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
+import { Alert, Button, Card, Group, Loader, Progress, SimpleGrid, Stack, Tabs, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -9,6 +9,7 @@ import {
   IconListDetails,
   IconPlayerStop,
   IconRefresh,
+  IconSettings,
   IconSparkles,
   IconTable,
   IconTrash,
@@ -16,12 +17,13 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { urls } from "../api/client";
-import { useJob, useJobActions, useProblem } from "../api/queries";
+import { useCatalog, useJob, useJobActions, useProblem } from "../api/queries";
 import type { JobDetail } from "../api/types";
-import { duration, formatSeconds, formatStat, statLabel } from "../lib/format";
+import { duration, formatSeconds } from "../lib/format";
 import { isActive, JobStatusBadge, RUN_STATUS, RunStatusBadge } from "../lib/status";
 import { CnfViewer, FactsList, LogViewer } from "./Display";
 import { AnswerView } from "./views/ProblemViews";
+import { SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
 
 function useTicker(active: boolean) {
   const [, setTick] = useState(0);
@@ -55,6 +57,7 @@ export function SolveResultPanel({
 }) {
   const { data: job, isLoading, isError } = useJob(jobId);
   const problem = useProblem(job?.problems[0]);
+  const catalog = useCatalog().data;
   const actions = useJobActions();
   const navigate = useNavigate();
   const active = job ? isActive(job.status) : false;
@@ -84,6 +87,8 @@ export function SolveResultPanel({
   const instance = job.instance;
   const elapsed = duration(job.started_at, job.finished_at);
   const status = result?.status;
+  const solverSpec = catalog?.solvers.find((solver) => solver.key === (result?.solver ?? job.request.solver));
+  const timeLimit = result ? result.timeout : (job.request.timeout ?? null);
   const appHeader = instance?.visual?.app_header as { problem?: string; params?: Record<string, unknown> } | undefined;
 
   return (
@@ -258,6 +263,11 @@ export function SolveResultPanel({
             <Tabs.Tab value="instance" leftSection={<IconFileCode size={14} />} disabled={!instance}>
               CNF
             </Tabs.Tab>
+            {solverSpec ? (
+              <Tabs.Tab value="settings" leftSection={<IconSettings size={14} />}>
+                Settings
+              </Tabs.Tab>
+            ) : null}
             <Tabs.Tab value="stats" leftSection={<IconTable size={14} />} disabled={!result}>
               Statistics
             </Tabs.Tab>
@@ -293,25 +303,30 @@ export function SolveResultPanel({
           <Tabs.Panel value="instance" pt="md">
             {instance?.cnf_file ? <CnfViewer jobId={job.id} height={isPage ? 560 : 360} /> : null}
           </Tabs.Panel>
+          {solverSpec ? (
+            <Tabs.Panel value="settings" pt="md">
+              <SolverSettingsTable
+                spec={solverSpec}
+                options={result?.options ?? job.request.options}
+                extra={[
+                  {
+                    label: "Time limit",
+                    help: "The run stops with TIMEOUT after this long.",
+                    value: timeLimit === null ? "none" : formatSeconds(timeLimit),
+                    default: catalog ? formatSeconds(catalog.defaults.solve_timeout) : undefined,
+                  },
+                  {
+                    label: "Log level",
+                    help: "How much the solver wrote to the Log tab; more logging is slower.",
+                    value: job.request.log_level ?? "normal",
+                    default: "normal",
+                  },
+                ]}
+              />
+            </Tabs.Panel>
+          ) : null}
           <Tabs.Panel value="stats" pt="md">
-            {result ? (
-              <Stack gap="xs">
-                <Text size="sm" c="dimmed">
-                  Options: {result.options_summary}
-                  {result.timeout !== null ? ` · time limit ${formatSeconds(result.timeout)}` : " · no time limit"}
-                </Text>
-                <Table striped withTableBorder className="wz-num">
-                  <Table.Tbody>
-                    {Object.entries(result.stats).map(([key, value]) => (
-                      <Table.Tr key={key}>
-                        <Table.Td>{statLabel(key)}</Table.Td>
-                        <Table.Td ta="right">{formatStat(value)}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Stack>
-            ) : null}
+            {result ? <StatsTable stats={result.stats} /> : null}
           </Tabs.Panel>
           <Tabs.Panel value="log" pt="md">
             <LogViewer jobId={job.id} initial={job.logs} height={isPage ? 560 : 280} />

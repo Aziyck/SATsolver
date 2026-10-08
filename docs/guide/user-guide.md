@@ -63,15 +63,32 @@ the clauses as you type.
 |---|---|---|
 | CDCL | yes, proves SAT and UNSAT | the default; learns from conflicts |
 | DPLL | yes | the classic baseline; slower on hard formulas |
-| WalkSAT | no, may answer UNKNOWN | fast on many satisfiable formulas |
-| ProbSAT | no, may answer UNKNOWN | a probabilistic WalkSAT variant |
+| WalkSAT | no, may answer UNKNOWN | large satisfiable formulas, especially random ones |
+| ProbSAT | no, may answer UNKNOWN | like WalkSAT; often best on large random k-SAT |
 
-Each solver shows its own options: CDCL's branching heuristic (VSIDS, most
-frequent, MOMS, DLIS, random), initial phase and restarts; WalkSAT's tries,
-flips per try and noise. **Advanced options** holds the rest: random seeds;
-for CDCL the restart schedule (Luby or fixed) and interval, and the
-learned-clause clean-up; for WalkSAT adaptive noise. The defaults are what
-modern solvers use; [CDCL](../algorithms/cdcl.md) explains each one.
+Each solver shows its own options:
+
+- CDCL: branching heuristic (VSIDS, most frequent, MOMS, DLIS, random),
+  initial phase and restarts.
+- WalkSAT and ProbSAT: tries and flips per try (10 x 100,000).
+- WalkSAT also has noise (0.567).
+
+**Advanced options** holds the rest:
+
+- random seeds;
+- for CDCL, the restart schedule (Luby or fixed) and interval, and the
+  learned-clause clean-up;
+- for WalkSAT, adaptive noise;
+- for ProbSAT, the break exponent `cb`.
+
+The defaults are what the published solvers use. [CDCL](../algorithms/cdcl.md)
+and [WalkSAT and ProbSAT](../algorithms/walksat.md) explain each option.
+
+Once you change an option, a small **back-arrow** appears next to it. Its
+tooltip shows the default, and clicking it puts the default back. **Reset N
+changed options**, beside the solver's description, resets all of that
+solver's options at once. The *Advanced options* button says how many hidden
+options are changed.
 
 **Time limit (s)** stops the solver after that many seconds (blank means no
 limit). **Log detail** controls how much the solver writes to the log:
@@ -109,9 +126,13 @@ The **Result** tab shows:
   - **Answer**: the solution drawn on the problem, plus facts about the
     instance (sizes, density, seed, encoding time);
   - **CNF**: the DIMACS text, paged, with a download button;
+  - **Settings**: every option the solver ran with, one row each. A row
+    shows what the option means, the value used and the default. Changed
+    options are marked. The time limit and log detail are listed too.
   - **Statistics**: decisions, conflicts, propagations, learned clauses,
-    restarts (CDCL/DPLL) or tries, flips, best number of unsatisfied clauses
-    (WalkSAT/ProbSAT);
+    restarts (CDCL/DPLL) or tries, flips, free/random/greedy flips, best
+    number of unsatisfied clauses (WalkSAT/ProbSAT). Hover a name for a
+    one-line explanation.
   - **Log**: the solver log.
 
 Buttons on the result: **Edit** loads the job's parameters back into the
@@ -170,7 +191,9 @@ The [benchmarking guide](benchmarking.md) describes each preset exactly.
    seeds and large n with few); the plan is the union of the grids.
 3. **Solvers**: add one or more. Every case runs with every solver on the same
    CNF. Add the same solver twice with different options (for example CDCL
-   with VSIDS and with DLIS) and give each a label to compare settings.
+   with VSIDS and with DLIS) and give each a label to compare settings. The
+   same reset buttons as on the Solve page put options back to their
+   defaults.
 4. **Run settings**:
    - **Repeats**: runs per case. Repeat 1 uses the case's own seed, so any row
      can be reproduced on the Solve page; later repeats derive new seeds.
@@ -223,8 +246,12 @@ benchmark and keeps the rows so far.
   the image.
 - **Runs** tab: every run, sortable by any column, with search, status and
   solver filters. Click a row (or press Enter on it) for details: parameters,
-  statistics, checks, and buttons to **Open in Solve** (rebuilds that exact
-  instance on the Solve page) or **Download CNF**.
+  statistics, the solver's settings for that run, checks, and buttons to
+  **Open in Solve** (rebuilds that exact instance on the Solve page) or
+  **Download CNF**.
+- **Setup** tab: what the benchmark ran with. It lists the problem, repeats,
+  time limit, parallel workers, seed, the limit rules, and a settings table
+  for each solver (value used, default, changed options marked).
 - **Log** tab: the benchmark log.
 
 Header buttons: **Rerun** (same request again), **Edit as new** (open the

@@ -108,6 +108,50 @@ MOMS and DLIS remain slow on large formulas by design: they look at every
 clause at every decision. That cost is part of what comparing them with
 VSIDS shows.
 
+## Local search: why WalkSAT and ProbSAT used to lose
+
+On satisfiable formulas you would expect local search to beat CDCL. In the
+first version of the app it did not, for four reasons:
+
+- **The problems.** Sudoku, N-Queens and the graph problems are structured,
+  with many short "at most one" clauses. Unit propagation solves much of
+  them for free, and CDCL has it while local search does not. Local search
+  shines on large *random* formulas.
+- **A slow implementation.** It recomputed make and break for every candidate
+  by scanning its clauses: about 50,000 flips per second.
+- **Non-standard strategies.** ProbSAT combined a noise step with a
+  make/break weight, which is neither of the published algorithms.
+- **A small budget.** 10 tries x 10,000 flips was too little for anything
+  hard.
+
+The rewrite (see [WalkSAT and ProbSAT](../algorithms/walksat.md)) uses the
+textbook WalkSAT/SKC and ProbSAT. It keeps break counts incrementally with the
+critical-variable trick, renumbers the variables compactly, and raises the
+budget to 10 x 100,000 flips. Throughput is now 120,000 to 300,000 flips per
+second.
+
+Median over seeds, 20 s limit, before and after the rewrite (WalkSAT /
+ProbSAT), with CDCL for reference:
+
+| Instance | Before | After | CDCL |
+|---|---|---|---|
+| 3-SAT n=150, ratio 4.2, SAT | 0.81 / 2.64 s | 0.02 / 0.01 s | 0.32 s |
+| Planted 3-SAT n=2000, ratio 4.0 | 0.13 / 0.26 s | 0.04 / 0.04 s | timeout |
+| Planted 3-SAT n=5000, ratio 4.2 | 0.65 / 18.75 s | 0.17 / 0.14 s | timeout |
+| 20-Queens | 0.04 / 12.36 s | 0.02 / 0.03 s | 0.06 s |
+| Sudoku 9x9, 25% givens | 0.20 s / timeout | 0.05 / 0.05 s | 0.07 s |
+| Hamiltonian path, G(20, 0.3) | timeouts | 0.12 / 0.73 s (one timeout) | 0.05 s |
+
+What this shows:
+
+- On large satisfiable random formulas local search now wins by a wide margin:
+  CDCL cannot finish n=2000 in 20 s, while WalkSAT needs 0.04 s.
+- On the structured problems they are now close to CDCL, but CDCL stays the
+  safer choice, especially for path and ordering problems.
+- On UNSAT formulas local search spends its whole budget and says `UNKNOWN`.
+  It cannot do better. Use a limit rule in benchmarks that mix SAT and UNSAT
+  cases.
+
 ## Benchmarks: running cases in parallel
 
 A benchmark normally solves its cases one after another on one CPU core. The
@@ -139,3 +183,5 @@ noisier (and turbo clock speeds drop when every core is busy). See
   [encodings](../algorithms/encodings.md#three-reusable-patterns)).
 - Learned-clause minimisation (removing redundant literals from learned
   clauses), as MiniSat does.
+- Clause weighting for local search (as in SAPS or PAWS), which helps on
+  structured formulas.

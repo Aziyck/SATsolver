@@ -1,7 +1,7 @@
 import { Group, NumberInput, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { defaultValues, type Values } from "../lib/params";
 import type { SolverSpec } from "../api/types";
-import type { Values } from "../lib/params";
-import { ParamForm } from "./fields/ParamForm";
+import { ParamForm, ResetToDefaults } from "./fields/ParamForm";
 
 export interface SolverSettings {
   solver: string;
@@ -44,14 +44,22 @@ export function SolverPanel({
         data={solvers.map((solver) => ({ value: solver.key, label: solver.title }))}
         aria-label="Solver"
       />
-      <Text size="sm" c="dimmed">
-        {spec.summary}
-      </Text>
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+        <Text size="sm" c="dimmed">
+          {spec.summary}
+        </Text>
+        <ResetToDefaults
+          fields={spec.fields}
+          values={{ ...defaultValues(spec.fields), ...options }}
+          onReset={() => onChange({ ...settings, options: { ...settings.options, [spec.key]: defaultValues(spec.fields) } })}
+        />
+      </Group>
       {spec.fields.length ? (
         <ParamForm
           fields={spec.fields}
-          values={options}
+          values={{ ...defaultValues(spec.fields), ...options }}
           errors={optionErrors}
+          resettable
           onChange={(name, value) => onChange({ ...settings, options: { ...settings.options, [spec.key]: { ...options, [name]: value } } })}
         />
       ) : null}

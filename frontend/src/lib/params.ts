@@ -89,3 +89,30 @@ export function errorsUnder(errors: Record<string, string>, prefix: string): Rec
   }
   return result;
 }
+
+function isBlank(value: unknown): boolean {
+  return value === null || value === undefined || value === "";
+}
+
+/** True when value equals the field's default. Blank, null and undefined count as the same; "3" equals 3. */
+export function isDefaultValue(field: Field, value: unknown): boolean {
+  const fallback = field.default;
+  if (isBlank(value) || isBlank(fallback)) return isBlank(value) && isBlank(fallback);
+  if (isNumericKind(field)) return Number(value) === Number(fallback);
+  return JSON.stringify(value) === JSON.stringify(fallback);
+}
+
+/** Visible fields whose value differs from the default. */
+export function changedFields(fields: Field[], values: Values): Field[] {
+  return visibleFields(fields, values).filter((field) => !isDefaultValue(field, values[field.name]));
+}
+
+/** A value as a person would say it: choice labels, On/Off, the placeholder for blanks ("automatic"). */
+export function displayValue(field: Field, value: unknown): string {
+  if (isBlank(value)) return field.placeholder || "none";
+  if (field.kind === "bool") return value ? "On" : "Off";
+  if (field.kind === "choice" || field.choices.length) return choiceLabel(field, value);
+  const number = typeof value === "string" && isNumericKind(field) ? Number(value) : value;
+  const text = typeof number === "number" && Number.isInteger(number) ? number.toLocaleString("en-US") : formatValue(number);
+  return field.unit ? `${text} ${field.unit}` : text;
+}

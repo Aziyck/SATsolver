@@ -31,7 +31,7 @@
 ## Solver options
 
 - [ ] [Figure 16: CDCL options: branching, phase and restarts]
-- [ ] [Figure 17: WalkSAT / ProbSAT options: tries, flips, noise]
+- [ ] [Figure 17: WalkSAT / ProbSAT options: tries, flips, noise (WalkSAT), cb (ProbSAT)]
 - [ ] [Figure 18: Time limit and seed]
 
 ## Benchmarks

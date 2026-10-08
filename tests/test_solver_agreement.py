@@ -1,7 +1,9 @@
 """
 Randomised cross-check: every complete solver configuration must agree with
 brute force on small random formulas, and every model it returns must satisfy
-the formula. This catches subtle bugs in propagation, learning, clause
+the formula. Local search (WalkSAT, ProbSAT) must find a model of every
+satisfiable formula within a generous budget and never claim one for an
+unsatisfiable formula. This catches subtle bugs in propagation, learning, clause
 deletion and restarts that hand-written examples miss.
 """
 
@@ -11,6 +13,7 @@ import unittest
 
 from solvers.cdcl import cdcl
 from solvers.dpll import dpll
+from solvers.walksat import walksat
 from sat_core.verify import check_assignment
 
 
@@ -57,6 +60,27 @@ class SolverAgreementTests(unittest.TestCase):
                         # Every variable of the input gets a value.
                         mentioned = {abs(lit) for clause in clauses for lit in clause}
                         self.assertTrue(mentioned <= set(model), clauses)
+
+    def test_local_search_finds_models_and_never_claims_unsat_ones(self):
+        rng = random.Random(77)
+        for case in range(200):
+            clauses, variables = random_formula(rng)
+            expected = brute_force_sat(clauses, variables)
+            for mode in ("walksat", "probsat"):
+                with self.subTest(case=case, mode=mode):
+                    model, stats = walksat(
+                        clauses,
+                        return_stats=True,
+                        logging_options={"selection_mode": mode, "random_seed": case, "max_tries": 5, "max_flips": 1000},
+                    )
+                    if expected:
+                        self.assertEqual(stats["status"], "SAT", clauses)
+                        self.assertTrue(check_assignment(clauses, model), clauses)
+                        mentioned = {abs(lit) for clause in clauses for lit in clause}
+                        self.assertTrue(mentioned <= set(model), clauses)
+                    else:
+                        self.assertIsNone(model)
+                        self.assertEqual(stats["status"], "UNKNOWN")
 
 
 if __name__ == "__main__":

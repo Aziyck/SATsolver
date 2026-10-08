@@ -172,18 +172,50 @@ CDCL_FIELDS = (
     ),
 )
 
-LOCAL_SEARCH_FIELDS = (
-    ParamField("max_tries", "Max tries", "int", default=10, minimum=1, maximum=1_000_000, help="Random restarts."),
-    ParamField("max_flips", "Max flips per try", "int", default=10_000, minimum=1, maximum=1_000_000_000),
+_BUDGET_FIELDS = (
+    ParamField(
+        "max_tries",
+        "Max tries",
+        "int",
+        default=10,
+        minimum=1,
+        maximum=1_000_000,
+        help="Random restarts: each try starts again from a fresh random assignment.",
+    ),
+    ParamField(
+        "max_flips",
+        "Max flips per try",
+        "int",
+        default=100_000,
+        minimum=1,
+        maximum=1_000_000_000,
+        help="Flips before giving up on a try. Tries x flips is the whole budget; then the answer is UNKNOWN.",
+    ),
+)
+_LOCAL_SEARCH_SEED = ParamField(
+    "random_seed",
+    "Random seed",
+    "seed",
+    default=None,
+    optional=True,
+    placeholder="random",
+    help="Makes the local search reproducible.",
+    advanced=True,
+)
+
+WALKSAT_FIELDS = _BUDGET_FIELDS + (
     ParamField(
         "noise",
         "Noise",
         "float",
-        default=0.5,
+        default=0.567,
         minimum=0.0,
         maximum=1.0,
         step=0.05,
-        help="Probability of a random repair flip instead of the heuristic choice.",
+        help=(
+            "When no free move exists, the probability of flipping a random variable of the clause "
+            "instead of the one that breaks the fewest clauses. 0.567 works best on random 3-SAT."
+        ),
     ),
     ParamField(
         "adaptive_noise",
@@ -193,19 +225,33 @@ LOCAL_SEARCH_FIELDS = (
         help="Raise noise after stagnation, lower it again after a new best assignment.",
         advanced=True,
     ),
-    ParamField(
-        "random_seed",
-        "Random seed",
-        "seed",
-        default=None,
-        optional=True,
-        placeholder="random",
-        help="Makes the local search reproducible.",
-        advanced=True,
-    ),
+    _LOCAL_SEARCH_SEED,
 )
 
-for _fields in (CDCL_FIELDS, LOCAL_SEARCH_FIELDS):
+PROBSAT_FIELDS = _BUDGET_FIELDS + (
+    ParamField(
+        "cb",
+        "Break exponent cb",
+        "float",
+        default=None,
+        optional=True,
+        minimum=0.1,
+        maximum=20.0,
+        step=0.1,
+        placeholder="automatic",
+        help=(
+            "How strongly low-break variables are preferred. Blank uses the published values: "
+            "(0.9 + break)^-2.06 for 3-SAT, cb^-break with cb = 3.0 to 5.4 for longer clauses."
+        ),
+        advanced=True,
+    ),
+    _LOCAL_SEARCH_SEED,
+)
+
+# Kept for code that imported the old shared schema.
+LOCAL_SEARCH_FIELDS = WALKSAT_FIELDS
+
+for _fields in (CDCL_FIELDS, WALKSAT_FIELDS, PROBSAT_FIELDS):
     check_field_order(_fields)
 
 
@@ -249,16 +295,8 @@ def _run_dpll(clauses, options, log_options, event_callback, token):
 def _local_search_runner(selection_mode: str) -> Runner:
     def run(clauses, options, log_options, event_callback, token):
         solver_options = dict(log_options)
-        solver_options.update(
-            {
-                "max_tries": options["max_tries"],
-                "max_flips": options["max_flips"],
-                "noise": options["noise"],
-                "adaptive_noise": options["adaptive_noise"],
-                "random_seed": options["random_seed"],
-                "selection_mode": selection_mode,
-            }
-        )
+        solver_options.update(options)
+        solver_options["selection_mode"] = selection_mode
         return walksat(
             clauses,
             return_stats=True,
@@ -339,13 +377,14 @@ register_solver(
         key="walksat",
         title="WalkSAT",
         complete=False,
-        summary="Incomplete local search. Fast on many SAT formulas; UNKNOWN when no model is found.",
+        summary="Incomplete local search. Fast on large satisfiable formulas; UNKNOWN when no model is found.",
         description=(
-            "Starts from a random assignment and repeatedly repairs an unsatisfied clause, flipping "
-            "either a random variable (noise) or the variable that leaves the fewest clauses "
-            "unsatisfied. Cannot prove UNSAT."
+            "WalkSAT/SKC: starts from a random assignment and repeatedly repairs a random unsatisfied "
+            "clause. It flips a variable that breaks no other clause if there is one; otherwise a "
+            "random variable of the clause (with probability noise) or the one that breaks the "
+            "fewest clauses. Cannot prove UNSAT."
         ),
-        fields=LOCAL_SEARCH_FIELDS,
+        fields=WALKSAT_FIELDS,
         runner=_local_search_runner("walksat"),
         progress_interval=5000,
     )
@@ -355,12 +394,13 @@ register_solver(
         key="probsat",
         title="ProbSAT",
         complete=False,
-        summary="Incomplete local search with probabilistic, low-break flip selection.",
+        summary="Incomplete local search. Strong on random k-SAT; UNKNOWN when no model is found.",
         description=(
-            "Same search loop as WalkSAT, but the variable to flip is sampled with weights that "
-            "favour flips which break few clauses and repair many. Cannot prove UNSAT."
+            "ProbSAT (Balint and Schoening): the same loop as WalkSAT, but the variable to flip is "
+            "drawn at random with probability proportional to f(break), which falls steeply as "
+            "break grows. No noise parameter. Cannot prove UNSAT."
         ),
-        fields=LOCAL_SEARCH_FIELDS,
+        fields=PROBSAT_FIELDS,
         runner=_local_search_runner("probsat"),
         progress_interval=5000,
     )
@@ -386,6 +426,9 @@ _STATS_SUMMARY_KEYS = (
     ("best_unsatisfied", "best unsatisfied"),
     ("termination_reason", "reason"),
     ("final_noise", "final noise"),
+    ("free_flips", "free"),
+    ("noise_flips", "noise"),
+    ("greedy_flips", "greedy"),
 )
 
 

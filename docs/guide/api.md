@@ -46,7 +46,7 @@ Everything the UI needs to draw its forms:
   "solvers": [SolverSpec, ...],
   "presets": [Preset, ...],
   "log_levels": ["normal", "periodic", "debug"],
-  "limits": {"max_clauses": 2000000, "max_benchmark_runs": 200000},
+  "limits": {"max_clauses": 2000000, "max_benchmark_runs": 200000, "max_workers": 4},
   "defaults": {
     "solve_timeout": 60,
     "benchmark_timeout": 30,
@@ -101,7 +101,8 @@ Body: `{"request": BenchmarkRequest}`. Expands the plan without running it:
   "largest": {"variables": 50, "clauses": 300},
   "total_clauses": 45000,
   "sample": [{"problem": "random_3sat", "label": "n=30 r=3 Random seed=1", "repeat": 1, "estimate": {...}}],
-  "seed": 1
+  "seed": 1,
+  "workers": 1
 }
 ```
 
@@ -151,14 +152,17 @@ A **BenchmarkRequest**:
   "rules": [{"solver": "dpll", "action": "cap", "min_variables": 200, "seconds": 10}],
   "seed": 1,
   "log_level": "normal",
-  "title": "optional"
+  "title": "optional",
+  "workers": 1
 }
 ```
 
 Sweepable fields take a single value, a list, or a string with lists and
 ranges (see [Benchmarking](benchmarking.md#writing-parameter-values)).
 `rules[].solver` may be `"*"` for any solver; `action` is `cap` (needs
-`seconds`) or `skip`.
+`seconds`) or `skip`. `workers` (default 1, at most `limits.max_workers`,
+the number of CPU cores) is how many cases are solved at the same time; see
+[Benchmarking](benchmarking.md#parallel-runs).
 
 The response is the job summary.
 

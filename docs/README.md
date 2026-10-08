@@ -11,7 +11,8 @@
 Guides:
 
 - [User guide](guide/user-guide.md): every page of the app.
-- [Benchmarking](guide/benchmarking.md): sweeps, limit rules, presets, CSV.
+- [Benchmarking](guide/benchmarking.md): sweeps, limit rules, presets, parallel runs, CSV.
+- [Solver performance](guide/performance.md): measurements, what was slow, how to profile.
 - [Architecture](guide/architecture.md): how the pieces fit together.
 - [HTTP API](guide/api.md): endpoints and live events.
 - [Adding a problem or solver](guide/adding-a-problem.md): extension walkthrough.

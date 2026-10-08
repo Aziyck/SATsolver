@@ -68,8 +68,10 @@ the clauses as you type.
 
 Each solver shows its own options: CDCL's branching heuristic (VSIDS, most
 frequent, MOMS, DLIS, random), initial phase and restarts; WalkSAT's tries,
-flips per try and noise. **Advanced options** holds the rest (random seeds,
-CDCL's learned-clause limit, WalkSAT's adaptive noise).
+flips per try and noise. **Advanced options** holds the rest: random seeds;
+for CDCL the restart schedule (Luby or fixed) and interval, and the
+learned-clause clean-up; for WalkSAT adaptive noise. The defaults are what
+modern solvers use; [CDCL](../algorithms/cdcl.md) explains each one.
 
 **Time limit (s)** stops the solver after that many seconds (blank means no
 limit). **Log detail** controls how much the solver writes to the log:
@@ -85,6 +87,13 @@ limit). **Log detail** controls how much the solver writes to the log:
 Both run in the background as a *job* (labelled J1, J2, ...). You can keep
 working, start other jobs or leave the page; up to one job per CPU core runs
 at a time and the rest queue.
+
+**Full page** on the result opens the job on its own page (`/jobs/<id>`),
+like a benchmark: the same tabs, full width, with a large log that streams
+while the solver runs. It opens on the **Log** tab while the job is running
+and switches to the answer when it finishes. Set *Log detail* to *Progress*
+or *Debug* to watch the solver's work there. The Jobs page and the Jobs
+drawer open solves on this page too.
 
 ### Read the result
 
@@ -119,7 +128,7 @@ What the statuses mean:
 | TIMEOUT | the time limit was reached |
 | CANCELLED | you cancelled the job |
 | SKIPPED | a benchmark rule or you skipped this run |
-| ERROR | the solver failed; the message says why (for example, DPLL running out of recursion depth on a huge formula) |
+| ERROR | the solver failed; the message says why |
 
 **Recent runs** below the result lists earlier jobs for the same problem.
 
@@ -168,6 +177,10 @@ The [benchmarking guide](benchmarking.md) describes each preset exactly.
    - **Time limit (s)**: per run; blank means none.
    - **Seed**: used for cases whose grid has no seed.
    - **Log detail**: as on the Solve page.
+   - **Parallel cases**: how many cases to solve at the same time (1 to the
+     number of CPU cores). 1 gives the cleanest timings; more finishes sooner
+     but makes individual times noisier. See
+     [Benchmarking](benchmarking.md#parallel-runs).
 5. **Limit rules** cap the time of a solver, or skip it, once formulas reach a
    size:
    *cap DPLL at 10 s when variables >= 200* is there by default, because DPLL
@@ -182,8 +195,9 @@ are fine: results stream in, and you can leave the page.
 ### While it runs
 
 The results page fills in live. **Skip case** marks the run in progress as
-SKIPPED and moves on (useful when one hard case hangs); **Stop** cancels the
-whole benchmark and keeps the rows so far.
+SKIPPED and moves on (useful when one hard case hangs; with parallel cases it
+skips every case running at that moment); **Stop** cancels the whole
+benchmark and keeps the rows so far.
 
 ### Results
 
@@ -221,7 +235,8 @@ includes the compared benchmarks too), and delete.
 
 Every solve, encoding and benchmark, newest first, with status, result,
 duration and start time. Filter by kind or search by title; click a row to
-open its result. **Delete finished** removes all finished jobs and their
+open it: benchmarks on their results page, solves and encodings on their job
+page. **Delete finished** removes all finished jobs and their
 files. Running jobs can be cancelled from the Jobs drawer.
 
 Jobs and benchmark rows are stored in `output/wizsat.db` (SQLite) and job

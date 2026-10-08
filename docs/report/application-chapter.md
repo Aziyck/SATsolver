@@ -286,18 +286,23 @@ a model, otherwise it proves unsatisfiability by exhausting the search tree.
 
 Main steps:
 
-1. unit propagation (`_unit_propagate`);
-2. detection of conflicts (empty clauses);
+1. unit propagation, with two counters per clause (true and false literals);
+2. detection of conflicts (clauses with every literal false);
 3. choice of an unassigned variable;
 4. trying `True` and `False`;
-5. chronological backtracking when a branch fails.
+5. chronological backtracking when a branch fails, with an explicit decision
+   stack.
 
-The variable is chosen with a small-clause heuristic
-(`_choose_variable_small_clause`): variables from the shortest clauses are
-preferred, because short clauses are the most constrained.
+The variable is chosen with a small-clause heuristic (`choose_variable`):
+variables from the shortest clauses are preferred, because short clauses are
+the most constrained.
 
-Statistics: decisions, propagations, conflicts and time. DPLL has no options
-in the interface.
+The solver is iterative and never copies the formula, so it is not limited by
+Python's recursion depth. An earlier recursive version, which made the same
+decisions, is kept in `legacy/dpll_recursive.py`.
+
+Statistics: decisions, propagations, conflicts, maximum depth and time. DPLL
+has no options in the interface.
 
 ### 2.5.2 CDCL
 
@@ -309,15 +314,16 @@ backjumping:
 - a trail with decision levels;
 - First-UIP conflict analysis;
 - learned clauses scored by LBD;
-- controlled deletion of learned clauses;
-- phase saving and optional restarts.
+- periodic deletion of weak learned clauses;
+- a binary heap for VSIDS decisions;
+- phase saving and Luby restarts.
 
 Options exposed in the interface:
 
 - branching heuristic: VSIDS, most frequent, MOMS, DLIS, random;
 - initial phase: positive first, negative first, polarity based, random;
-- restarts every N conflicts;
-- a limit on the number of learned clauses;
+- restarts (Luby schedule or a fixed interval, on by default);
+- automatic learned-clause clean-up, or a fixed limit;
 - a seed for reproducible random choices.
 
 The options are declared as typed fields in the solver registry and passed to

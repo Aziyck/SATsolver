@@ -84,6 +84,22 @@ threads would share one core through the GIL, and a runaway solver could not
 be stopped. Each job gets a `spawn`ed process, which also isolates crashes
 (a worker that dies is reported as a failed job).
 
+The processes while the app is busy:
+
+```text
+python -m sat_web                       the server: HTTP, WebSocket, JobManager, SQLite
+  +- job process (J7, a solve)          sat_core.jobs.run_job -> solve_job
+  +- job process (J8, a benchmark)      run_job -> benchmark_job -> run_benchmark
+       +- worker 1 .. N                 only with "workers" > 1: one case at a time each
+```
+
+Job processes are not daemons, because a benchmark job may start a pool of
+its own (daemon processes may not have children). They still end with the
+server: `JobManager.shutdown()` stops them, and every job and pool worker
+runs a small watchdog thread (`exit_when_parent_dies` in
+`sat_core/parallel.py`) that exits the process if its parent disappears, so
+nothing keeps running after a crash.
+
 ### Lifecycle
 
 ```text
@@ -101,7 +117,31 @@ POST /api/jobs
 returns `CANCELLED` at its next check. If the process has not ended three
 seconds later it is terminated. **Skip** (benchmarks) sets a second event
 that ends only the current run with `SKIPPED`. **Timeouts** are the same
-token with a deadline.
+token with a deadline. Solvers ask the token every 2,048 steps, which keeps
+the check cheap and the reaction time well under a second.
+
+### Parallel benchmark runs
+
+With `"workers": N` (N > 1) the benchmark job becomes a coordinator
+(`sat_core/parallel.py`):
+
+1. It starts a `ProcessPoolExecutor` with N spawned workers. Each worker
+   rebuilds the plan from the normalized request once (`parse_request` is
+   deterministic, so all processes agree on the cases).
+2. It submits cases by index, keeping at most 2N queued so a Stop does not
+   leave a long queue behind.
+3. A worker runs `run_case()`, the same function the sequential loop uses:
+   encode the case once, run every solver on that CNF, collect the rows and
+   log lines, and return them.
+4. The coordinator forwards the log lines and rows as ordinary events. Row
+   indices are `case index x number of solvers + solver position`, so the
+   rows equal those of a sequential run whatever order cases finish in.
+
+Stop and Skip reach the workers through shared objects that a small thread
+in the coordinator keeps in sync with the job's token: Stop sets a shared
+event; Skip increments a shared counter. A worker remembers the counter when
+it starts a case, and a changed counter means "skip this case". So Skip
+affects exactly the cases running when it is pressed, never later ones.
 
 ### Persistence
 
@@ -157,7 +197,8 @@ already arrived. Two mechanisms make the result correct regardless of order:
   the benchmark request; `lib/stats.ts` aggregates rows for the charts
   (ECharts) and tables.
 - **Routing**: `/solve/:problem`, `/benchmarks`, `/benchmarks/new`,
-  `/benchmarks/:id`, `/jobs`, `/learn/:topic`. The Python server returns
+  `/benchmarks/:id`, `/jobs`, `/jobs/:id` (a solve or encode job on its own
+  page; benchmarks redirect to their results page), `/learn/:topic`. The Python server returns
   `index.html` for any non-API path, so deep links work.
 
 ## Serving

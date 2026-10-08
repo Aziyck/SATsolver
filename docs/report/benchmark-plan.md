@@ -134,8 +134,8 @@ Clique vs Independent Set*.
    limit rules that applied (the CSV has a `rule` column).
 2. Keep the same seeds for randomly generated instances. The application
    runs every solver on the same CNF for each case.
-3. For CDCL, record the branching heuristic, initial phase, restarts and
-   learned-clause limit.
+3. For CDCL, record the branching heuristic, initial phase, restart schedule
+   and learned-clause clean-up. Keep *Parallel cases* at 1 for timed runs.
 4. For WalkSAT/ProbSAT, record max tries, max flips, noise, adaptive noise
    and seed.
 5. Keep `UNSAT` and `UNKNOWN` apart.

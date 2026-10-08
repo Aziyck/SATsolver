@@ -20,12 +20,14 @@
   and is checked twice: the model must satisfy every clause, and the decoded
   answer must pass the problem's own rules.
 - **Look inside the encoding**: the generated CNF, its size, what each variable
-  means, the solver statistics and the full solver log.
+  means, the solver statistics and the full solver log, live, on a page of
+  its own for each job.
 - **Benchmark** solvers on parameter sweeps (`n = 50..200`, ratios
   `3, 3.5, 4.26`, seeds `1..30`, ...), with repeats, time limits and per-solver
   limit rules such as "cap DPLL at 10 s once formulas reach 200 variables".
   Results stream in live and can be charted, filtered, compared across runs
-  and exported as CSV.
+  and exported as CSV. Optionally several cases run at once, one per CPU
+  core.
 - **Presets** reproduce the report experiments (Random 3-SAT A/B/C) and a few
   classic ones (the 3-SAT phase transition, the 3-coloring threshold, CDCL
   branching heuristics).
@@ -196,7 +198,8 @@ legacy/         the original Tkinter app and Romanian documents, kept for refere
 | Document | What it covers |
 |---|---|
 | [User guide](docs/guide/user-guide.md) | every page of the app, input formats, reading results |
-| [Benchmarking](docs/guide/benchmarking.md) | sweeps, limit rules, presets, CSV columns, fair comparisons |
+| [Benchmarking](docs/guide/benchmarking.md) | sweeps, limit rules, presets, parallel runs, CSV columns, fair comparisons |
+| [Solver performance](docs/guide/performance.md) | how fast the solvers are, what made them faster, how to measure |
 | [Architecture](docs/guide/architecture.md) | how the pieces fit together, job lifecycle, live events |
 | [HTTP API](docs/guide/api.md) | endpoints and WebSocket messages |
 | [Adding a problem or solver](docs/guide/adding-a-problem.md) | step-by-step extension guide |

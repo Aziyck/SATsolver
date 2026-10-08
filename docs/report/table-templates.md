@@ -32,7 +32,7 @@
 | Solver | File | Complete | Possible statuses | Main options |
 |---|---|---|---|---|
 | DPLL | `solvers/dpll.py` | yes | SAT, UNSAT, TIMEOUT, CANCELLED, ERROR | none (small-clause heuristic) |
-| CDCL | `solvers/cdcl.py` | yes | SAT, UNSAT, TIMEOUT, CANCELLED | branching, phase, restarts, learned-clause limit, seed |
+| CDCL | `solvers/cdcl.py` | yes | SAT, UNSAT, TIMEOUT, CANCELLED | branching, phase, restarts (Luby/fixed), learned-clause clean-up, seed |
 | WalkSAT | `solvers/walksat.py` | no | SAT, UNKNOWN, TIMEOUT, CANCELLED | tries, flips, noise, adaptive noise, seed |
 | ProbSAT | `solvers/walksat.py` (`selection_mode="probsat"`) | no | SAT, UNKNOWN, TIMEOUT, CANCELLED | tries, flips, noise, adaptive noise, seed |
 

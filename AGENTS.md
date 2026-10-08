@@ -17,6 +17,7 @@ cd frontend && npm run dev               # UI with hot reload on :5173 (proxies 
 
 python -m unittest discover -s tests     # Python tests (API tests need requirements-dev.txt)
 python scripts/benchmark_cdcl.py         # smoke-run every solver
+python scripts/solver_timings.py         # time the solvers on a fixed set (docs/guide/performance.md)
 
 cd frontend
 npm run typecheck                        # tsc
@@ -35,12 +36,13 @@ problems/        one module per problem, each a registered ProblemSpec
   base.py          ProblemSpec, register_problem, MAX_CLAUSES, RESULT_VIEWS
   encoding.py      variable numbering helpers (sudoku_var, readable_pair_var, ...)
   graph.py         shared graph fields (gnp/gnm/gnd/manual + seed) and GraphProblemSpec
-solvers/         dpll.py, cdcl.py, walksat.py (WalkSAT and ProbSAT)
+solvers/         dpll.py (iterative), cdcl.py, walksat.py (WalkSAT and ProbSAT)
 sat_core/
   params.py        ParamField schema: parsing, validation, sweeps ("1..30", "0.1..0.5:0.1")
   models.py        ProblemInstance, SolveResult, BenchmarkRow, STATUS_* constants
   solver_registry.py  SolverSpec registry and run_solver()
-  benchmark.py     request parsing, plan expansion, limit rules, run_benchmark, CSV
+  benchmark.py     request parsing, plan expansion, limit rules, run_benchmark/run_case, CSV
+  parallel.py      opt-in process pool for benchmarks ("workers" > 1), parent watchdog
   presets.py       benchmark presets (plain request dicts)
   jobs.py          job bodies run in worker processes (solve, generate, benchmark)
   runtime.py       RunEvent protocol, RunToken (cancel / skip / timeout)
@@ -140,11 +142,18 @@ Full walkthrough: `docs/guide/adding-a-problem.md`. Checklist:
    fields and a runner that maps the options to your solver's arguments.
    `complete=False` for solvers that cannot prove UNSAT (they report
    `UNKNOWN`).
-3. Add tests (`tests/test_<solver>.py`) and make sure
-   `python scripts/benchmark_cdcl.py` runs it.
+3. Add tests (`tests/test_<solver>.py`), add complete solvers to
+   `tests/test_solver_agreement.py` (checks against brute force), and make
+   sure `python scripts/benchmark_cdcl.py` runs it.
 
 Keep the `dpll()`, `cdcl()` and `walksat()` signatures backward compatible
-unless the registry, tests and docs change with them.
+unless the registry, tests and docs change with them. The recursive DPLL
+that `solvers/dpll.py` replaced is archived in `legacy/dpll_recursive.py`.
+
+Solver hot loops are performance-sensitive (`docs/guide/performance.md`):
+check the cancel token every few thousand steps, not on every step; avoid
+scanning all clauses or variables per conflict or decision; measure with
+`scripts/solver_timings.py` before and after.
 
 ## Statuses
 
@@ -189,12 +198,19 @@ A benchmark request is plain JSON (the same shape the presets use):
   CNF variables. `skip` wins over `cap`, and the smallest cap applies.
 - `sat_core.benchmark.DPLL_FALLBACK_RULE` (cap DPLL at 10 s from 200
   variables) is the default rule in the builder and in presets.
+- `"workers": N` (default 1, at most the CPU count) solves N cases at once
+  in a process pool (`sat_core/parallel.py`). A case is the unit of work and
+  row indices are `case.index * len(solvers) + position`, so parallel and
+  sequential runs give identical rows. Code inside `run_case` must therefore
+  work in a worker process too (no globals set by the job process).
 - One CSV format for all problems: base columns, one column per parameter,
   solver statistics.
 
 ## Web server rules
 
 - Jobs run in `spawn` worker processes, at most `WIZSAT_MAX_JOBS` at once.
+  They are not daemons (a benchmark may start its own pool); they exit with
+  the server through `shutdown()` and a parent watchdog.
 - The reader thread applies events under `JobManager.lock` and publishes to
   the event loop with `call_soon_threadsafe`. Take snapshots for HTTP replies
   under the lock (`manager.summary(job)`, `manager.detail(job)`).
@@ -221,7 +237,8 @@ A benchmark request is plain JSON (the same shape the presets use):
 
 1. `python -m unittest discover -s tests` passes (install
    `requirements-dev.txt` so the API tests run too).
-2. For solver, DIMACS or example changes: `python scripts/benchmark_cdcl.py`.
+2. For solver, DIMACS or example changes: `python scripts/benchmark_cdcl.py`,
+   and `python scripts/solver_timings.py` when speed may have changed.
 3. For frontend changes: `npm run typecheck`, `npm test`, `npm run build`,
    and `npm run test:e2e` when a user flow changed.
 4. Update the docs that describe what you changed (README, `docs/guide/`,

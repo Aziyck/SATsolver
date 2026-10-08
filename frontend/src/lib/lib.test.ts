@@ -5,6 +5,7 @@ import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
 import { defaultValues, isVisible, parseNumberList, visibleValues } from "./params";
 import { aggregate, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
+import { learnLink } from "./learn";
 import { conflictCells, parsePuzzle } from "./sudoku";
 
 function field(partial: Partial<Field> & Pick<Field, "name" | "kind">): Field {
@@ -196,5 +197,15 @@ describe("benchmark drafts", () => {
     expect(request.workers).toBe(3);
     // Drafts stored before the setting existed run one case at a time.
     expect(requestFromDraft(catalog, { ...draft, workers: undefined as unknown as number }).workers).toBe(1);
+  });
+});
+
+describe("links in the algorithm notes", () => {
+  const topics = ["dpll", "cdcl", "walksat", "encodings"];
+  it("maps repository-relative links to app routes or GitHub", () => {
+    expect(learnLink("dpll.md", topics)).toEqual({ href: "/learn/dpll", internal: true });
+    expect(learnLink("../visualisations/cdcl/index.html", topics).href).toBe("/visualisations/cdcl/");
+    expect(learnLink("../guide/performance.md", topics).href).toBe("https://github.com/Aziyck/SATsolver/blob/main/docs/guide/performance.md");
+    expect(learnLink("https://example.org/x", topics).href).toBe("https://example.org/x");
   });
 });

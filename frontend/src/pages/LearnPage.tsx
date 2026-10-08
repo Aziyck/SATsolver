@@ -3,6 +3,7 @@ import { IconExternalLink } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useParams } from "react-router-dom";
+import { learnLink } from "../lib/learn";
 
 // The algorithm notes live in docs/algorithms and are bundled at build time.
 const documents = import.meta.glob("../../../docs/algorithms/*.md", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
@@ -20,6 +21,7 @@ const rank = (key: string) => (ORDER.includes(key) ? ORDER.indexOf(key) : ORDER.
 const topics = Object.entries(documents)
   .map(([path, text]) => ({ key: path.split("/").pop()!.replace(/\.md$/, ""), text }))
   .sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
+const topicKeys = topics.map((topic) => topic.key);
 
 export default function LearnPage() {
   const { topic } = useParams();
@@ -66,16 +68,18 @@ export default function LearnPage() {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  a: ({ href, children }) =>
-                    href && href.endsWith(".md") && !href.startsWith("http") ? (
-                      <Anchor component={Link} to={`/learn/${href.split("/").pop()!.replace(/\.md$/, "")}`}>
+                  a: ({ href, children }) => {
+                    const link = learnLink(href ?? "", topicKeys);
+                    return link.internal ? (
+                      <Anchor component={Link} to={link.href}>
                         {children}
                       </Anchor>
                     ) : (
-                      <Anchor href={href} target="_blank" rel="noreferrer">
+                      <Anchor href={link.href} target="_blank" rel="noreferrer">
                         {children}
                       </Anchor>
-                    ),
+                    );
+                  },
                 }}
               >
                 {current.text}

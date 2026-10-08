@@ -104,12 +104,17 @@ browser form
   4. backtracking on conflict.
 
   If a model exists it finds one; otherwise it proves `UNSAT`.
-- **Practice**: the solver
-  1. propagates unit clauses;
-  2. chooses a variable;
-  3. tries one branch, then the other;
-  4. simplifies the formula by removing satisfied clauses and false literals;
-  5. returns recursively on conflict.
+- **Practice**: the solver is iterative. It
+  1. propagates unit clauses, using two counters per clause (true and false
+     literals) instead of copying the formula;
+  2. chooses a variable with the small-clause rule;
+  3. tries `True` first, then `False`;
+  4. on a conflict, undoes the trail back to the most recent decision whose
+     second value has not been tried (an explicit decision stack replaces
+     recursion).
+  The earlier recursive version, which copied the simplified formula at every
+  branch, is archived in `legacy/dpll_recursive.py`; both make the same
+  decisions.
 - **Complexity**: exponential in the worst case, about `O(2^n)`; unit
   propagation adds a cost that depends on the number and length of clauses.
 - **Input / output**: a CNF `list[list[int]]`; a `dict[int, bool]` if
@@ -125,10 +130,9 @@ Notes:
    self-contained.
 2. The variable choice favours short clauses; there is no heuristic option in
    the interface.
-3. The recursion depth grows with the number of decisions; on very large
-   formulas Python's recursion limit can be reached, which is reported as an
-   `ERROR` result with an explanation rather than a crash.
-4. Statistics: decisions, propagations, conflicts, time.
+3. The search depth is limited only by the number of variables (the recursive
+   version stopped at Python's recursion limit, about 1,000 decisions).
+4. Statistics: decisions, propagations, conflicts, maximum depth, time.
 
 ---
 
@@ -177,7 +181,8 @@ Notes:
   6. controlled deletion of learned clauses;
   7. several branching heuristics;
   8. phase selection and phase saving;
-  9. optional restarts.
+  9. Luby restarts (on by default).
+  10. a binary heap that keeps the decision order (VSIDS).
 - **Complexity**: still exponential in the worst case; in practice far more
   efficient than plain DPLL thanks to learning and cheap propagation.
 - **Input / output**: CNF and solver options; a model, `None` for `UNSAT`, or
@@ -194,11 +199,11 @@ Notes:
 removes duplicate literals, drops tautologies, detects the empty clause.
 *Type*: preprocessing and logical check.
 
-**b) Watched literals** (`watch_clause`, `attach_clause`, `propagate`): each
-clause watches two literals; when a value changes, only the clauses watching
-the falsified literal are visited, not the whole formula. `watches` maps a
-literal to the clauses watching it. *Type*: structural optimisation; it
-changes practical cost, not worst-case complexity.
+**b) Watched literals** (`add_clause`, `propagate`): each clause watches
+two literals, kept at positions 0 and 1; when a value changes, only the
+clauses watching the falsified literal are visited, not the whole formula.
+`watches` maps a literal to the clauses watching it. *Type*: structural
+optimisation; it changes practical cost, not worst-case complexity.
 
 **c) First-UIP conflict analysis** (`analyse_conflict`): the conflict clause
 is resolved with the reasons of propagated literals, walking the
@@ -212,21 +217,31 @@ again. *Type*: exact optimisation.
 
 **e) Non-chronological backjumping** (`backtrack`): the solver returns to the
 second-highest decision level in the learned clause, not necessarily to the
-last decision. *Type*: exact optimisation.
+last decision. The literal with that level is stored second in the learned
+clause, so it is the clause's second watch. *Type*: exact optimisation.
 
-**f) Restarts**: periodically return to level 0 while keeping the learned
-clauses. Optional, controlled by the restart interval option. *Type*:
-heuristic.
+**f) Restarts** (`luby`): periodically return to level 0 while keeping the
+learned clauses, activities and saved phases. By default after 1, 1, 2, 1, 1,
+2, 4, ... times 100 conflicts (the Luby sequence); a fixed interval or no
+restarts can be chosen. *Type*: heuristic.
 
 **g) LBD of learned clauses** (`clause_lbd`): the Literal Block Distance is
 the number of distinct decision levels among a clause's literals; clauses
 with a low LBD tend to be more useful. *Type*: clause-quality heuristic.
 
 **h) Deleting learned clauses** (`learned_clause_delete_key`,
-`learned_clauses_to_delete`, `prune_learned_clauses`): the learned-clause
-database is bounded to keep propagation fast. Binary clauses, clauses with a
-low LBD and clauses that are currently the reason of an assignment
-("locked") are protected. *Type*: memory and performance heuristic.
+`learned_clauses_to_delete`, `reduce_learned`): the learned-clause database
+is cleaned periodically to keep propagation fast: after 2,000 conflicts, then
+after 300 more each time, half of the weak learned clauses are deleted.
+Binary clauses, glue clauses (LBD at most 2) and clauses that are currently
+the reason of an assignment ("locked") are protected. Deleted clauses are
+dropped from the watch lists lazily. *Type*: memory and performance
+heuristic.
+
+**i) Decision heap** (`heap_up`, `heap_down`, `heap_pop`): the unassigned
+variables are kept in a binary max-heap ordered by VSIDS activity, so the
+next decision costs O(log n) instead of a scan of all variables. *Type*:
+data structure.
 
 ---
 
@@ -387,15 +402,15 @@ givens.
 
 | Heuristic | Where | Idea | Type |
 |---|---|---|---|
-| Small-clause preference | `dpll`, `_choose_variable_small_clause` | branch on variables of the shortest clauses; they are the most constrained and reveal conflicts early | heuristic |
+| Small-clause preference | `dpll`, `choose_variable` | branch on variables of the shortest clauses; they are the most constrained and reveal conflicts early | heuristic |
 | VSIDS-like activity | `cdcl`, `bump_var`, `decay_activity` | variables involved in recent conflicts get higher scores and are chosen first | main CDCL branching heuristic |
-| Most frequent | `cdcl`, `pick_most_frequent_var` | the variable occurring most often in unresolved clauses | heuristic |
+| Most frequent | `cdcl`, `pick_heap_var` with occurrence counts | the variable occurring most often in the formula | heuristic |
 | MOMS | `cdcl`, `pick_moms_var` | Maximum Occurrences in clauses of Minimum Size | heuristic |
 | DLIS | `cdcl`, `pick_dlis_decision` | Dynamic Largest Individual Sum: the literal satisfying the most unresolved clauses | heuristic |
 | Random branching | `cdcl`, `pick_random_var` | a baseline for comparisons | stochastic heuristic |
 | Initial phase | `cdcl`, `choose_phase` | positive first, negative first, polarity based, random | heuristic |
 | Phase saving | `cdcl`, `saved_phase` | retry the last value a variable had | search-continuity heuristic |
-| Restarts | `cdcl` | return to level 0 every N conflicts, keeping learned clauses | heuristic |
+| Restarts | `cdcl`, `luby` | return to level 0 after a Luby-sequence number of conflicts, keeping learned clauses | heuristic |
 | Noise | `walksat` | with probability `noise` flip at random, otherwise greedily | exploration vs exploitation |
 | Adaptive noise | `walksat` | raise the noise when the search stagnates, lower it on progress | adaptive heuristic |
 | Greedy flip score | `walksat`, `_UnsatisfiedTracker.flip_effect` | estimate make/break of each candidate flip | local optimisation |

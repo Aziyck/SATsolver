@@ -75,11 +75,32 @@ cap  WalkSAT at 1 s   when variables >= 0
   the table stays rectangular.
 
 **The DPLL fallback.** New benchmarks and all presets start with *cap DPLL at
-10 s when variables >= 200*. DPLL has no clause learning and can take
+10 s when variables >= 200*. DPLL never learns from a conflict and can take
 minutes or hours on formulas that CDCL solves in milliseconds; the cap keeps
 it in the comparison without stalling the run. Edit or remove it in **Limit
 rules**. To change the default for everyone, edit
 `DPLL_FALLBACK_RULE` in `sat_core/benchmark.py`.
+
+## Parallel runs
+
+By default a benchmark solves one case at a time, on one CPU core. **Parallel
+cases** in the builder (`"workers"` in a request, 1 up to the number of CPU
+cores) solves that many cases at the same time:
+
+- Each case still goes to one worker as a whole: it is encoded once and every
+  solver runs on that same CNF, so the comparison stays fair.
+- The rows are identical to a sequential run; only their arrival order and
+  the timings change. Row numbers come from the case and the solver, not
+  from the order in which they finish.
+- **Skip case** skips the cases running at that moment (all of them);
+  **Stop** stops every worker.
+- Runs compete for the CPU, caches and memory bandwidth, so individual times
+  are noisier, and processors lower their clock speed when every core is busy.
+  Use parallel runs to explore quickly, and 1 for the timings you report.
+
+On a 4-core machine, 24 cases took 16.7 s with 1 worker, 9.4 s with 2 and
+6.9 s with 4. How the processes are organised is described in
+[Architecture](architecture.md#parallel-benchmark-runs).
 
 ## Presets
 
@@ -205,7 +226,7 @@ Every benchmark exports the same format, whatever the problem:
 | `size_variables` | the size used by limit rules |
 | `timeout` | the time limit that applied to this run |
 | `rule` | the limit rule that applied, if any |
-| `decisions`, `conflicts`, `propagations`, `learned_clauses`, `restarts` | CDCL/DPLL statistics |
+| `decisions`, `conflicts`, `propagations`, `learned_clauses`, `restarts` | CDCL/DPLL statistics (`learned_clauses` and `restarts` are CDCL only) |
 | `tries`, `flips`, `best_unsatisfied` | WalkSAT/ProbSAT statistics |
 | `error` | the error message for ERROR rows |
 
@@ -231,7 +252,8 @@ curl -X POST http://127.0.0.1:8000/api/jobs \
       "repeats": 1,
       "timeout": 30,
       "rules": [{"solver": "dpll", "action": "cap", "min_variables": 200, "seconds": 10}],
-      "seed": 1
+      "seed": 1,
+      "workers": 1
     }
   }'
 ```
@@ -256,12 +278,13 @@ print(rows_to_csv(rows))
    limit rules that applied.
 2. Fix the benchmark seed (and use seed ranges in the grids) so the formulas
    can be regenerated.
-3. Record solver options: for CDCL the branching heuristic, phase, restarts
-   and learned-clause limit; for WalkSAT/ProbSAT the tries, flips, noise and
-   seed. Solver labels (named after the options unless you set one) carry
-   them into the CSV.
-4. Report SAT, UNSAT, UNKNOWN and TIMEOUT counts separately.
-5. Prefer medians, and show how many runs each point summarises (the table
+3. Record solver options: for CDCL the branching heuristic, phase, restart
+   schedule and learned-clause clean-up; for WalkSAT/ProbSAT the tries,
+   flips, noise and seed. Solver labels (named after the options unless you
+   set one) carry them into the CSV.
+4. Keep **Parallel cases** at 1 for the runs whose timings you report.
+5. Report SAT, UNSAT, UNKNOWN and TIMEOUT counts separately.
+6. Prefer medians, and show how many runs each point summarises (the table
    view shows `n=`).
-6. Export the CSV right after the run and keep it with the request (use
+7. Export the CSV right after the run and keep it with the request (use
    **Edit as new** to see it).

@@ -7,6 +7,7 @@
 | [report/](report/) | thesis and report material, in English | [report index](report/README.md) |
 | [visualisations/](visualisations/) | standalone interactive DPLL, CDCL and WalkSAT pages | open `index.html` in any subfolder |
 | [images/](images/) | screenshots for the README | [what to add](images/README.md) |
+| [reviews/](reviews/) | code review findings kept as a to-do list | [2026-10-16 audit](reviews/2026-10-16-audit.md) |
 
 Guides:
 

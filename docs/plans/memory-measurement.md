@@ -125,7 +125,7 @@ With every run in its own child, a per-run limit becomes possible:
 - A new status touches several places:
   - the `STATUS_*` constants in `sat_core/models.py`;
   - the "Statuses" section of `AGENTS.md`;
-  - the frontend status colours (`lib/status.ts`, where status colours are
+  - the frontend status colours (`frontend/src/lib/status.tsx`, where status colours are
     reserved for statuses);
   - the charts' status shares, CSV counts and docs.
   

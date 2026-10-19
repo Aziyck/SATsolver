@@ -3,6 +3,8 @@
 - **Status:** proposed, not started
 - **Written:** 2026-10-19, against commit `9e11958`
 - **Related:** [Solver optimisations](solver-optimisations.md),
+  [Memory measurement](memory-measurement.md) (reuses the solver runner of
+  Part 2 and the metadata of Part 1),
   [Solver performance](../guide/performance.md),
   [Benchmarking](../guide/benchmarking.md), [Architecture](../guide/architecture.md)
 

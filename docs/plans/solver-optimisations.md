@@ -3,6 +3,7 @@
 - **Status:** proposed, not started
 - **Written:** 2026-10-19, against commit `9e11958`
 - **Related:** [PyPy runner and run metadata](pypy-solver-runner-and-run-metadata.md),
+  [Memory measurement](memory-measurement.md),
   [2026-10-16 audit](../reviews/2026-10-16-audit.md) (A2, B6-B9),
   [Solver performance](../guide/performance.md)
 

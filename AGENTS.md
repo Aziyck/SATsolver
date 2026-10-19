@@ -61,7 +61,8 @@ frontend/src/
   components/      forms (fields/ParamForm.tsx), result views (views/), charts (charts/)
   pages/           Solve, Benchmarks, BenchmarkBuilder, BenchmarkResults, Jobs, Learn
 tests/           unittest suites; test_api.py is skipped when fastapi/httpx are missing
-docs/            guide/, algorithms/, report/, visualisations/ (standalone HTML)
+docs/            guide/, algorithms/, report/, visualisations/ (standalone HTML),
+                 reviews/ (dated findings to fix), plans/ (planned features)
 ```
 
 ## How a request flows
@@ -263,6 +264,15 @@ A benchmark request is plain JSON (the same shape the presets use):
 CI (`.github/workflows/ci.yml`) runs the same checks on every push to `main`
 and on pull requests: Python on Ubuntu (3.10, 3.13) and Windows (3.12), the
 frontend checks, then the end-to-end tests.
+
+## Planned work and open findings
+
+`docs/plans/` holds features that are designed but not built yet (status,
+design, steps as checkboxes, measurements, rejected options), and
+`docs/reviews/` holds dated review findings still to fix. Read the relevant
+file before working on the solvers, benchmarks or results metadata, tick its
+checkboxes as you go, and update its status line when a plan is done or
+dropped.
 
 ## Conventions
 

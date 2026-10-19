@@ -8,6 +8,7 @@
 | [visualisations/](visualisations/) | standalone interactive DPLL, CDCL and WalkSAT pages | open `index.html` in any subfolder |
 | [images/](images/) | screenshots for the README | [what to add](images/README.md) |
 | [reviews/](reviews/) | code review findings kept as a to-do list | [2026-10-16 audit](reviews/2026-10-16-audit.md) |
+| [plans/](plans/) | planned features not started yet, with status, design and steps | [solver optimisations](plans/solver-optimisations.md), [PyPy runner and run metadata](plans/pypy-solver-runner-and-run-metadata.md) |
 
 Guides:
 

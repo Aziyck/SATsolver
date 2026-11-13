@@ -23,6 +23,8 @@ import threading
 import webbrowser
 from pathlib import Path
 
+from sat_web.config import Settings
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
@@ -91,6 +93,16 @@ def free_port(host: str, port: int, attempts: int = 20) -> int:
     raise SystemExit(f"[wizsat] No free port between {port} and {port + attempts - 1}.")
 
 
+def allow_host(host: str) -> None:
+    """Make the app answer for the --host name too (sat_web.config reads the variable)."""
+
+    # uvicorn creates the app itself, with --dev in a child process, so the
+    # environment is the one channel that reaches it. "Every interface" is
+    # not a name anyone addresses the server by.
+    if host not in ("", "0.0.0.0", "::"):
+        os.environ["WIZSAT_ALLOWED_HOSTS"] = f"{os.environ.get('WIZSAT_ALLOWED_HOSTS', '')},{host}"
+
+
 def main(argv: list[str] | None = None) -> None:
     if sys.version_info < (3, 10):
         raise SystemExit("WizSAT needs Python 3.10 or newer.")
@@ -113,11 +125,22 @@ def main(argv: list[str] | None = None) -> None:
     if not args.skip_build and (args.build or frontend_is_stale()):
         build_frontend()
 
+    allow_host(args.host)
+    try:
+        Settings()
+    except ValueError as exc:
+        raise SystemExit(f"[wizsat] {exc}") from None
+
     # The Vite dev server proxies to a fixed port, so --dev never moves.
     port = free_port(args.host, args.port, attempts=1 if args.strict_port or args.dev else 20)
     shown_host = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     url = f"http://{shown_host}:{port}"
     print(f"\n[wizsat] WizSAT is starting at {url}  (press Ctrl+C to stop)\n")
+    if args.host in ("", "0.0.0.0", "::"):
+        print(
+            "[wizsat] Listening on every interface. Other machines are answered only under the names\n"
+            "         listed in WIZSAT_ALLOWED_HOSTS (comma-separated, for example 192.168.1.20,my-pc).\n"
+        )
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, [url]).start()
 

@@ -231,6 +231,20 @@ proxies `/api`, `/media` and `/visualisations` to the Python server.
 
 - The server binds to `127.0.0.1`. There is no authentication because
   nothing is exposed to the network.
+- A page on another website can still make the user's browser send requests
+  to `127.0.0.1`, so the middleware `LocalOnlyGuard` (`sat_web/api.py`) makes
+  two checks in front of every route, static files and the WebSocket
+  included. It answers 400 when the `Host` header is not an allowed name,
+  which stops DNS rebinding (a hostile name that resolves to 127.0.0.1). It
+  answers 403 when an `Origin` header names a host that is not allowed;
+  requests without `Origin` (curl, scripts, same-origin page loads) pass.
+  The allowed names are `Settings.allowed_hosts`: `localhost`, `127.0.0.1`
+  and `[::1]`, plus the names in `WIZSAT_ALLOWED_HOSTS`, compared exactly
+  (lower case, any port). The launcher adds its `--host` value to that
+  variable, and a value that is not a plain name or address stops the start.
+  The reasons are in [ADR 0002](../adr/0002-origin-and-host-checks.md).
+  Not covered yet: another site can still show the app in a frame (audit
+  item A13).
 - `MAX_CLAUSES` (2,000,000, `WIZSAT_MAX_CLAUSES`) refuses instances whose
   estimated size would exhaust memory, before any encoding starts.
 - `MAX_BENCHMARK_RUNS` (200,000) and `MAX_CASES` bound benchmark plans.

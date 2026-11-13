@@ -36,7 +36,12 @@ jobs:
           cache-dependency-path: requirements*.txt
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Lint
+        run: python -m ruff check .
       - name: Unit and API tests
+        env:
+          # Missing web dependencies must fail the run, not skip the API tests.
+          WIZSAT_REQUIRE_API_TESTS: "1"
         run: python -m unittest discover -s tests -v
       - name: Solver smoke benchmark
         run: python scripts/benchmark_cdcl.py
@@ -61,7 +66,10 @@ jobs:
 
   e2e:
     name: End to end
-    runs-on: ubuntu-latest
+    # Pinned: the Playwright version in frontend/package.json cannot install
+    # Chromium on Ubuntu 26.04, which ubuntu-latest now is. Go back to
+    # ubuntu-latest when Playwright is upgraded (audit item A12).
+    runs-on: ubuntu-24.04
     needs: [python, frontend]
     steps:
       - uses: actions/checkout@v4

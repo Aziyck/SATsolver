@@ -7,6 +7,10 @@
   or solvers, `docs/guide/benchmarking.md` for the benchmark engine.
 - Python API tests start real worker processes; they need
   `pip install -r requirements-dev.txt` and take a few seconds.
+- Cloud sessions get their dependencies from `.claude/hooks/session-start.sh`
+  (pip packages, `frontend/node_modules`, `WIZSAT_REQUIRE_API_TESTS=1`). If a
+  check fails because a package is missing, run that script instead of
+  working around the missing package.
 - When you start the server in the background, pass `--no-browser`, and
   `--strict-port` if something else will connect to a fixed port. Stop it by
   PID. Do not `pkill -f` a pattern that also appears in your own command line.
@@ -26,6 +30,32 @@
   switch role with `{ force: true }`.
 - A push to `main` starts two workflows: "CI" (the tests) and "pages build
   and deployment". Check "CI".
+
+## Difficulty and models
+
+Every item carries a difficulty (`docs/plans/README.md` defines the levels).
+This is the one place that maps it to a model, so a model change is a
+one-line edit:
+
+| Difficulty | Model | Review before the item is closed |
+|---|---|---|
+| easy | Sonnet, high effort | the checks in "Before you finish" |
+| medium | Sonnet, high effort | plus `/code-review` on the diff; fix what it confirms |
+| hard | the strongest model available (Opus), or Sonnet followed by a `/code-review` run on the stronger model | plus, for solver items, unchanged conflict counts and timings |
+
+- If the session's model is below the item's level, say so before starting
+  and let the owner choose: switch model, or proceed with the stronger review.
+- After three failed attempts at an item's "done when", stop and write the
+  `Escalate:` line (`docs/plans/README.md`). Do not keep trying variations.
+
+## Subagents
+
+- Implement in the main session, one item at a time. A subagent starts with
+  no context and re-reads the codebase, so parallel implementers multiply the
+  token cost without making a one-item change faster.
+- Use a subagent for read-only research, for the long wait described below,
+  or when the owner asks for one. One at a time unless the owner asks for
+  more.
 
 ## Long-running work
 

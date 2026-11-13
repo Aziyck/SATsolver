@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: picks-first-task-that-can-start
+expected_outcome: |
+  The session reads the whole run-metadata plan, picks META-1 (the first open task that is not blocked), tells the owner the task and its done-when, writes failing tests first, builds sat_core/environment.py, verifies and closes META-1 only.

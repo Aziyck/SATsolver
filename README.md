@@ -152,8 +152,9 @@ npm run dev                              # UI on http://localhost:5173, proxies 
 ### Tests
 
 ```bash
-# Python: core, encoders, solvers, and the web API
-python -m pip install -r requirements-dev.txt
+# Python: lint, then core, encoders, solvers, and the web API
+python -m pip install -r requirements-dev.txt   # FastAPI, httpx and ruff
+python -m ruff check .
 python -m unittest discover -s tests
 
 # Frontend: type check, unit tests, production build
@@ -169,6 +170,15 @@ npm run test:e2e
 
 The end-to-end tests start `python -m sat_web` themselves with a throwaway data
 directory; set `WIZSAT_PYTHON` if your interpreter is not called `python`.
+
+The web API tests skip themselves when FastAPI is not installed, and a skipped
+test looks like a pass. Set `WIZSAT_REQUIRE_API_TESTS=1` to make a missing
+dependency fail the run instead (CI does):
+
+```bash
+WIZSAT_REQUIRE_API_TESTS=1 python -m unittest discover -s tests     # Linux, macOS
+$env:WIZSAT_REQUIRE_API_TESTS = "1"; python -m unittest discover -s tests   # Windows PowerShell
+```
 
 A quick command-line check of every solver (no server needed):
 
@@ -207,6 +217,9 @@ legacy/         the original Tkinter app and Romanian documents, kept for refere
 | [DPLL](docs/algorithms/dpll.md), [CDCL](docs/algorithms/cdcl.md), [WalkSAT](docs/algorithms/walksat.md) | the solver algorithms |
 | [Report material](docs/report/README.md) | English, updated versions of the thesis documents |
 | [AGENTS.md](AGENTS.md) | conventions for contributors and coding agents |
+| [GLOSSARY.md](GLOSSARY.md) | what the project's words mean (case, run, row, glue clause, ...) |
+| [Work queue](docs/plans/README.md) | open findings and planned features, in order, and how items are written and closed |
+| [Decisions](docs/adr/README.md) | architecture decision records |
 
 ## Legacy
 

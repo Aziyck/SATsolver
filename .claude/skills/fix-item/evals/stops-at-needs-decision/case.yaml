@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: stops-at-needs-decision
+expected_outcome: |
+  The session reads item A1, sees its undecided Needs decision, and asks the owner to decide (showing the options and the recommendation) without changing any code.

@@ -38,7 +38,7 @@ class LocalSearchStateTests(unittest.TestCase):
             state.flip(rng.choice(variables))
             for variable in variables:
                 self.assertEqual(state.breaks[variable], brute_force_breaks(clauses, values, variable))
-            expected_unsat = {index for index, clause in enumerate(clauses) if not any(values[abs(l)] == (l > 0) for l in clause)}
+            expected_unsat = {index for index, clause in enumerate(clauses) if not any(values[abs(lit)] == (lit > 0) for lit in clause)}
             self.assertEqual(set(state.unsat), expected_unsat)
 
     def test_make_and_break_of_a_small_example(self):

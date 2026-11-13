@@ -1,11 +1,12 @@
 # Plan: further solver optimisations (pure Python)
 
 - **Status:** proposed, not started
-- **Written:** 2026-10-19, against commit `9e11958`
-- **Related:** [PyPy runner and run metadata](pypy-solver-runner-and-run-metadata.md),
-  [Memory measurement](memory-measurement.md),
+- **Written:** 2026-10-19, against commit `9e11958`; tasks rewritten 2026-11-13
+- **Related:** [PyPy solver runner](pypy-solver-runner.md),
+  [memory measurement](memory-measurement.md),
   [2026-10-16 audit](../reviews/2026-10-16-audit.md) (A2, B6-B9),
   [Solver performance](../guide/performance.md)
+- Item format, difficulty and closing rule: [README.md](README.md)
 
 ## Goal
 
@@ -37,7 +38,7 @@ What is already done (details in `docs/guide/performance.md` and
 
 Where CDCL spends its time now: propagation (`propagate()` in
 `solvers/cdcl.py`) is about three quarters of the run time; the rest is
-conflict analysis and the heap. So the steps below target propagation first.
+conflict analysis and the heap. So the tasks below target propagation first.
 
 Reference times (CPython 3.11, from `scripts/solver_timings.py` and the
 2026-10-19 PyPy comparison):
@@ -53,91 +54,85 @@ Reference times (CPython 3.11, from `scripts/solver_timings.py` and the
 Re-measure these on your own machine before starting; absolute times differ
 between machines, ratios are what matter.
 
-## Rules for every step
+## Rules for every task
 
 1. Measure before and after: `python scripts/solver_timings.py` (run nothing
    else heavy at the same time).
 2. Correctness: `python -m unittest tests.test_solver_agreement tests.test_cdcl
    tests.test_walksat tests.test_runtime`.
-3. Steps marked "same search" must give identical decisions and conflicts:
-   compare the `conflicts` column of `solver_timings.py` before and after. A
-   different count means the step changed the search, which is a bug for
-   those steps.
-4. One step per commit, with the measured gain in the commit message and a line
+3. Tasks marked "same search" must give identical decisions and conflicts:
+   compare the conflicts column of `solver_timings.py` before and after. A
+   different count means the task changed the search, which is a bug for
+   those tasks.
+4. One task per commit, with the measured gain in the commit message and a line
    in `docs/guide/performance.md`.
+5. A task that brings no measurable gain is closed as dropped, with the
+   numbers, and its code is not merged.
 
-## Steps
+## Tasks
 
-Do the cleanup first: the CDCL items B6-B9 of the
-[audit](../reviews/2026-10-16-audit.md) touch the same code (`_dedupe_clause`,
-unreachable branches, the duplicated `assignment`/`val` state, the extra
-counters). Doing them first makes the hot loop smaller and easier to change.
-
-- [ ] **1. Blocker literals in the watch lists** (CDCL, same search)
-  - **What:** each watch entry stores one other literal of the clause (the
+- [ ] **OPT-1. Blocker literals in the watch lists** (CDCL, same search)
+  - **Difficulty:** hard (CDCL hot loop)
+  - **Blocked by:** B6, B7, B8, B9 (the clean-up of the same code comes first)
+  - **How:** each watch entry stores one other literal of the clause (the
     "blocker", as in MiniSat). When the blocker is already true, the clause is
-    satisfied and propagation skips it without opening the clause object.
-  - **Where:** `add_clause()` and `propagate()` in `solvers/cdcl.py`; watch
-    lists become lists of `(clause, blocker)` pairs, or two parallel lists.
-  - **Expected:** the biggest of the pure-Python wins on large formulas, since
-    most watch visits find a satisfied clause. Estimate 1.2-1.4x on propagation;
-    not measured.
-  - **Risk:** the blocker must be updated when the watch moves; the agreement
-    test covers it.
+    satisfied and `propagate()` skips it without opening the clause object.
+    Watch lists become lists of `(clause, blocker)` pairs, or two parallel
+    lists; `add_clause()` fills them. The blocker must be updated when the
+    watch moves.
+  - **Done when:** rules 1-3 hold with an unchanged conflicts column, and the
+    large instances (3-SAT n=250, Sudoku 25x25) are measurably faster.
+    Estimate, not measured: 1.2-1.4x on propagation.
 
-- [ ] **2. Lighter clause objects** (CDCL, same search)
-  - **What:** `Clause` is a `@dataclass(eq=False)`; attribute access on a plain
-    class instance goes through a dict. `@dataclass(eq=False, slots=True)`
-    (Python 3.10+) makes `clause.lits`, `clause.deleted` faster. Measure plain
-    lists (`[lits, learnt, lbd, ...]`) as an alternative only if slots is not
-    enough; they are less readable.
-  - **Where:** `Clause` near the top of `solvers/cdcl.py`.
-  - **Expected:** a few percent; cheap to try.
-  - **Risk:** none for correctness. `slots=True` needs Python 3.10, which the
-    repo already requires.
+- [ ] **OPT-2. Lighter clause objects** (CDCL, same search)
+  - **Difficulty:** medium
+  - **How:** `Clause` is a `@dataclass(eq=False)`; attribute access on a plain
+    instance goes through a dict. Try `@dataclass(eq=False, slots=True)`
+    (needs Python 3.10, which the repo requires). Measure plain lists only if
+    slots is not enough; they are less readable.
+  - **Done when:** rules 1-3 hold with an unchanged conflicts column and a
+    measured gain; expect a few percent.
 
-- [ ] **3. Fast path for two-literal clauses** (CDCL, same search if done
-  carefully)
-  - **What:** binary clauses are common in the encodings (all the "at most one"
+- [ ] **OPT-3. Fast path for two-literal clauses** (CDCL)
+  - **Difficulty:** hard (CDCL hot loop; may change the search)
+  - **Blocked by:** OPT-1
+  - **Needs decision:** only if the conflicts column changes. The order in
+    which implications are found can differ, which changes the search and
+    makes earlier benchmark numbers no longer comparable. Options: accept and
+    document it as a search change, or drop the task.
+  - **How:** binary clauses are common in the encodings (all the "at most one"
     pairs). A separate watch list per literal holding just the other literal
     lets propagation handle them without the general replacement search.
-  - **Where:** `add_clause()`, `propagate()`, and conflict analysis (which
-    needs a reason clause for binary implications).
-  - **Expected:** large on Sudoku, N-Queens and graph colouring, where most
-    clauses are binary. Estimate 1.2-1.5x on those; not measured.
-  - **Risk:** medium. The order in which implications are found can change,
-    which changes the search. If the conflicts column moves, document it as a
-    search change rather than reverting blindly.
+    Conflict analysis still needs a reason clause for binary implications.
+  - **Done when:** rules 1-2 hold and Sudoku, N-Queens and graph colouring are
+    measurably faster (estimate, not measured: 1.2-1.5x on those). If the
+    search changed, `docs/algorithms/cdcl.md` and `docs/guide/performance.md`
+    say so.
 
-- [ ] **4. Renumber huge variable numbers** (CDCL and DPLL, same search)
-  - **What:** audit item A2. CDCL and DPLL size their arrays by the largest
-    variable number, so two clauses using variable 10,000,000 cost 20 s and
-    2.3 GB. Move WalkSAT's compact renumbering (`solvers/walksat.py`,
-    "Work on compact variable numbers") into `run_solver` in
-    `sat_core/solver_registry.py`, used when the largest variable is above
-    1,000,000 and far above the number of distinct variables.
-  - **Expected:** fixes the memory blow-up; no change for normal encodings
-    (they stay below the threshold and keep readable numbers in the logs).
-  - **Risk:** low. Renumbering keeps the order of the variables, so every
-    heuristic (heap ties, DLIS, MOMS) makes the same decisions.
+- **OPT-4. Renumber huge variable numbers:** this is audit item A2; do it
+  there.
 
-- [ ] **5. Learned-clause minimisation** (CDCL, changes the search)
-  - **What:** after first-UIP analysis, remove literals of the learned clause
-    that are implied by the others (MiniSat's recursive minimisation). Shorter
-    learned clauses propagate more and usually cut the number of conflicts.
-  - **Where:** end of `analyse_conflict()` in `solvers/cdcl.py`.
-  - **Expected:** fewer conflicts on hard instances; often a clear net win.
-  - **Risk:** it changes decisions and conflicts, so earlier benchmark results
-    are no longer directly comparable. Make it an option (default on or off is
-    your call), mention it in `docs/algorithms/cdcl.md`, and note it in the
-    thesis if results before and after are mixed.
+- [ ] **OPT-5. Learned-clause minimisation** (CDCL, changes the search)
+  - **Difficulty:** hard
+  - **Needs decision:** on or off by default. It changes decisions and
+    conflicts, so earlier benchmark results are no longer directly comparable.
+    Recommendation: a solver option, off by default until the thesis numbers
+    are final.
+  - **How:** after first-UIP analysis, remove literals of the learned clause
+    that are implied by the others (MiniSat's recursive minimisation), at the
+    end of `analyse_conflict()`.
+  - **Done when:** the agreement test passes with the option on and off; with
+    it on, the hard instances need fewer conflicts and less time; the option
+    is described in `docs/algorithms/cdcl.md`.
 
-- [ ] **6. DPLL and WalkSAT: profile before touching**
-  - DPLL already uses counters and gains 8.6x under PyPy, so its CPython time
-    is dominated by interpreter overhead; look for allocations in
-    `propagate()`/`undo()` only if a profile shows them.
-  - WalkSAT/ProbSAT are close to the speed of a hand-tuned prototype; the hot
-    loop is already lean. Leave them unless a profile says otherwise.
+- [ ] **OPT-6. DPLL and WalkSAT: profile before touching**
+  - **Difficulty:** easy (the result is a note, not code)
+  - **How:** DPLL already uses counters and gains 8.6x under PyPy, so its
+    CPython time is mostly interpreter overhead; WalkSAT/ProbSAT are close to
+    a hand-tuned prototype. Profile one long run of each.
+  - **Done when:** `docs/guide/performance.md` records where their time goes
+    and either names a concrete next task (added to this plan) or says there
+    is nothing worth doing.
 
 How to profile one instance:
 
@@ -156,14 +151,6 @@ The solver runs in the same process here, so the profile shows the solver's
 own functions (`propagate`, `analyse_conflict`, `enqueue`, ...). The profiler
 slows everything down, so use it to compare shares of time, not absolute
 times.
-
-## Done when
-
-- Each step above is either done (with its measured gain in
-  `docs/guide/performance.md`) or explicitly dropped with the reason.
-- `tests/test_solver_agreement.py` and the solver tests pass; the
-  `conflicts` column of `scripts/solver_timings.py` is unchanged for the
-  "same search" steps.
 
 ## Considered and rejected
 

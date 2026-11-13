@@ -85,6 +85,38 @@ def _timeout(value: Any) -> float | None:
     return timeout
 
 
+def _current_options(solver: Any, options: Any) -> Any:
+    try:
+        names = {field.name for field in get_solver(solver or "cdcl").fields}
+    except ValueError:
+        return options  # validate_job reports the unknown solver
+    if not isinstance(options, dict):
+        return options
+    return {name: value for name, value in options.items() if name in names}
+
+
+def without_removed_options(kind: str, request: dict[str, Any]) -> dict[str, Any]:
+    """
+    A saved request with the solver options that no longer exist dropped.
+
+    Jobs saved before a solver lost an option (ProbSAT's noise and
+    adaptive_noise) would otherwise fail validation on Rerun. New requests
+    are not cleaned: a mistyped option there is still an error.
+    """
+
+    if kind == "solve" and "options" in request:
+        return {**request, "options": _current_options(request.get("solver"), request["options"])}
+    if kind == "benchmark" and isinstance(request.get("solvers"), list):
+        solvers = [
+            {**entry, "options": _current_options(entry.get("solver"), entry["options"])}
+            if isinstance(entry, dict) and "options" in entry
+            else entry
+            for entry in request["solvers"]
+        ]
+        return {**request, "solvers": solvers}
+    return request
+
+
 def validate_job(kind: str, request: dict[str, Any], title: str | None) -> tuple[dict[str, Any], str]:
     """Check a job request and return (normalized request, title)."""
 
@@ -358,7 +390,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs/{job_id}/rerun", status_code=201)
     async def rerun_job(request: Request, job_id: int) -> dict[str, Any]:
         job = job_or_404(request, job_id)
-        normalized, title = await run_in_threadpool(validate_job, job.kind, job.request, job.title)
+        saved = without_removed_options(job.kind, job.request)
+        normalized, title = await run_in_threadpool(validate_job, job.kind, saved, job.title)
         manager = manager_of(request)
         return manager.summary(manager.submit(job.kind, normalized, title))
 
@@ -435,7 +468,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         row = next((row for row in rows if row["index"] == index), None)
         if row is None:
             raise HTTPException(404, "Row not found")
-        plan = parse_request(job.request)
+        # The cases do not depend on the solvers, so the saved solver list and
+        # rules are replaced: options a solver has since lost cannot fail this.
+        plan = parse_request({**job.request, "solvers": ["cdcl"], "rules": []})
         case = plan.cases[row["case_index"]]
         spec = get_problem(case.problem)
         instance = spec.build(case.params)

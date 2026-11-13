@@ -153,7 +153,8 @@ The **Result** tab shows:
   - **Log**: the solver log.
 
 Buttons on the result: **Edit** loads the job's parameters back into the
-form, **Rerun** runs exactly the same job again, the bin deletes it.
+form, **Rerun** runs exactly the same job again (a job saved by an older
+version drops solver options that no longer exist), the bin deletes it.
 **Download the model** saves the assignment as DIMACS `v` lines.
 
 What the statuses mean:

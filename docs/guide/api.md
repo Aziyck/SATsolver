@@ -235,7 +235,7 @@ Benchmark rows: `{"job_id", "label", "rows": [BenchmarkRow, ...]}`. A row has
 |---|---|
 | `POST /api/jobs/{id}/cancel` | stop a queued or running job (cooperative first, forced after 3 s) |
 | `POST /api/jobs/{id}/skip` | benchmarks: mark the current run SKIPPED and continue |
-| `POST /api/jobs/{id}/rerun` -> 201 | submit the same request as a new job |
+| `POST /api/jobs/{id}/rerun` -> 201 | submit the same request as a new job; solver options the solver no longer has (ProbSAT's old `noise`) are dropped first |
 | `DELETE /api/jobs/{id}` -> 204 | delete a finished job and its files (409 while it runs) |
 | `POST /api/jobs/clear` | body `{"kinds": ["solve", ...]}` or `{}`: delete all finished jobs of those kinds; returns `{"deleted": [ids]}` |
 | `POST /api/jobs/reset-numbering` -> 204 | make the next job J1 again; 409 while any job exists (ids are otherwise never reused) |
@@ -251,7 +251,7 @@ Cancel, skip and rerun return a job summary.
 | `GET /api/jobs/{id}/cnf?offset=0&limit=500` | a page of CNF lines: `{"offset", "lines", "total"}` (limit up to 5000) |
 | `GET /api/jobs/{id}/export.csv` | the benchmark as CSV |
 | `GET /api/export.csv?jobs=3,4,5` | several benchmarks in one CSV (the `run` column tells them apart) |
-| `GET /api/jobs/{id}/rows/{index}/case` | rebuilds one benchmark case: `{"row", "problem", "params", "instance"}` |
+| `GET /api/jobs/{id}/rows/{index}/case` | rebuilds one benchmark case: `{"row", "problem", "params", "instance"}`; the saved solvers and rules are not re-checked |
 | `GET /api/jobs/{id}/rows/{index}/cnf` | the DIMACS file of one benchmark case |
 
 Only `instance.cnf` and `model.txt` can be downloaded from a job folder. The

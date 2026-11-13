@@ -391,6 +391,57 @@ class PersistenceTests(unittest.TestCase):
                 restored = client.get(f"/api/jobs/{job['id']}/rows").json()["rows"]
                 self.assertEqual(len(restored), 2)
 
+    def test_jobs_saved_with_removed_solver_options_still_open_and_rerun(self):
+        # Before the ProbSAT rewrite its options included noise and adaptive_noise
+        # (audit item A3); saved jobs keep them.
+        old_options = {"noise": 0.5, "adaptive_noise": False, "max_flips": 2000, "random_seed": 1}
+        benchmark = {"problems": ["n_queens"], "segments": [{"size": "4,5"}], "solvers": [{"solver": "probsat"}, {"solver": "cdcl"}]}
+        solve = {"problem": "n_queens", "params": {"size": 5}, "solver": "probsat"}
+        with tempfile.TemporaryDirectory() as folder:
+            with local_client(make_settings(folder)) as client:
+                ids = {}
+                for kind, request in (("benchmark", benchmark), ("solve", solve)):
+                    ids[kind] = client.post("/api/jobs", json={"kind": kind, "request": request}).json()["id"]
+                    deadline = time.monotonic() + 60
+                    while client.get(f"/api/jobs/{ids[kind]}").json()["status"] != "done" and time.monotonic() < deadline:
+                        time.sleep(0.1)
+                stored = {kind: client.get(f"/api/jobs/{job_id}").json()["request"] for kind, job_id in ids.items()}
+
+            from sat_web.store import Store
+
+            stored["benchmark"]["solvers"][0]["options"] = dict(old_options)
+            stored["solve"]["options"] = dict(old_options)
+            store = Store(make_settings(folder).db_path)
+            for kind, job_id in ids.items():
+                store.update_job(job_id, request=stored[kind])
+            store.close()
+
+            with local_client(make_settings(folder)) as client:
+                benchmark_id = ids["benchmark"]
+                for index in (0, 1, 3):
+                    with self.subTest(row=index):
+                        self.assertEqual(client.get(f"/api/jobs/{benchmark_id}/rows/{index}/case").status_code, 200)
+                        self.assertEqual(client.get(f"/api/jobs/{benchmark_id}/rows/{index}/cnf").status_code, 200)
+
+                rerun = client.post(f"/api/jobs/{benchmark_id}/rerun")
+                self.assertEqual(rerun.status_code, 201, rerun.text)
+                options = client.get(f"/api/jobs/{rerun.json()['id']}").json()["request"]["solvers"][0]["options"]
+                self.assertNotIn("noise", options)
+                self.assertNotIn("adaptive_noise", options)
+                # Options the solver still has are kept.
+                self.assertEqual((options["max_flips"], options["random_seed"]), (2000, 1))
+
+                rerun = client.post(f"/api/jobs/{ids['solve']}/rerun")
+                self.assertEqual(rerun.status_code, 201, rerun.text)
+                options = client.get(f"/api/jobs/{rerun.json()['id']}").json()["request"]["options"]
+                self.assertNotIn("noise", options)
+                self.assertEqual((options["max_flips"], options["random_seed"]), (2000, 1))
+
+                # Only saved jobs are cleaned: a new request with that option is still refused.
+                fresh = client.post("/api/jobs", json={"kind": "solve", "request": {**solve, "options": old_options}})
+                self.assertEqual(fresh.status_code, 422)
+                self.assertIn("options.noise", fresh.json()["errors"])
+
 
 class FrontendServingTests(unittest.TestCase):
     def test_spa_fallback_serves_index_for_client_routes(self):

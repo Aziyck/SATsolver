@@ -67,6 +67,11 @@ false_count[c]  how many literals of clause c are false
 
 and, for every literal, the list of clauses that contain it (`occurs`).
 
+`values` and `occurs` are as long as the largest variable number, not the
+number of variables. For a formula with huge, mostly unused numbers,
+`run_solver()` renumbers the variables first, as described under
+[CDCL](cdcl.md).
+
 Assigning a literal `x` updates only the clauses that mention it:
 
 - every clause containing `x` gets `true_count += 1` (it is satisfied now);

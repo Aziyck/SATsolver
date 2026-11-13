@@ -123,7 +123,9 @@ or solver; it has the checklists and the tests to write. What it cannot show:
   r*10000 + c*100 + v`; `readable_pair_var(a, b, max_b)`, always with
   `max_b`, or large instances collide). A solver that keeps per-variable
   arrays renumbers 1..n internally and maps the model back (see
-  `solvers/walksat.py`). Numbering per problem: `docs/algorithms/encodings.md`.
+  `solvers/walksat.py`). For CDCL and DPLL, `run_solver` renumbers
+  formulas whose largest number is above 1,000,000 and mostly unused; no
+  encoder reaches that at the default clause limit. Numbering per problem: `docs/algorithms/encodings.md`.
 - The order of the clauses an encoder produces is part of its behaviour: it
   changes the solvers' decisions and every benchmark number.
 - Every solver is in `tests/test_solver_agreement.py`: complete solvers must

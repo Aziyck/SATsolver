@@ -1,11 +1,14 @@
 import contextlib
 import dataclasses
+import time
 import unittest
 from unittest import mock
 
+from problems import build_problem
 from sat_core.runtime import EVENT_LOG, EVENT_PROGRESS, RunEvent, RunToken
 from sat_core import solver_registry
 from sat_core.solver_registry import all_solvers, get_solver, options_summary, run_solver
+from sat_core.verify import check_assignment
 
 
 @contextlib.contextmanager
@@ -144,6 +147,69 @@ class RunSolverTests(unittest.TestCase):
         result = run_solver([[1, 2], [-1, 2]], "walksat", {"random_seed": 2})
 
         self.assertTrue(all(isinstance(value, (int, float, str, bool, type(None))) for value in result.stats.values()))
+
+
+class SparseNumberingTests(unittest.TestCase):
+    """The cost of a run follows the number of variables, not the largest variable number (audit A2)."""
+
+    def test_one_huge_variable_number_is_solved_at_once(self):
+        formula = [[10_000_000], [-5]]
+        for spec in all_solvers():
+            with self.subTest(solver=spec.key):
+                events = []
+                started = time.perf_counter()
+                result = run_solver(formula, spec.key, event_callback=events.append)
+                elapsed = time.perf_counter() - started
+                self.assertEqual(result.status, "SAT")
+                self.assertEqual(result.solution, {5: False, 10_000_000: True})
+                self.assertEqual(result.variables, 2)
+                self.assertLess(elapsed, 1.0)
+                # CDCL and DPLL debug lines then show new numbers, so the log says that they changed.
+                # The local-search solvers renumber by themselves and log the original numbers.
+                self.assertEqual(any("renumbered" in message for message in log_messages(events)), spec.complete)
+
+    def test_renumbered_formulas_keep_every_outcome(self):
+        big = 10_000_000
+        for key in ("cdcl", "dpll"):
+            with self.subTest(solver=key):
+                self.assertEqual(run_solver([[big], [-big]], key).status, "UNSAT")
+                self.assertEqual(run_solver([[big, 7], [-big, 7], [big, -7], [-big, -7]], key).status, "UNSAT")
+                self.assertEqual(run_solver([[big], [-5]], key, timeout=0).status, "TIMEOUT")
+                # A variable that only appears in a tautology still gets a value.
+                self.assertEqual(sorted(run_solver([[big, -big], [-5]], key).solution), [5, big])
+
+    def test_far_apart_numbers_give_the_same_search_as_compact_ones(self):
+        compact = build_problem("random_3sat", {"variables": 50, "ratio": 4.26, "mode": "random", "seed": 1}).clauses
+        # Same order of the variables, largest number 2,501,050.
+        spread = [[lit * 50_021 for lit in clause] for clause in compact]
+        seeded = {"branching": "random", "phase": "random", "random_seed": 3}
+        runs = [("cdcl", None), ("cdcl", seeded), ("cdcl", {"branching": "moms"}), ("cdcl", {"branching": "dlis"}), ("dpll", None)]
+        runs += [(key, {"random_seed": 5}) for key in ("walksat", "probsat")]
+        for solver, options in runs:
+            with self.subTest(solver=solver, options=options):
+                near = run_solver(compact, solver, options)
+                far = run_solver(spread, solver, options)
+                self.assertEqual(far.status, near.status)
+                self.assertEqual(far.variables, near.variables)
+                for key in ("decisions", "conflicts", "propagations", "flips"):
+                    self.assertEqual(far.stats.get(key), near.stats.get(key), key)
+                if near.solution is not None:
+                    self.assertEqual(far.solution, {var * 50_021: value for var, value in near.solution.items()})
+                    self.assertTrue(check_assignment(spread, far.solution))
+
+    def test_readable_encoder_numbers_are_kept(self):
+        # Renumbering is for numbers no encoder produces: large and mostly unused.
+        self.assertTrue(solver_registry.needs_renumbering(10_000_000, 2))
+        self.assertFalse(solver_registry.needs_renumbering(252_525, 15_625))    # 25x25 Sudoku
+        self.assertFalse(solver_registry.needs_renumbering(1_000_000, 2))
+        self.assertFalse(solver_registry.needs_renumbering(3_000_000, 2_900_000))  # a big, dense DIMACS file
+        # A literal 0 inside a clause is passed on as it was.
+        self.assertEqual(solver_registry.compact_numbering([[70, 0, -30]], {0, 30, 70}), ([[2, 0, -1]], [30, 70]))
+
+        events = []
+        result = run_solver([[90_909], [-5]], "cdcl", event_callback=events.append)
+        self.assertEqual(result.solution, {5: False, 90_909: True})
+        self.assertFalse(any("renumbered" in message for message in log_messages(events)))
 
 
 if __name__ == "__main__":

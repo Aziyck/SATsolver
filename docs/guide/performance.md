@@ -61,6 +61,15 @@ Smaller changes: literal values in one list indexed by literal (a lookup
 instead of a function call), watch lists in a list instead of a dictionary,
 and the watched literals kept at positions 0 and 1 of each clause.
 
+CDCL and DPLL size their arrays by the largest variable number. The two
+clauses `10000000 0` and `-5 0` took CDCL 20 s and 2.3 GB and DPLL 10 s and
+1.5 GB, and variable 1,000,000,000 ran the process out of memory.
+`run_solver()` now renumbers such formulas 1..n before CDCL or DPLL sees
+them (largest number above 1,000,000 and more than twice the number of
+variables); both cases take under a millisecond. The order of the variables
+is kept, so decisions and conflicts do not change, and formulas below the
+threshold are passed through untouched.
+
 One correctness detail was fixed along the way: the second watched literal
 of a learned clause is now the one with the highest decision level (as in
 MiniSat). Before, a propagation could be noticed late after certain

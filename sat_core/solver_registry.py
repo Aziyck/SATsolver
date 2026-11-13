@@ -46,6 +46,9 @@ class SolverSpec:
     fields: tuple[ParamField, ...]
     runner: Runner
     progress_interval: int = 1000
+    # True when the solver's arrays are as long as the largest variable number
+    # (run_solver then renumbers a formula with huge, mostly unused numbers).
+    arrays_by_variable_number: bool = False
 
     def parse_options(self, options: dict[str, Any] | None) -> dict[str, Any]:
         return parse_params(self.fields, options)
@@ -353,6 +356,7 @@ register_solver(
         fields=CDCL_FIELDS,
         runner=_run_cdcl,
         progress_interval=2000,
+        arrays_by_variable_number=True,
     )
 )
 register_solver(
@@ -370,6 +374,7 @@ register_solver(
         fields=(),
         runner=_run_dpll,
         progress_interval=2000,
+        arrays_by_variable_number=True,
     )
 )
 register_solver(
@@ -495,6 +500,38 @@ def _error_message(solver: SolverSpec, exc: BaseException) -> str:
     return f"{solver.title} failed: {type(exc).__name__}: {exc}"
 
 
+RENUMBER_ABOVE = 1_000_000
+
+
+def needs_renumbering(largest: int, variables: int) -> bool:
+    """
+    True when the variable numbers are large and mostly unused.
+
+    CDCL and DPLL keep arrays as long as the largest variable number, so a
+    DIMACS file with one variable numbered 10,000,000 would cost seconds and
+    gigabytes before the search starts. The encoders' readable numbers stay
+    below the threshold at the default clause limit (a 25x25 Sudoku reaches
+    252,525) and are kept, and so is a big formula that really uses most of
+    its numbers.
+    """
+
+    return largest > RENUMBER_ABOVE and largest > 2 * variables
+
+
+def compact_numbering(clauses: list[list[int]], numbers: set[int]) -> tuple[list[list[int]], list[int]]:
+    """
+    Return the clauses with the variables renumbered 1..n, and the original number of each new one.
+
+    The order of the variables is kept, so every heuristic makes the same
+    decisions as on the original numbers. original[new - 1] maps a model back.
+    """
+
+    original = sorted(numbers - {0})
+    compact_of = {var: index + 1 for index, var in enumerate(original)}
+    compact_of[0] = 0  # a stray 0 is left for the solver, as before
+    return [[compact_of[lit] if lit > 0 else -compact_of[-lit] for lit in clause] for clause in clauses], original
+
+
 def run_solver(
     clauses: list[list[int]],
     solver: str,
@@ -519,7 +556,8 @@ def run_solver(
     parsed = spec.parse_options(options)
     name = label or spec.title
     token = RunToken(timeout_seconds=timeout, parent=cancel_token) if timeout is not None else cancel_token
-    variables = len({abs(lit) for clause in clauses for lit in clause})
+    numbers = {abs(lit) for clause in clauses for lit in clause}
+    variables = len(numbers)
 
     def result(status, elapsed=0.0, solution=None, stats=None, error=None):
         return SolveResult(
@@ -540,9 +578,19 @@ def run_solver(
 
     emit(event_callback, EVENT_LOG, f"Solving with {name}...")
     log_options = log_options_for(log_level, progress_interval or spec.progress_interval)
+    solver_clauses, original = clauses, None
+    largest = max(numbers, default=0)
     started = time.perf_counter()
     try:
-        solution, raw_stats = spec.runner(clauses, parsed, log_options, event_callback, token)
+        if spec.arrays_by_variable_number and needs_renumbering(largest, variables):
+            solver_clauses, original = compact_numbering(clauses, numbers)
+            emit(
+                event_callback,
+                EVENT_LOG,
+                f"Variables renumbered 1..{len(original)} for solving (the largest number is {largest}); "
+                "solver logs show the new numbers.",
+            )
+        solution, raw_stats = spec.runner(solver_clauses, parsed, log_options, event_callback, token)
     except Exception as exc:  # noqa: BLE001 - reported as an ERROR status
         elapsed = time.perf_counter() - started
         message = _error_message(spec, exc)
@@ -564,6 +612,8 @@ def run_solver(
 
     if status != STATUS_SAT:
         solution = None
+    elif original is not None:
+        solution = {original[var - 1]: value for var, value in solution.items()}
     return result(status, elapsed, solution, stats)
 
 

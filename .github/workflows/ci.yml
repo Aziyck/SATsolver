@@ -66,10 +66,7 @@ jobs:
 
   e2e:
     name: End to end
-    # Pinned: the Playwright version in frontend/package.json cannot install
-    # Chromium on Ubuntu 26.04, which ubuntu-latest now is. Go back to
-    # ubuntu-latest when Playwright is upgraded (audit item A12).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: [python, frontend]
     steps:
       - uses: actions/checkout@v4

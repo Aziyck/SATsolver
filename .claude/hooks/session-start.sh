@@ -22,6 +22,9 @@ hashes=frontend/node_modules/.session-start.sha256
 if ! sha256sum --check --status "$hashes" 2>/dev/null; then
   rm -f "$hashes"
   (cd frontend && npm install --no-audit --no-fund)
+  # The e2e tests need the Chromium build of the pinned Playwright, which the
+  # preinstalled browsers may not include. Skips the download when present.
+  (cd frontend && npx playwright install chromium)
   sha256sum .claude/hooks/session-start.sh frontend/package.json frontend/package-lock.json > "$hashes" || rm -f "$hashes"
 fi
 

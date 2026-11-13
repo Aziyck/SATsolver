@@ -29,7 +29,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
+    "@playwright/test": "1.65.0",
     "@types/cytoscape": "^3.21.9",
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",

@@ -50,3 +50,4 @@ What becomes easier, what becomes harder, what to watch.
 | ADR | Decision |
 |---|---|
 | [0001](0001-agent-workflow.md) | Work is tracked as items in reviews and plans; code changes go through a branch and a pull request |
+| [0002](0002-origin-and-host-checks.md) | The server accepts only local `Host` and `Origin` values, and needs no token |

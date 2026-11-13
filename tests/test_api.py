@@ -15,9 +15,12 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 try:
     from fastapi.testclient import TestClient
+    import starlette.testclient
+    from starlette.websockets import WebSocketDisconnect
 except ImportError as exc:  # pragma: no cover
     install_hint = "fastapi/httpx not installed; run: python -m pip install -r requirements-dev.txt"
     if os.environ.get("WIZSAT_REQUIRE_API_TESTS", "").lower() not in ("", "0", "false"):
@@ -32,10 +35,18 @@ def make_settings(folder: str, dist: Path | None = None) -> Settings:
     return Settings(data_dir=Path(folder), max_parallel_jobs=2, frontend_dist=dist or Path(folder) / "no-dist")
 
 
+# The server only answers for its own names; TestClient's default host is "testserver".
+LOCAL = "localhost:8000"
+
+
+def local_client(settings: Settings) -> TestClient:
+    return TestClient(create_app(settings), base_url=f"http://{LOCAL}")
+
+
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
-        self.client = TestClient(create_app(make_settings(self.folder.name)))
+        self.client = local_client(make_settings(self.folder.name))
         self.client.__enter__()
 
     def tearDown(self):
@@ -253,7 +264,7 @@ class JobTests(ApiTestCase):
         self.assertNotEqual((leftover / "instance.cnf").read_text(), "stale")
 
     def test_websocket_streams_job_events(self):
-        with self.client.websocket_connect("/api/ws") as socket:
+        with self.client.websocket_connect(f"ws://{LOCAL}/api/ws") as socket:
             hello = socket.receive_json()
             self.assertEqual(hello["type"], "hello")
             job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
@@ -275,11 +286,94 @@ class JobTests(ApiTestCase):
             self.assertEqual(self.client.get(f"/api/jobs/{job['id']}").json()["rev"], revs[-1])
 
 
+class OriginAndHostTests(ApiTestCase):
+    """Only this machine's own pages may use the API (audit item A1)."""
+
+    request = {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"}
+
+    def reset_numbering(self, **headers):
+        return self.client.post("/api/jobs/reset-numbering", headers=headers)
+
+    def use_up_job_number_one(self):
+        job = self.submit("solve", self.request)
+        self.wait(job["id"])
+        self.assertEqual(self.client.delete(f"/api/jobs/{job['id']}").status_code, 204)
+
+    def test_foreign_origin_is_refused_and_changes_nothing(self):
+        self.use_up_job_number_one()
+        for origin in ("http://evil.example", "http://localhost.evil.example:8000", "null", "file://"):
+            response = self.reset_numbering(Origin=origin)
+            self.assertEqual(response.status_code, 403, origin)
+            self.assertIn("Origin", response.json()["detail"])
+        # The numbering was not restarted.
+        self.assertEqual(self.submit("solve", self.request)["id"], 2)
+
+    def test_foreign_origin_cannot_read_either(self):
+        self.assertEqual(self.client.get("/api/jobs", headers={"Origin": "http://evil.example"}).status_code, 403)
+
+    def test_local_origins_and_no_origin_still_work(self):
+        # Any port: the Vite dev server sends Origin http://localhost:5173.
+        for origin in ("http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000", "http://[::1]:8000"):
+            self.use_up_job_number_one()
+            self.assertEqual(self.reset_numbering(Origin=origin).status_code, 204, origin)
+        self.use_up_job_number_one()
+        self.assertEqual(self.reset_numbering().status_code, 204)
+        self.assertEqual(self.submit("solve", self.request)["id"], 1)
+
+    def test_foreign_host_is_refused(self):
+        # DNS rebinding: a hostile name that resolves to 127.0.0.1.
+        self.assertEqual(self.client.get("/api/health", headers={"Host": "evil.example"}).status_code, 400)
+        self.assertEqual(self.client.get("/", headers={"Host": "evil.example:8000"}).status_code, 400)
+        # The refusal names the setting, for someone who reaches the server under a new name.
+        self.assertIn("WIZSAT_ALLOWED_HOSTS", self.client.get("/", headers={"Host": "my-pc:8000"}).text)
+        for host in ("localhost", "127.0.0.1:8000", "[::1]:8000", "LOCALHOST:8000"):
+            self.assertEqual(self.client.get("/api/health", headers={"Host": host}).status_code, 200, host)
+
+    def assert_websocket_refused(self, **headers):
+        # Starlette reports a handshake refused with an HTTP response (the Host check) as its own type.
+        refused = (WebSocketDisconnect, getattr(starlette.testclient, "WebSocketDenialResponse", WebSocketDisconnect))
+        with self.assertRaises(refused):
+            with self.client.websocket_connect(f"ws://{LOCAL}/api/ws", headers=headers) as socket:
+                self.fail(f"connected and received {socket.receive_json()['type']}")
+
+    def test_websocket_refuses_foreign_origin_and_host_before_hello(self):
+        self.assert_websocket_refused(Origin="http://evil.example")
+        self.assert_websocket_refused(Host="evil.example")
+        with self.client.websocket_connect(f"ws://{LOCAL}/api/ws", headers={"Origin": "http://localhost:5173"}) as socket:
+            self.assertEqual(socket.receive_json()["type"], "hello")
+
+    def test_extra_hosts_come_from_the_environment(self):
+        with mock.patch.dict(os.environ, {"WIZSAT_ALLOWED_HOSTS": "Wizsat.lan, FE80:0:0:0:0:0:0:1,"}):
+            settings = make_settings(self.folder.name)
+        self.assertEqual(settings.allowed_hosts, ["localhost", "127.0.0.1", "[::1]", "wizsat.lan", "[fe80::1]"])
+        with local_client(settings) as client:
+            response = client.post("/api/jobs/reset-numbering", headers={"Host": "wizsat.lan:8000", "Origin": "http://wizsat.lan:8000"})
+            self.assertEqual(response.status_code, 204)
+            self.assertEqual(client.get("/api/health", headers={"Host": "evil.example"}).status_code, 400)
+
+    def test_host_names_that_could_never_match_are_refused_at_start(self):
+        # A port, a URL or a wildcard would be an entry that silently matches nothing (or everything).
+        for value in ("192.168.1.20:8000", "http://my-pc", "*.lan", "*", "my pc"):
+            with mock.patch.dict(os.environ, {"WIZSAT_ALLOWED_HOSTS": value}):
+                with self.assertRaisesRegex(ValueError, "WIZSAT_ALLOWED_HOSTS"):
+                    Settings()
+
+    def test_launcher_passes_its_host_to_the_app(self):
+        from sat_web.__main__ import allow_host
+
+        with mock.patch.dict(os.environ, {"WIZSAT_ALLOWED_HOSTS": "wizsat.lan"}):
+            allow_host("192.168.1.20")
+            # "Every interface" is not a name anyone addresses the server by.
+            allow_host("0.0.0.0")
+            allow_host("::")
+            self.assertEqual(Settings().allowed_hosts[3:], ["wizsat.lan", "192.168.1.20"])
+
+
 class PersistenceTests(unittest.TestCase):
     def test_jobs_survive_a_restart_and_running_jobs_become_interrupted(self):
         with tempfile.TemporaryDirectory() as folder:
             settings = make_settings(folder)
-            with TestClient(create_app(settings)) as client:
+            with local_client(settings) as client:
                 job = client.post("/api/jobs", json={"kind": "benchmark", "request": {"problems": ["n_queens"], "segments": [{"size": "4,5"}], "solvers": ["cdcl"]}}).json()
                 deadline = time.monotonic() + 60
                 while client.get(f"/api/jobs/{job['id']}").json()["status"] != "done" and time.monotonic() < deadline:
@@ -291,7 +385,7 @@ class PersistenceTests(unittest.TestCase):
             store.insert_job({"kind": "solve", "title": "ghost", "status": "running", "request": {}})
             store.close()
 
-            with TestClient(create_app(make_settings(folder))) as client:
+            with local_client(make_settings(folder)) as client:
                 jobs = {item["title"]: item for item in client.get("/api/jobs").json()["jobs"]}
                 self.assertEqual(jobs["ghost"]["status"], "interrupted")
                 restored = client.get(f"/api/jobs/{job['id']}/rows").json()["rows"]
@@ -306,7 +400,7 @@ class FrontendServingTests(unittest.TestCase):
             (dist / "index.html").write_text("<html>app</html>")
             (dist / "assets" / "app.js").write_text("console.log(1)")
             (dist / "favicon.png").write_bytes(b"png")
-            with TestClient(create_app(make_settings(folder, dist))) as client:
+            with local_client(make_settings(folder, dist)) as client:
                 self.assertIn("app", client.get("/benchmarks/results").text)
                 self.assertEqual(client.get("/assets/app.js").text, "console.log(1)")
                 self.assertEqual(client.get("/favicon.png").content, b"png")

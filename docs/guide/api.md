@@ -28,6 +28,14 @@ below and are the most precise reference.
   belong to no single field (for example "instance too large").
 - Unknown jobs or rows return **404**; deleting a running job returns
   **409**.
+- Only this machine's own pages may use the API. A request whose `Host`
+  header is not `localhost`, `127.0.0.1`, `[::1]` or a name in
+  `WIZSAT_ALLOWED_HOSTS` (any port) returns **400** with a plain-text
+  message. A request whose `Origin` header names any other host returns
+  **403** (`{"detail": "Requests from this Origin are not allowed"}`). The
+  WebSocket handshake is refused with 403 in both cases. Requests without an
+  `Origin` header (curl, scripts) are accepted, so the examples below work
+  unchanged.
 
 ## Catalog
 

@@ -12,13 +12,16 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Collection, Literal
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES, ProblemSpec
@@ -151,6 +154,75 @@ class CnfLineIndex:
         return chunk.decode("utf-8", errors="replace").splitlines(), total
 
 
+def header_host(header: str | None) -> str:
+    """The name in a Host header, without the port: 'LOCALHOST:8000' -> 'localhost', '[::1]:8000' -> '[::1]'."""
+
+    name = (header or "").strip().lower()
+    if name.startswith("["):
+        return name[: name.find("]") + 1]
+    return name.partition(":")[0]
+
+
+def origin_host(origin: str) -> str | None:
+    """The host of an Origin header, written as a Host header would; None when it is not an http(s) origin."""
+
+    try:
+        parts = urlsplit(origin)
+        host = parts.hostname
+    except ValueError:
+        return None
+    # "null" (sandboxed frames, file:// pages) has no scheme.
+    if parts.scheme not in ("http", "https") or not host:
+        return None
+    return f"[{host}]" if ":" in host else host
+
+
+class LocalOnlyGuard:
+    """
+    ASGI middleware: only this machine's own pages may use the server.
+
+    The server has no login, and a page on any website can make the user's
+    browser send requests to 127.0.0.1. Two header checks stop that:
+
+    - Host must be an allowed name (400 otherwise). This stops DNS rebinding,
+      where a hostile name resolves to 127.0.0.1 and so counts as same-origin.
+    - Origin, when present, must name an allowed host on any port (403
+      otherwise). Browsers add it to every cross-site POST, fetch and
+      WebSocket, and a page cannot forge it. Requests without it (curl,
+      scripts, same-origin page loads) pass.
+    """
+
+    def __init__(self, app: ASGIApp, allowed_hosts: Collection[str]) -> None:
+        self.app = app
+        self.allowed_hosts = frozenset(allowed_hosts)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        origin = headers.get("origin")
+        refusal: Response
+        if header_host(headers.get("host")) not in self.allowed_hosts:
+            refusal = PlainTextResponse(HOST_REFUSED, status_code=400)
+        elif origin is not None and origin_host(origin) not in self.allowed_hosts:
+            refusal = JSONResponse({"detail": "Requests from this Origin are not allowed"}, status_code=403)
+        else:
+            await self.app(scope, receive, send)
+            return
+        if scope["type"] == "websocket":
+            # A close before accept() refuses the handshake (HTTP 403).
+            await send({"type": "websocket.close", "code": 1008})
+        else:
+            await refusal(scope, receive, send)
+
+
+HOST_REFUSED = (
+    "WizSAT does not answer for this host name. To use it under this name, start the server with the name "
+    "in the WIZSAT_ALLOWED_HOSTS environment variable (comma-separated, without the port)."
+)
+
+
 def catalog() -> dict[str, Any]:
     return {
         "version": VERSION,
@@ -191,6 +263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="WizSAT", version=VERSION, lifespan=lifespan)
     app.state.settings = settings
+    app.add_middleware(LocalOnlyGuard, allowed_hosts=settings.allowed_hosts)
     cnf_index = CnfLineIndex()
     catalog_cache: dict[str, Any] = {}
 

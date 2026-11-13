@@ -105,6 +105,7 @@ python -m sat_web --strict-port   exit instead of moving when the port is busy
 python -m sat_web --build         force a rebuild of the web UI
 python -m sat_web --skip-build    never build (serve whatever is in frontend/dist)
 python -m sat_web --dev           auto-reload the Python server while you edit it
+python -m sat_web --host NAME     listen on another interface (default: 127.0.0.1, this machine only)
 ```
 
 Environment variables:
@@ -115,6 +116,14 @@ Environment variables:
 | `WIZSAT_MAX_JOBS` | CPU cores - 1 | jobs that may run at the same time; the rest wait in a queue |
 | `WIZSAT_MAX_CLAUSES` | `2000000` | instances larger than this are refused before encoding |
 | `WIZSAT_FRONTEND_DIST` | `frontend/dist/` | the built web UI to serve |
+| `WIZSAT_ALLOWED_HOSTS` | empty | extra host names, comma-separated, that the server answers for |
+
+The server has no login. It answers only requests addressed to `localhost`,
+`127.0.0.1` or `[::1]` (any port), the `--host` value and the names in
+`WIZSAT_ALLOWED_HOSTS`, and it refuses requests that a page on another
+website makes through your browser. With `--host 0.0.0.0`, list the names or
+addresses other machines will type, without the port, for example
+`WIZSAT_ALLOWED_HOSTS=192.168.1.20,my-pc`.
 
 If Node.js is missing, the server still starts and the page explains how to
 build the interface.

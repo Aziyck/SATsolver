@@ -173,6 +173,12 @@ The invariants code must keep:
 - Logs are throttled per job; row and summary events are batched.
 - Only `instance.cnf` and `model.txt` can be downloaded from a job folder.
 - The server binds to `127.0.0.1` by default. Keep it that way.
+- The server has no login. The middleware `LocalOnlyGuard`
+  (`sat_web/api.py`) refuses a foreign `Host` (400) and a foreign `Origin`
+  (403) for every route and the WebSocket; the allowed names are
+  `Settings.allowed_hosts`. Do not add a route, a mount or CORS headers that
+  bypass it. Tests reach the app as `localhost:8000` (`local_client` in
+  `tests/test_api.py`).
 
 ## Frontend rules
 

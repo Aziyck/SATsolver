@@ -250,7 +250,7 @@ def dpll(
             return choose_var_fn(remaining_clauses(), current_assignment())
         best = None
         best_length = None
-        for index, clause in enumerate(formula):
+        for index in range(len(formula)):
             if true_count[index]:
                 continue
             length = lengths[index] - false_count[index]

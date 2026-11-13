@@ -25,3 +25,10 @@ frontend/*.tsbuildinfo
 Thumbs.db
 .idea/
 .vscode/
+
+# Tools
+.ruff_cache/
+
+# Claude Code: personal settings and skill-creator eval workspaces
+.claude/settings.local.json
+.claude/skills/*-workspace/

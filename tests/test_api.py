@@ -1,12 +1,16 @@
 """
 Web API tests. They start real worker processes, so each job takes a moment.
 
-Skipped automatically when the web dependencies (fastapi, httpx) are not
-installed: python -m pip install -r requirements-dev.txt
+Skipped when the web dependencies (fastapi, httpx) are not installed:
+python -m pip install -r requirements-dev.txt
+
+A skipped module looks like a pass ("OK (skipped=1)"), so CI and agent
+sessions set WIZSAT_REQUIRE_API_TESTS=1, which turns the skip into a failure.
 """
 
 import csv
 import io
+import os
 import tempfile
 import time
 import unittest
@@ -14,8 +18,11 @@ from pathlib import Path
 
 try:
     from fastapi.testclient import TestClient
-except ImportError:  # pragma: no cover
-    raise unittest.SkipTest("fastapi/httpx not installed; run pip install -r requirements-dev.txt")
+except ImportError as exc:  # pragma: no cover
+    install_hint = "fastapi/httpx not installed; run: python -m pip install -r requirements-dev.txt"
+    if os.environ.get("WIZSAT_REQUIRE_API_TESTS", "").lower() not in ("", "0", "false"):
+        raise ImportError(f"WIZSAT_REQUIRE_API_TESTS is set, but {install_hint}") from exc
+    raise unittest.SkipTest(install_hint) from None
 
 from sat_web.api import create_app
 from sat_web.config import Settings

@@ -1,0 +1,18 @@
+# Tool settings only. WizSAT is run from the repository (python -m sat_web),
+# not installed as a package; dependencies live in requirements*.txt.
+
+[tool.ruff]
+target-version = "py310"
+line-length = 160
+extend-exclude = ["legacy", "frontend", "output", "input"]
+
+[tool.ruff.lint]
+# pyflakes (unused names, undefined names), pycodestyle errors, and bugbear's
+# likely-bug checks. Formatting is not enforced.
+select = ["F", "E", "W", "B"]
+ignore = [
+    "E501",  # long lines: tables and messages in the solvers and docs strings read better unwrapped
+    "E731",  # small lambdas assigned to names are used on purpose
+    "E402",  # scripts/ put the repo root on sys.path before importing
+    "B905",  # zip() pairs lists built side by side; strict= would add a check in solver hot loops
+]

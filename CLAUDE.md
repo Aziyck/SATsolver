@@ -19,9 +19,11 @@
 - The frontend build is what `python -m sat_web` serves. After changing
   `frontend/src`, rebuild (`npm run build`) before testing through the
   Python server, or use `npm run dev`.
-- Playwright is pinned in `frontend/package.json`; if the environment has
-  preinstalled browsers, keep the pin matching them instead of downloading new
-  ones.
+- Playwright is pinned in `frontend/package.json`, and each Playwright version
+  runs only its own Chromium build. After changing the pin, run
+  `npx playwright install chromium` (the session hook does it in cloud
+  sessions); the pin stays at a version whose Chromium installs on the CI's
+  `ubuntu-latest`.
 - To check a UI change by eye: start the server on a temp data dir, create
   jobs with `curl -X POST localhost:<port>/api/jobs` (same body as the UI),
   and screenshot with a small Playwright script that imports

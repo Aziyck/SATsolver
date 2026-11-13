@@ -62,6 +62,17 @@ Everything below explains one line of this loop.
 Literals are stored at index `max_var + literal`, so one list covers
 `-max_var .. max_var`.
 
+These lists are as long as the largest variable number, not the number of
+variables: a DIMACS file with one variable numbered 10,000,000 would cost
+seconds and gigabytes before the search starts.
+`run_solver()` therefore renumbers the variables 1..n for CDCL and DPLL, in
+the same order, when the largest number is above 1,000,000 and more than
+twice the number of variables, and maps the model back (`needs_renumbering`
+in `sat_core/solver_registry.py`). The search is the same; the log says when
+it happened, because debug lines then show the new numbers. The encoders'
+readable numbers stay below the threshold at the default clause limit, so
+they are kept.
+
 **Decision levels.** Level 0 holds facts that follow from the formula alone
 (unit clauses and what they force). Each decision opens a new level, and every
 assignment it forces belongs to that level. The trail plus `trail_lim` let

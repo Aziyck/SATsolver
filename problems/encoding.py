@@ -7,9 +7,9 @@ variable 10203 is "row 1, column 2 holds value 3", and graph-coloring
 variable 203 is "node 2 has color 3".
 
 The numbers are sparse (Sudoku 9x9 uses values up to 90909 for 729
-variables). Solvers index arrays by variable number, so a compact
-renumbering inside the solver layer is a possible later optimisation; the
-encodings themselves stay readable.
+variables). CDCL and DPLL index arrays by variable number; run_solver
+renumbers compactly only formulas whose numbers are above 1,000,000 and
+mostly unused, so the encodings stay readable in the logs.
 """
 
 from __future__ import annotations

@@ -277,6 +277,8 @@ def my_solver(clauses, *, return_stats=False, event_callback=None, cancel_token=
   `frontend/src/lib/format.ts`.
 - If you keep arrays indexed by variable, renumber the variables 1..n first:
   the encoders' readable numbers are sparse (see `solvers/walksat.py`).
+  `run_solver()` does it for a solver registered with
+  `arrays_by_variable_number=True`, and only above 1,000,000 (see below).
 - Check `stop_requested(cancel_token)` often enough (every few thousand
   steps) that cancel and timeouts react within a fraction of a second.
 
@@ -314,7 +316,12 @@ register_solver(
 
 `run_solver()` wraps the runner: it applies the time limit, turns exceptions
 into `ERROR` results, fills in SAT/UNSAT/UNKNOWN from `complete` when the
-stats carry no status, and keeps only scalar stats. The solver now appears in
+stats carry no status, and keeps only scalar stats. For a solver registered
+with `arrays_by_variable_number=True`, when the largest variable number is
+above 1,000,000 and more than twice the number of variables, it also hands
+the runner the formula renumbered 1..n (same order) and maps the model back,
+so one huge number in a DIMACS file cannot exhaust memory. The solver now
+appears in
 the Solve page, the benchmark builder, limit rules and the API, and its
 options in the job Settings and benchmark Setup tables (with their `help`
 text), with reset-to-default buttons in the forms.

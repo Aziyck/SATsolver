@@ -49,6 +49,10 @@ text under each field. A few special inputs:
 - **DIMACS / CNF**: paste the text or press **Open .cnf file**. Parse errors
   name the line. Files exported by WizSAT remember which problem they came
   from; after solving one, **Open as that problem** reloads its parameters.
+  A file whose variable numbers are very large and mostly unused (above
+  1,000,000) is solved by CDCL and DPLL on compact numbers; the answer uses
+  the file's numbers, and the log notes that debug lines show the compact
+  ones.
 
 The badge in the card header estimates the size of the CNF formula (variables
 and clauses). Very large instances are refused before any work starts; the

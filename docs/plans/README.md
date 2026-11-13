@@ -31,14 +31,14 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Free to do at any point after step 1, when there is time or when the code is
 being touched anyway:
 
-- the remaining audit findings A4-A11;
+- the remaining audit findings A4-A12;
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
   items B6-B9 that touch the same code.
 
 | File | What | Waits on |
 |---|---|---|
-| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | A1-A11 whole-repo findings, B1-B17 solver simplification | nothing |
+| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | A1-A12 whole-repo findings, B1-B17 solver simplification | nothing |
 | [frontend-tests.md](frontend-tests.md) | component tests for the result and settings screens | nothing |
 | [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |

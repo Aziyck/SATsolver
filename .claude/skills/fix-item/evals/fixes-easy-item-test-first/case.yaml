@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: fixes-easy-item-test-first
+expected_outcome: |
+  The session writes a failing test for old ProbSAT options first, fixes _rebuild_case and rerun, runs the checks from Before you finish, closes A3 in the audit and commits with a subject that starts with A3:.

@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: refuses-blocked-task
+expected_outcome: |
+  The session sees that RUNNER-2 is blocked by the open task RUNNER-1, changes no code, and tells the owner what it waits for (offering RUNNER-1 instead).

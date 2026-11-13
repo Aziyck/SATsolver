@@ -28,6 +28,7 @@ Thumbs.db
 
 # Tools
 .ruff_cache/
+.env
 
 # Claude Code: personal settings and skill-creator eval workspaces
 .claude/settings.local.json

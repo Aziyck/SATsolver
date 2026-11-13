@@ -116,6 +116,29 @@ What each piece does:
 | `check()` | an independent check of the decoded answer; an empty list means valid |
 | `describe()` | facts listed under the answer |
 
+#### Parameter fields
+
+A `ParamField` (`sat_core/params.py`) is the single description of a
+parameter. It drives validation, benchmark sweeps, CSV columns, case labels,
+the forms with their reset buttons, and the Settings/Setup tables on job
+pages. The frontend never hard-codes a field: declaring or changing one in
+Python is enough.
+
+| Option | Effect |
+|---|---|
+| kind | `int`, `float`, `bool`, `choice`, `text`, `seed`, `edges`, `sudoku_grid`, `cnf` |
+| `default`, `minimum`, `maximum`, `step`, `unit`, `placeholder`, `optional` | validation and how the input looks |
+| `help` | shown next to the input and in the Settings/Setup tables, so say what the option does, not just its name |
+| `sweepable=True` | benchmarks may pass a list or a range (`"1..30"`, `"0.1..0.5:0.1"`) |
+| `show_if=(("graph_mode", ("manual",)),)` | the field exists only while another field has one of those values; a hidden field keeps its default |
+| `short="n"` | the field is part of the case label (`n=50 r=4.26 ...`) |
+| `advanced=True` | the field sits under "Advanced options" |
+
+A field may only depend (`show_if`) on fields declared before it;
+`check_field_order` enforces this when the problem is registered. Report bad
+values as `ParamError({field_name: message})`: the API returns them as
+`422 {"message", "errors"}` and the forms show each message at its field.
+
 `GraphProblemSpec` supplies `encode()` (build the graph, then call
 `encode_graph`), `visual()` and `preview()` (the graph drawing), and the graph
 facts. For a problem that is not a graph, subclass `ProblemSpec` directly and

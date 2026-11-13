@@ -4,11 +4,14 @@
 |---|---|---|
 | [guide/](guide/) | people using or extending the app | [user guide](guide/user-guide.md) |
 | [algorithms/](algorithms/) | how the solvers and encodings work (also shown on the Learn page) | [encodings](algorithms/encodings.md) |
-| [report/](report/) | thesis and report material, in English | [report index](report/README.md) |
+| [report/](report/) | thesis and report material, in English (for people; agents edit it only when asked) | [report index](report/README.md) |
 | [visualisations/](visualisations/) | standalone interactive DPLL, CDCL and WalkSAT pages | open `index.html` in any subfolder |
 | [images/](images/) | screenshots for the README | [what to add](images/README.md) |
-| [reviews/](reviews/) | code review findings kept as a to-do list | [2026-10-16 audit](reviews/2026-10-16-audit.md) |
-| [plans/](plans/) | planned features not started yet, with status, design and steps | [solver optimisations](plans/solver-optimisations.md), [PyPy runner and run metadata](plans/pypy-solver-runner-and-run-metadata.md), [memory measurement](plans/memory-measurement.md), [agent workflow](plans/agent-workflow.md) |
+| [plans/](plans/) | features to build, and the order of all open work | [the work queue](plans/README.md) |
+| [reviews/](reviews/) | dated code review findings still to fix | [2026-10-16 audit](reviews/2026-10-16-audit.md) |
+| [adr/](adr/) | architecture decision records: one short note per decision | [what an ADR is](adr/README.md) |
+
+The words the project uses are defined in [`GLOSSARY.md`](../GLOSSARY.md).
 
 Guides:
 

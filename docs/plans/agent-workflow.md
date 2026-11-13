@@ -1,11 +1,17 @@
 # Plan: a workflow for agent-driven fixes and features
 
-- **Status:** draft, under discussion (nothing decided yet)
+- **Status:** done (2026-11-13). The decisions are recorded in
+  [ADR 0001](../adr/0001-agent-workflow.md); the rules live in
+  [README.md](README.md), `AGENTS.md` and `CLAUDE.md`.
 - **Written:** 2026-10-23, against commit `189c2bf`
 - **Related:** [2026-10-16 audit](../reviews/2026-10-16-audit.md),
   [solver optimisations](solver-optimisations.md),
-  [PyPy runner and run metadata](pypy-solver-runner-and-run-metadata.md),
+  [PyPy solver runner](pypy-solver-runner.md), [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md)
+
+This file is kept as the record of the research and of what was decided. The
+sections up to "What was done" describe the state on 2026-10-23, before the
+changes.
 
 ## Goal
 
@@ -116,45 +122,62 @@ rather than repeating it.
 Possible later: `/triage-bug` (raw report to a review item with a reproduction
 and a done-when test), only if that is done by hand often.
 
-## Proposed order of repo changes
+## What was done (2026-11-13)
 
-- [ ] Add "done when" tests, "needs decision" flags and difficulty/model hints
-  to the review items.
-- [ ] Remove the duplicates between the audit and the plans (one owner per
-  item, a link from the other place).
-- [ ] Add a short "what's next" index (order, dependencies).
-- [ ] Split the steps that are too big for one session.
-- [ ] Write the closing rule next to "Before you finish" in `AGENTS.md`.
-- [ ] SessionStart hook: install `requirements-dev.txt` and the frontend
-  packages, and make the API tests impossible to skip silently.
-- [ ] Write the two skills.
+- [x] **WF-1. Item format with "done when", "needs decision", "blocked by" and difficulty** - Done 2026-11-13. Defined in [README.md](README.md); applied to the audit and every plan.
+- [x] **WF-2. One owner per item** - Done 2026-11-13. Audit A2 owns the renumbering (OPT-4 points to it); A11 owns `cdcl_debug` (B14 points to it).
+- [x] **WF-3. A "what's next" index** - Done 2026-11-13. "Order of work" in [README.md](README.md).
+- [x] **WF-4. Steps sized to one commit** - Done 2026-11-13. The runner is RUNNER-1 to RUNNER-10; the run metadata became its own plan (META-1 to META-5).
+- [x] **WF-5. Closing rule and statuses** - Done 2026-11-13. In [README.md](README.md); "Before you finish" in `AGENTS.md` points to it.
+- [x] **WF-6. Names instead of line numbers** - Done 2026-11-13. The audit was rewritten; the rule is in [README.md](README.md).
+- [x] **WF-7. Tooling** - Done 2026-11-13. SessionStart hook for cloud sessions, `WIZSAT_REQUIRE_API_TESTS`, `ruff` with `pyproject.toml`, both in CI.
+- [x] **WF-8. Glossary and ADRs** - Done 2026-11-13. `GLOSSARY.md`; `docs/adr/` with a template and ADR 0001.
+- [x] **WF-9. Leaner `AGENTS.md` and a code-to-docs table** - Done 2026-11-13.
+- [x] **WF-10. Skills** - Done 2026-11-13. `/fix-item`, `/do-plan-step` and a copy of `writing-for-agents` in `.claude/skills/`.
+- [x] **WF-11. A type checker for Python** - Dropped 2026-11-13: the code is not annotated enough for mypy to give a useful signal yet. Revisit after the solver clean-up.
 
-## Open questions (2026-10-23)
+## Decisions on the open questions (2026-11-13)
 
-To settle before changing anything; record each decision here.
-
-1. Adopt a `GLOSSARY.md` and ADRs (as in Matt Pocock's workflow), or keep an own
-   lighter workflow?
-2. Work on branches or worktrees (superpowers), or keep committing to `main`?
-3. Copy Matt Pocock's `writing-for-agents` (with `SKILL-MECHANICS.md`) into the
-   repo before writing our own skills?
-4. Rules for subagents (another repo burned tokens on 3 parallel subagents)?
-5. "Done when" tests: written by the agent first, or present before the task
-   starts?
-6. "Needs decision" tag: agreed in principle; define its format.
-7. A skill that turns an audit into plans? Where are the duplicates exactly?
-8. A plan index with status and a "blocked" tag?
-9. How to split big plans: more plans, or more detailed tasks inside a plan?
-10. Closing rule and statuses (done, dropped, needs a stronger model).
-11. Rewrite plans with function names and behaviour instead of line numbers;
-    include code snippets or not?
-12. Difficulty tag to choose between Sonnet and a stronger model.
-13. SessionStart hook, rule that the API tests must run, `ruff`,
-    `pyproject.toml`, a type checker.
-14. Docs volume: restructure, shorten, mark human-only docs?
-15. Frontend tests first, even before A1-A3?
-16. More inspiration for `/do-plan-step` (Matt's `implement`); split skills into
-    smaller ones (like `implement` calling `code-review`)?
+1. **Glossary and ADRs:** a `GLOSSARY.md` now, including the solver terms.
+   ADRs from now on only; no ADRs for old decisions unless one is questioned.
+   Matt Pocock's wider workflow is not adopted; start small and iterate.
+2. **Branches:** code changes go on a branch and through a pull request, one
+   item (or a few small related ones) per branch; documentation-only changes
+   may go to `main`. No worktrees.
+3. **`writing-for-agents`:** copied into `.claude/skills/` (MIT, with licence
+   and source commit).
+4. **Subagents:** implementation in the main session, one item at a time;
+   subagents only for read-only research or when asked; never several at once
+   unless asked. Rule in `CLAUDE.md`.
+5. **"Done when" tests:** the item states the behaviour; the session that
+   takes the item writes the test first.
+6. **Needs decision:** `Needs decision:` with question, options and
+   recommendation; rewritten as `Decided (date):` once answered.
+7. **Audit to plans:** no skill; a rule instead (an item bigger than one
+   commit moves into a plan, the review keeps a pointer).
+8. **Index:** `docs/plans/README.md` holds the order and the dependencies;
+   statuses stay on the items; `Blocked by:` on the item.
+9. **Splitting plans:** one file per feature with a shared design; tasks of
+   one commit each with their own ID; a new file only for a part that ships on
+   its own (run metadata).
+10. **Closing rule:** done with date and the ID in the commit subject; dropped
+    with a reason; `Escalate:` after three failed attempts.
+11. **Line numbers:** names and behaviour instead; snippets only for
+    interfaces.
+12. **Difficulty:** easy, medium, hard, defined in `README.md`; the mapping to
+    a model is in `CLAUDE.md`.
+13. **Tooling:** hook, `WIZSAT_REQUIRE_API_TESTS`, `ruff`, `pyproject.toml`
+    now; a type checker later.
+14. **Docs volume:** `AGENTS.md` trimmed to rules and pointers, details moved
+    to the guides; a table says which doc belongs to which code area; the
+    report folder is edited only on request.
+15. **Order:** must-fix findings A1-A3, then frontend tests, then features.
+    Recorded in `README.md`.
+16. **Skills:** `/do-plan-step` borrows the rhythm of Matt Pocock's
+    `implement` and the rulings and stop conditions of superpowers'
+    `executing-plans`; both skills call the built-in `code-review` rather
+    than a skill of our own; no further splitting until two skills share a
+    multi-step procedure.
 
 ## Sources
 

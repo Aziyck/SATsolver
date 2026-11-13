@@ -15,6 +15,10 @@ can be used the same way.
 | [screenshot-checklist.md](screenshot-checklist.md) | `screenshot_checklist.md` | figures to capture from the web interface |
 | [table-templates.md](table-templates.md) | `tables_template.md` | tables to fill in with measured results |
 
+These documents are thesis material, written for people. Coding agents do not
+update them as part of code changes; they edit them only when the owner asks
+(see "Which docs go with which code" in `AGENTS.md`).
+
 `TODO` in the tables marks values that must come from real runs. Related
 reference material: [encodings](../algorithms/encodings.md),
 [benchmarking guide](../guide/benchmarking.md).

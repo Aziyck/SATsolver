@@ -1,14 +1,15 @@
 # Plan: memory use in the results
 
 - **Status:** proposed, not started
-- **Written:** 2026-10-19, against commit `33cdfab`
-- **Depends on:** the per-run child process ("solver runner") from
-  [PyPy runner and run metadata](pypy-solver-runner-and-run-metadata.md),
-  Part 2, and the run metadata from Part 1 of the same plan.
+- **Written:** 2026-10-19; tasks rewritten 2026-11-13
+- **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
+  RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](run-metadata.md)).
+  MEM-1, MEM-2 and MEM-5 can start before the runner exists.
 - **Related:** [Benchmarking](../guide/benchmarking.md),
   [audit A2](../reviews/2026-10-16-audit.md) (one huge variable number can
   exhaust memory), `docs/report/table-templates.md` (Table 8 lists "benchmarks
   do not measure memory" as a limitation)
+- Item format, difficulty and closing rule: [README.md](README.md)
 
 ## Goal
 
@@ -133,42 +134,93 @@ With every run in its own child, a per-run limit becomes possible:
 - This also turns audit A2 ("one huge variable number freezes the machine")
   into a clean MEMOUT row instead of a frozen machine.
 
-## Steps
+## Tasks
 
-- [ ] 0. Prerequisites from the other plan: run metadata (Part 1) and the
-  solver runner (Part 2's child process with JSON pipes, cancel, timeout).
-- [ ] 1. A small helper `peak_memory_mb()` / `memory_baseline()` with the three
-  platform branches (new module, for example `sat_core/memory.py`; standard
-  library only, returns `None` when unsupported).
-- [ ] 2. Solve jobs: baseline and peak around the solver call in `solve_job`
-  (`sat_core/jobs.py`), stored as stats.
-- [ ] 3. The runner reports `baseline_memory_mb` and `peak_memory_mb` with its
-  result.
-- [ ] 4. Benchmark option "Measure memory" (request field, `ParamField`-style
-  validation in `parse_request`, builder control, Setup tab line, preset
-  default off).
-- [ ] 5. `peak_stored_literals` in CDCL, DPLL and WalkSAT/ProbSAT (a counter,
-  not a scan). Check with `scripts/solver_timings.py` that speed is unchanged.
-- [ ] 6. CSV columns, `STATS` labels, chart measures, Runs table column, run
-  drawer.
-- [ ] 7. Docs: `docs/guide/benchmarking.md` (what the numbers mean and cost),
-  `docs/guide/performance.md`, `docs/report/table-templates.md` (Table 8 no
-  longer a limitation; add a memory column to the result tables).
-- [ ] 8. Optional: memory limit and `MEMOUT` (Linux/macOS first).
+- [ ] **MEM-1. Read a process's peak memory on every platform**
+  - **Difficulty:** medium (three operating systems, units differ)
+  - **How:** a new module `sat_core/memory.py` with `peak_memory_mb()`,
+    standard library only: `resource.getrusage` on Linux (kilobytes) and macOS
+    (bytes), `GetProcessMemoryInfo` through `ctypes` on Windows. Returns
+    `None` where unsupported.
+  - **Done when:** tests show a positive number on the CI platforms (Ubuntu,
+    Windows), a value that grows by roughly the right amount after allocating
+    a 50 MB list, and `None` instead of an exception when the platform call is
+    patched to fail.
 
-## Tests
+- [ ] **MEM-2. Solve jobs report peak memory**
+  - **Difficulty:** easy
+  - **Blocked by:** MEM-1
+  - **How:** in `solve_job` (`sat_core/jobs.py`), read the baseline after
+    encoding and the peak after the solver returns; store `peak_memory_mb` and
+    `baseline_memory_mb` as stats. The number includes the encoded formula;
+    label it "peak memory of the job".
+  - **Done when:** an API test finds both stats on a finished solve job with
+    peak >= baseline > 0, and the Statistics tab shows them with a label and
+    an explanation (`STATS` in `frontend/src/lib/format.ts`).
 
-- [ ] The memory helper returns a positive number on the CI platforms (Ubuntu
-  and Windows) and `None` instead of raising where unsupported.
-- [ ] A benchmark with "Measure memory" on: every row has `peak_memory_mb`
-  greater than or equal to `baseline_memory_mb`, and running the same small
-  case twice in one benchmark gives similar peaks (the bug this design avoids).
-- [ ] `peak_stored_literals` equals the input literal count for DPLL and
-  WalkSAT, and is at least that for CDCL.
-- [ ] With the option off, rows carry no memory stats and the UI shows "not
-  measured".
-- [ ] Optional MEMOUT: a child with a tiny limit (for example 64 MB) on a large
-  formula reports `MEMOUT` (skip the test on Windows).
+- [ ] **MEM-3. The solver runner reports memory per run**
+  - **Difficulty:** easy
+  - **Blocked by:** MEM-1, RUNNER-2
+  - **How:** the child measures its baseline after reading the clauses and its
+    peak after the solver returns, and sends both with the result.
+  - **Done when:** with the runner on, running the same small case twice in
+    one benchmark gives similar peaks, including after a much larger case ran
+    in between (the bug this design avoids).
+
+- [ ] **MEM-4. Benchmark option "Measure memory"**
+  - **Difficulty:** medium
+  - **Blocked by:** MEM-3, RUNNER-5
+  - **How:** a request field (off by default) validated in `parse_request`; a
+    switch under Run settings in the builder with a help text that states the
+    cost (about 0.05 s per run); a line in the Setup tab. When on, every run
+    goes through the solver runner, even on CPython.
+  - **Done when:** with the option on, every row has `peak_memory_mb` >=
+    `baseline_memory_mb`; with it off, rows carry no memory stats and the plan
+    panel does not mention memory.
+
+- [ ] **MEM-5. Solvers count their peak stored literals**
+  - **Difficulty:** hard (solver code; speed must not change)
+  - **How:** stat `peak_stored_literals`. CDCL: input literals plus learned
+    literals with a running maximum, updated where `add_clause()` adds a
+    learned clause and where `reduce_learned()` deletes; never in
+    propagation. DPLL and WalkSAT/ProbSAT: the input literal count.
+  - **Done when:** tests show the stat equals the input literal count for DPLL
+    and WalkSAT and is at least that for CDCL (greater on a formula that
+    causes conflicts); the conflicts column and the times of
+    `scripts/solver_timings.py` are unchanged.
+
+- [ ] **MEM-6. Memory in the CSV, the table and the charts**
+  - **Difficulty:** medium
+  - **Blocked by:** MEM-4, MEM-5
+  - **How:** `peak_memory_mb`, `baseline_memory_mb` and `peak_stored_literals`
+    in `STAT_COLUMNS` (`sat_core/benchmark.py`); labels in `STATS`; "Peak
+    memory" and "Stored literals" in `METRICS` (`frontend/src/lib/stats.ts`);
+    an optional column in the Runs table; the run drawer. One y-axis per chart
+    (memory and time are separate measures).
+  - **Done when:** the CSV of a measured benchmark has the three columns
+    filled; a chart can use each new measure; rows without the measurement
+    show "not measured", never 0.
+
+- [ ] **MEM-7. Documentation**
+  - **Difficulty:** easy
+  - **Blocked by:** MEM-6
+  - **Done when:** `docs/guide/benchmarking.md` explains what the numbers mean
+    and cost; `docs/guide/performance.md` carries the measurements of this
+    plan; the user guide mentions the option. (Updating
+    `docs/report/table-templates.md` is the owner's call: the report folder is
+    edited only on request.)
+
+- [ ] **MEM-8. Memory limit and status MEMOUT (optional)**
+  - **Difficulty:** hard (new status everywhere, process limits)
+  - **Blocked by:** MEM-4
+  - **Needs decision:** whether to build it, and whether Linux/macOS only is
+    acceptable at first. Recommendation: yes, Linux/macOS first, with the
+    option shown as unavailable on Windows.
+  - **How:** see "Optional later" above.
+  - **Done when:** a child with a 64 MB limit on a large formula reports
+    `MEMOUT` (test skipped on Windows); the status has a colour, a place in
+    the status shares and CSV counts, and an entry in `GLOSSARY.md` and the
+    "Statuses" section of `AGENTS.md`; it is never counted as UNSAT.
 
 ## Rules for results (thesis)
 

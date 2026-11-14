@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** in progress (FE-1 to FE-4 done)
+- **Status:** done (2026-11-15)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -74,7 +74,7 @@ caught by `npm test` instead of by eye.
     `entryForRow` maps row indices to solver entries for one, two and three
     entries.
 
-- [ ] **FE-5. Result panel states**
+- [x] **FE-5. Result panel states** - Done 2026-11-15.
   - **Difficulty:** medium
   - **Blocked by:** FE-1
   - **Done when:** tests of `SolveResultPanel` with a stubbed job show the

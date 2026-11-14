@@ -328,9 +328,14 @@ Two mechanisms make the result correct regardless of order:
   `index.html` for any non-API path, so deep links work.
 - **Tests**: vitest runs in jsdom. Pure helpers are tested directly
   (`lib/lib.test.ts`); a component test renders through `renderWithApp()`
-  (`test/render.tsx`), which supplies the Mantine theme and a fresh React
-  Query client; `test/fields.ts` builds parameter fields for fixtures. `test/setup.ts` adds the browser APIs jsdom lacks
-  (`matchMedia`, `ResizeObserver`) and unmounts after each test.
+  (`test/render.tsx`), which supplies the Mantine theme, a router and a
+  fresh React Query client. Server data is stubbed by seeding that client
+  (`queryData: [[["job", 7], job]]`); seeded data never goes stale. There is
+  no server: `test/setup.ts` fails a test that calls `fetch` and names the
+  URL, so a query the test forgot to seed shows up. `test/fields.ts` builds
+  parameter fields for fixtures. `test/setup.ts` also adds the browser APIs
+  jsdom lacks (`matchMedia`, `ResizeObserver`) and unmounts after each
+  test.
 
 ## Serving
 

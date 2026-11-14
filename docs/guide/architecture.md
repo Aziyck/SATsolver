@@ -4,19 +4,39 @@ WizSAT is a Python backend with a React frontend, both running on the user's
 machine. This page explains how the parts fit together and why they are
 split the way they are. The file-by-file map is in [AGENTS.md](../../AGENTS.md).
 
-```text
- browser (React, frontend/)                     Python (sat_web/, sat_core/, problems/, solvers/)
- ---------------------------                     -------------------------------------------------
- pages and forms  --- REST /api/... ----------->  api.py  --validate-->  problems.*.parse,
-                                                                          benchmark.parse_request
- React Query cache <-- JSON --------------------  api.py  <--snapshot--  JobManager (manager.py)
-                                                                          |  spawn one process per job
- live.ts          <-- WebSocket /api/ws --------  fan-out  <--events--   |  (at most WIZSAT_MAX_JOBS)
-                                                     ^                    v
-                                                     |               worker: sat_core.jobs.run_job
-                                                  reader thread  <-- multiprocessing queue of RunEvents
-                                                     |
-                                                  store.py (SQLite)      job folder: instance.cnf, model.txt
+```mermaid
+flowchart TB
+    subgraph browser["Browser (frontend/)"]
+        direction LR
+        pages["pages and forms"]
+        cache["React Query cache"]
+        live["live.ts"]
+    end
+
+    subgraph server["Server process (sat_web/)"]
+        direction LR
+        api["api.py<br/>REST, validate_job"]
+        manager["JobManager"]
+        reader["reader thread"]
+        db[("SQLite<br/>store.py")]
+    end
+
+    subgraph job["Job process, one per job"]
+        direction LR
+        worker["sat_core.jobs.run_job<br/>problems/ + solvers/"]
+        folder[/"job folder<br/>instance.cnf, model.txt"/]
+    end
+
+    pages -- "REST /api/..." --> api
+    api -- "JSON" --> cache
+    api <-- "submit / snapshot under the lock" --> manager
+    manager -- "spawn, at most WIZSAT_MAX_JOBS" --> worker
+    worker -- "RunEvents on a queue" --> reader
+    worker --> folder
+    reader -- "apply under the lock" --> manager
+    reader -- "persist" --> db
+    reader -- "WebSocket /api/ws" --> live
+    live -- "patch" --> cache
 ```
 
 ## Layers
@@ -29,11 +49,34 @@ split the way they are. The file-by-file map is in [AGENTS.md](../../AGENTS.md).
 | Server | `sat_web/` | HTTP, WebSocket, processes, SQLite | encodings, solver internals |
 | Frontend | `frontend/` | the JSON API | Python |
 
-The dependency arrows only point down: `sat_web` uses `sat_core` and
-`problems`, `sat_core` uses `problems` and `solvers`, and solvers use
-nothing but `sat_core.runtime` for events and cancellation. A command-line
-script or a notebook can use `problems` and `sat_core` directly, without the
-server.
+Who imports whom, module by module:
+
+```mermaid
+flowchart TD
+    frontend["frontend/"]
+    web["sat_web/<br/>api, manager, store, config"]
+    engine["sat_core engine<br/>jobs, benchmark, solver_registry, parallel, presets"]
+    problems["problems/"]
+    solvers["solvers/"]
+    base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify"]
+
+    frontend -. "JSON API only" .-> web
+    web --> engine
+    web --> problems
+    web --> base
+    engine --> problems
+    engine --> solvers
+    engine --> base
+    problems --> base
+    solvers -- "runtime only" --> base
+```
+
+Every arrow points down. `sat_core` has two halves: its base modules import
+nothing from the other packages, and problems build on them (`ParamField`,
+`ProblemInstance`, seeds, DIMACS); its engine modules sit above problems and
+solvers and connect them. Solvers use nothing but `sat_core.runtime`, for
+events and cancellation. A command-line script or a notebook can use
+`problems` and `sat_core` directly, without the server.
 
 ## Registries instead of switch statements
 
@@ -86,11 +129,16 @@ be stopped. Each job gets a `spawn`ed process, which also isolates crashes
 
 The processes while the app is busy:
 
-```text
-python -m sat_web                       the server: HTTP, WebSocket, JobManager, SQLite
-  +- job process (J7, a solve)          sat_core.jobs.run_job -> solve_job
-  +- job process (J8, a benchmark)      run_job -> benchmark_job -> run_benchmark
-       +- worker 1 .. N                 only with "workers" > 1: one case at a time each
+```mermaid
+flowchart TD
+    server["python -m sat_web<br/>HTTP, WebSocket, JobManager, SQLite"]
+    j7["job process J7, a solve<br/>run_job -> solve_job"]
+    j8["job process J8, a benchmark<br/>run_job -> benchmark_job -> run_benchmark"]
+    pool["pool workers 1 .. N<br/>one case at a time each"]
+
+    server -- spawn --> j7
+    server -- spawn --> j8
+    j8 -- "only with workers > 1" --> pool
 ```
 
 Job processes are not daemons, because a benchmark job may start a pool of
@@ -102,15 +150,56 @@ nothing keeps running after a crash.
 
 ### Lifecycle
 
-```text
-POST /api/jobs
-  -> api.validate_job        422 on bad input; blank seeds are resolved here
-  -> JobManager.submit       insert into SQLite, status "queued", publish
-  -> _schedule / _start      when a slot is free: spawn the worker, status "running"
-  -> worker run_job          RunEvents on a queue: log, progress, instance, result, row, done/error/cancelled
-  -> reader thread _apply    update the Job under the lock, persist, publish to the WebSocket
-  -> _finalize               process exited: status done / failed / cancelled / interrupted
+One job, from the request to the end of its process:
+
+```mermaid
+sequenceDiagram
+    participant UI as Browser
+    participant API as api.py
+    participant M as JobManager
+    participant W as job process
+    participant R as reader thread
+
+    UI->>API: POST /api/jobs {kind, request}
+    API->>API: validate_job (422 on bad input, blank seeds resolved)
+    API->>M: submit
+    M->>M: insert into SQLite, status "queued", publish
+    API-->>UI: job summary
+    M->>W: _schedule / _start when a slot is free: spawn, status "running"
+    loop until the job ends
+        W->>R: RunEvent (log, progress, instance, result, row)
+        R->>M: _apply: update the Job under the lock, persist
+        M-->>UI: publish over the WebSocket
+    end
+    W->>R: done, error or cancelled
+    W->>M: process exits
+    M->>M: _finalize: final status, publish
 ```
+
+The status a job can have, and what moves it on (`sat_web/manager.py`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued: submit
+    queued --> running: a slot is free
+    queued --> cancelled: Stop before it started
+    running --> cancelling: Stop
+    running --> done: done event, process exited
+    running --> failed: error event, or the process died or could not start
+    cancelling --> cancelled: process exited
+    cancelling --> done: it finished before seeing the Stop
+    cancelling --> failed: error event
+    queued --> interrupted: server stopped
+    running --> interrupted: server stopped
+    cancelling --> interrupted: server stopped
+    done --> [*]
+    failed --> [*]
+    cancelled --> [*]
+    interrupted --> [*]
+```
+
+Jobs still `queued`, `running` or `cancelling` when the server starts again
+are marked `interrupted`.
 
 **Cancellation** is cooperative first: the manager sets a
 `multiprocessing.Event`, the worker's `RunToken` sees it, and the solver
@@ -125,17 +214,28 @@ the check cheap and the reaction time well under a second.
 With `"workers": N` (N > 1) the benchmark job becomes a coordinator
 (`sat_core/parallel.py`):
 
-1. It starts a `ProcessPoolExecutor` with N spawned workers. Each worker
-   rebuilds the plan from the normalized request once (`parse_request` is
-   deterministic, so all processes agree on the cases).
-2. It submits cases by index, keeping at most 2N queued so a Stop does not
-   leave a long queue behind.
-3. A worker runs `run_case()`, the same function the sequential loop uses:
-   encode the case once, run every solver on that CNF, collect the rows and
-   log lines, and return them.
-4. The coordinator forwards the log lines and rows as ordinary events. Row
-   indices are `case index x number of solvers + solver position`, so the
-   rows equal those of a sequential run whatever order cases finish in.
+```mermaid
+sequenceDiagram
+    participant M as JobManager
+    participant C as benchmark job (coordinator)
+    participant P as pool workers 1 .. N
+
+    C->>P: start a ProcessPoolExecutor with N spawned workers
+    P->>P: each rebuilds the plan from the normalized request once
+    loop until every case has run, or Stop
+        C->>P: submit the next case by index (at most 2N queued)
+        P->>P: run_case(): encode once, run every solver on that CNF
+        P-->>C: the case's rows and log lines
+        C->>M: forward them as ordinary row and log events
+    end
+```
+
+- `parse_request` is deterministic, so every process agrees on the cases.
+- At most 2N cases wait in the queue, so a Stop does not leave a long queue
+  behind.
+- `run_case()` is the same function the sequential loop uses.
+- Row indices are `case index x number of solvers + solver position`, so the
+  rows equal those of a sequential run whatever order cases finish in.
 
 Stop and Skip reach the workers through shared objects that a small thread
 in the coordinator keeps in sync with the job's token: Stop sets a shared
@@ -172,7 +272,25 @@ in the job's log).
 
 A page usually fetches a job over HTTP while events for it stream in, so the
 two can race: the HTTP reply may describe an older state than an event that
-already arrived. Two mechanisms make the result correct regardless of order:
+already arrived:
+
+```mermaid
+sequenceDiagram
+    participant P as page
+    participant L as live.ts
+    participant A as api.py
+    participant M as JobManager
+
+    P->>A: GET the job (fetch in flight)
+    A->>M: snapshot under the lock: rev 11
+    M-->>L: WebSocket: summary rev 12, a result event
+    L->>L: keep rev 12, record the result as pending
+    A-->>P: reply with the rev 11 snapshot
+    P->>L: mergeJobSnapshot
+    L-->>P: rev 12 summary wins, the pending result is merged in
+```
+
+Two mechanisms make the result correct regardless of order:
 
 - **`rev`**: every published job summary carries a revision number that the
   manager increments under its lock. HTTP snapshots are also taken under the

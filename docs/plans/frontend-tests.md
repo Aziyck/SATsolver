@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** in progress (FE-1, FE-2, FE-3 done)
+- **Status:** in progress (FE-1 to FE-4 done)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -66,7 +66,7 @@ caught by `npm test` instead of by eye.
     - a field with `show_if` appears and disappears with the field it depends
       on.
 
-- [ ] **FE-4. Benchmark set-up**
+- [x] **FE-4. Benchmark set-up** - Done 2026-11-15.
   - **Difficulty:** easy
   - **Blocked by:** FE-1
   - **Done when:** tests show that `BenchmarkSetup` lists every solver entry

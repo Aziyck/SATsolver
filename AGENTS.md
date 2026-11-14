@@ -69,6 +69,7 @@ frontend/src/
   lib/             pure helpers (params, benchmark drafts, stats, formatting) + tests
   components/      forms (fields/ParamForm.tsx), result views (views/), charts (charts/)
   pages/           Solve, Benchmarks, BenchmarkBuilder, BenchmarkResults, Jobs, Learn
+  test/            renderWithApp() for component tests, vitest setup
 tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),
@@ -191,6 +192,8 @@ The invariants code must keep:
   instead of a second axis), a table view next to every chart, status colors
   only for statuses, text never in series colors.
 - Pure logic lives in `lib/` with vitest tests; components stay thin.
+  Component tests render through `renderWithApp()` (`src/test/render.tsx`)
+  and use Testing Library queries.
 
 ## Working on items
 

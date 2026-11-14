@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** in progress (FE-1 done)
+- **Status:** in progress (FE-1, FE-2 done)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -39,7 +39,7 @@ caught by `npm test` instead of by eye.
   - **Done when:** one test renders `StatsTable` with two statistics and finds
     both labels; `npm test` and `npm run typecheck` pass in CI.
 
-- [ ] **FE-2. Solver settings and statistics tables**
+- [x] **FE-2. Solver settings and statistics tables** - Done 2026-11-14.
   - **Difficulty:** easy
   - **Blocked by:** FE-1
   - **Done when:** tests of `SolverSettingsTable` and `StatsTable` show that

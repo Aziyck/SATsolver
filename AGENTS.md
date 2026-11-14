@@ -69,7 +69,7 @@ frontend/src/
   lib/             pure helpers (params, benchmark drafts, stats, formatting) + tests
   components/      forms (fields/ParamForm.tsx), result views (views/), charts (charts/)
   pages/           Solve, Benchmarks, BenchmarkBuilder, BenchmarkResults, Jobs, Learn
-  test/            renderWithApp() for component tests, vitest setup
+  test/            renderWithApp() and field() fixtures for component tests, vitest setup
 tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),

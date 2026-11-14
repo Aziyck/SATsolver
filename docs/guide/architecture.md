@@ -329,7 +329,7 @@ Two mechanisms make the result correct regardless of order:
 - **Tests**: vitest runs in jsdom. Pure helpers are tested directly
   (`lib/lib.test.ts`); a component test renders through `renderWithApp()`
   (`test/render.tsx`), which supplies the Mantine theme and a fresh React
-  Query client. `test/setup.ts` adds the browser APIs jsdom lacks
+  Query client; `test/fields.ts` builds parameter fields for fixtures. `test/setup.ts` adds the browser APIs jsdom lacks
   (`matchMedia`, `ResizeObserver`) and unmounts after each test.
 
 ## Serving

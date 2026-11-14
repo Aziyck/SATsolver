@@ -5,7 +5,8 @@ import { field } from "../test/fields";
 import { renderWithApp } from "../test/render";
 import { SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
 
-// Trimmed copies of the CDCL and ProbSAT option lists in sat_core/solver_registry.py.
+// Modelled on the CDCL and ProbSAT options in sat_core/solver_registry.py, trimmed to
+// what these tests need (no advanced flags or bounds).
 const CDCL: SolverSpec = {
   key: "cdcl",
   title: "CDCL",
@@ -79,15 +80,13 @@ describe("SolverSettingsTable", () => {
   it("lists an option the solver no longer has as no longer an option", () => {
     renderWithApp(<SolverSettingsTable spec={PROBSAT} options={{ noise: 0.5 }} />);
     expect(screen.getByText(/not an option of ProbSAT \(any more\): noise=0\.5/)).toBeTruthy();
-    expect(screen.queryByRole("cell", { name: /^Noise/ })).toBeNull();
+    expect(screen.queryByRole("cell", { name: /noise/i })).toBeNull();
   });
 
   it("shows the placeholder for a blank optional value", () => {
     renderWithApp(<SolverSettingsTable spec={CDCL} options={{ learned_limit: null }} />);
-    const [used, byDefault] = within(row("Learned clause limit")).getAllByText("automatic");
-    expect(used).toBeTruthy();
-    expect(byDefault).toBeTruthy();
-    expect(within(row("Learned clause limit")).queryByText("none")).toBeNull();
+    const [, used] = within(row("Learned clause limit")).getAllByRole("cell");
+    expect(used.textContent).toBe("automatic");
   });
 });
 

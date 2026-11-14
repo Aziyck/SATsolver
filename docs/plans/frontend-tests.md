@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** in progress (FE-1, FE-2 done)
+- **Status:** in progress (FE-1, FE-2, FE-3 done)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -44,15 +44,17 @@ caught by `npm test` instead of by eye.
   - **Blocked by:** FE-1
   - **Done when:** tests of `SolverSettingsTable` and `StatsTable` show that
     - a changed option is marked "changed" and shows its default;
-    - an option hidden by another option (restart interval while the schedule
-      is Luby) is not listed;
+    - an option hidden by another option (restart schedule and interval while
+      restarts are off) is not listed. (First written as "restart interval
+      while the schedule is Luby"; the interval is the unit of the Luby
+      schedule and stays visible there.)
     - an option the solver no longer has (ProbSAT `noise`) is listed as no
       longer an option;
     - a blank optional value shows its placeholder ("automatic");
     - `elapsed` is shown as a time and unknown statistic keys get a readable
       label.
 
-- [ ] **FE-3. Parameter forms: reset buttons and compact help**
+- [x] **FE-3. Parameter forms: reset buttons and compact help** - Done 2026-11-15.
   - **Difficulty:** medium
   - **Blocked by:** FE-1
   - **Done when:** tests of `ParamForm` show that

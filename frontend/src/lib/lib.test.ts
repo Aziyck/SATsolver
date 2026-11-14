@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BenchmarkRow, Catalog, Field } from "../api/types";
+import type { BenchmarkRow, Catalog } from "../api/types";
+import { field } from "../test/fields";
 import { draftFromRequest, isVisibleSweep, requestFromDraft, sweepValue } from "./benchmark";
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
@@ -7,27 +8,6 @@ import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, 
 import { aggregate, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
 import { learnLink } from "./learn";
 import { conflictCells, parsePuzzle, sudokuSize } from "./sudoku";
-
-function field(partial: Partial<Field> & Pick<Field, "name" | "kind">): Field {
-  return {
-    label: partial.name,
-    default: null,
-    help: "",
-    min: null,
-    max: null,
-    step: null,
-    choices: [],
-    optional: false,
-    sweepable: false,
-    group: "",
-    show_if: {},
-    placeholder: "",
-    unit: "",
-    advanced: false,
-    short: "",
-    ...partial,
-  };
-}
 
 const MODE = field({
   name: "mode",

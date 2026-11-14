@@ -44,8 +44,10 @@ caught by `npm test` instead of by eye.
   - **Blocked by:** FE-1
   - **Done when:** tests of `SolverSettingsTable` and `StatsTable` show that
     - a changed option is marked "changed" and shows its default;
-    - an option hidden by another option (restart interval while the schedule
-      is Luby) is not listed;
+    - an option hidden by another option (restart schedule and interval while
+      restarts are off) is not listed. (First written as "restart interval
+      while the schedule is Luby"; the interval is the unit of the Luby
+      schedule and stays visible there.)
     - an option the solver no longer has (ProbSAT `noise`) is listed as no
       longer an option;
     - a blank optional value shows its placeholder ("automatic");

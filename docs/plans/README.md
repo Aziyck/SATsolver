@@ -31,7 +31,7 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Free to do at any point after step 1, when there is time or when the code is
 being touched anyway:
 
-- the remaining audit findings A4-A12;
+- the remaining audit findings, A4 onwards;
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
   items B6-B9 that touch the same code.
@@ -120,5 +120,9 @@ as the work.
   costs more than an open item.
 - When every task of a plan is closed, set its status line to
   `done (date)` and move decisions worth keeping into an ADR.
-- A new finding met along the way becomes a new item (next free ID in the
-  newest review); it is not fixed inside another item's change.
+- A **new finding** met along the way (a bug, a weak spot, a review finding
+  left unfixed) is filed the moment it is found: a new item at the end of the
+  newest file in `docs/reviews/`, next free ID, marked
+  `(added <date>, found while <ID>)`. It goes into the current change as a
+  documentation edit and into the report to the owner; the fix waits for its
+  own session.

@@ -68,8 +68,9 @@ is the default. Where the item leaves a detail open and the choice is cheap to
 undo, decide it and record a **ruling** for the commit message:
 `Ruling: <what> - <why> - <what it costs if wrong>`.
 
-Stay inside the item. Something else you notice becomes a new item, not an
-extra edit.
+Stay inside the item. Each other problem you meet, file now as a new
+finding (`docs/plans/README.md`, "Statuses and closing an item") and carry
+on.
 
 **Done when** the loop is green (for a refactor: tests pass and the conflicts
 column matches the baseline).
@@ -78,7 +79,8 @@ column matches the baseline).
 
 Run every check of "Before you finish" in `AGENTS.md` that applies, after the
 last edit. For a medium or hard item, also run `/code-review` on the diff and
-fix what it confirms.
+fix what it confirms; a confirmed finding outside this item is filed as a new
+finding instead.
 
 If the loop will not go green after three different attempts, stop: write the
 `Escalate:` line on the item, leave it open, and report what was tried.

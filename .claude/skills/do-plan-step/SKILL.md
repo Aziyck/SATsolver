@@ -61,7 +61,8 @@ the next. Tests written all at once check an imagined design.
   cannot be undone; anything security-sensitive; something the Non-goals
   exclude; or a design that turns out not to work (say what you found).
 - Build this task only. Later tasks stay untouched, even when they look
-  close.
+  close. Each other problem you meet, file now as a new finding
+  (`docs/plans/README.md`, "Statuses and closing an item") and carry on.
 
 **Done when** every test from step 3 is green.
 
@@ -70,7 +71,8 @@ the next. Tests written all at once check an imagined design.
 Run every check of "Before you finish" in `AGENTS.md` that applies, after the
 last edit, plus the plan's own rules (for a "same search" task: the conflicts
 column matches the baseline). For a medium or hard task, also run
-`/code-review` on the diff and fix what it confirms.
+`/code-review` on the diff and fix what it confirms; a confirmed finding
+outside this task is filed as a new finding instead.
 
 If the tests will not go green after three different attempts, stop: write
 the `Escalate:` line on the task, leave it open, and report what was tried.
@@ -85,4 +87,4 @@ the `Escalate:` line on the task, leave it open, and report what was tried.
    environment`). The body lists any rulings and measurements.
 3. Branch and pull request as "Working on items" in `AGENTS.md` says.
 4. Report to the owner: what was built, each check with its result, rulings,
-   measurements, and which task can start next.
+   measurements, new findings filed, and which task can start next.

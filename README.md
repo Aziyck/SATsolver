@@ -234,4 +234,6 @@ legacy/         the original Tkinter app and Romanian documents, kept for refere
 
 The original Tkinter desktop app (with its own copy of the backend and tests),
 the early console scripts and the Romanian thesis documents are archived in
-[`legacy/`](legacy/README.md). They are not used by the web app.
+[`legacy/`](legacy/README.md). They are not used by the web app. The archive is
+frozen: nothing there is edited or tested any more, so its code may stop
+running ([ADR 0003](docs/adr/0003-legacy-is-a-frozen-archive.md)).

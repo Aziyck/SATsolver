@@ -5,8 +5,9 @@ several SAT solvers, and benchmarking the solvers. A Python backend (FastAPI)
 serves a React frontend. Everything runs on the user's machine.
 
 The original Tkinter app and the Romanian thesis documents are archived in
-`legacy/`. Do not import from `legacy/` and do not edit it except to keep its
-own tests passing.
+`legacy/`, a frozen archive: read it for reference, and keep imports and
+edits outside it. Its tests are not run and may no longer pass
+([ADR 0003](docs/adr/0003-legacy-is-a-frozen-archive.md)).
 
 Words such as *case*, *run*, *row*, *item* or *glue clause* have one meaning
 each, pinned in [`GLOSSARY.md`](GLOSSARY.md). Use them that way.
@@ -235,7 +236,7 @@ needs a routine edit.
 | a term's meaning, or a new term | `GLOSSARY.md` |
 | the workflow or the item format | `docs/plans/README.md` |
 | `docs/report/` | thesis material: edit only when the owner asks |
-| `legacy/` | never, except to keep its own tests passing |
+| `legacy/` | never (frozen archive, ADR 0003) |
 
 ## Before you finish
 

@@ -156,7 +156,8 @@ print(stats["status"], solution)   # SAT {1: True, 2: True}
 ```
 
 The archived recursive version can be run for comparison from the
-repository root:
+repository root (`legacy/` is frozen and untested, so this may stop
+working):
 
 ```python
 from legacy.dpll_recursive import dpll as recursive_dpll

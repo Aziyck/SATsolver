@@ -1,8 +1,11 @@
 # Legacy
 
-Archived code and documents kept for reference. Product code must not import
-anything from this folder; if an idea here is useful, port it into the active
-packages and add tests.
+Archived code and documents kept for reference. The archive is frozen:
+nothing here is edited, and the tests in `tkinter_app/tests/` are not run any
+more, so the code may stop working
+([ADR 0003](../docs/adr/0003-legacy-is-a-frozen-archive.md)). Product code
+must not import anything from this folder; if an idea here is useful, port it
+into the active packages and add tests.
 
 | Path | What it is |
 |---|---|

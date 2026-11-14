@@ -208,6 +208,11 @@ already arrived. Two mechanisms make the result correct regardless of order:
   `/benchmarks/:id`, `/jobs`, `/jobs/:id` (a solve or encode job on its own
   page; benchmarks redirect to their results page), `/learn/:topic`. The Python server returns
   `index.html` for any non-API path, so deep links work.
+- **Tests**: vitest runs in jsdom. Pure helpers are tested directly
+  (`lib/lib.test.ts`); a component test renders through `renderWithApp()`
+  (`test/render.tsx`), which supplies the Mantine theme and a fresh React
+  Query client. `test/setup.ts` adds the browser APIs jsdom lacks
+  (`matchMedia`, `ResizeObserver`) and unmounts after each test.
 
 ## Serving
 

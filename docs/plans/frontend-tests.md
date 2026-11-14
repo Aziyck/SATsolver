@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** proposed, not started
+- **Status:** in progress (FE-1 done)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -30,7 +30,7 @@ caught by `npm test` instead of by eye.
 
 ## Tasks
 
-- [ ] **FE-1. Components can be rendered in tests**
+- [x] **FE-1. Components can be rendered in tests** - Done 2026-11-14.
   - **Difficulty:** easy
   - **How:** add `@testing-library/react` (and `@testing-library/user-event`
     if clicks need it) as dev dependencies, plus a small `renderWithApp()`

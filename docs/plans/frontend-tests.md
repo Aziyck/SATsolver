@@ -1,6 +1,6 @@
 # Plan: component tests for the result and settings screens
 
-- **Status:** in progress (FE-1, FE-2 done)
+- **Status:** in progress (FE-1, FE-2, FE-3 done)
 - **Written:** 2026-11-13
 - **Related:** [run metadata](run-metadata.md),
   [memory measurement](memory-measurement.md) (both change these screens)
@@ -54,7 +54,7 @@ caught by `npm test` instead of by eye.
     - `elapsed` is shown as a time and unknown statistic keys get a readable
       label.
 
-- [ ] **FE-3. Parameter forms: reset buttons and compact help**
+- [x] **FE-3. Parameter forms: reset buttons and compact help** - Done 2026-11-15.
   - **Difficulty:** medium
   - **Blocked by:** FE-1
   - **Done when:** tests of `ParamForm` show that

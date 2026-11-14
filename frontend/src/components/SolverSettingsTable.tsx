@@ -14,7 +14,7 @@ export interface ExtraSetting {
 /**
  * The options a solver ran with, one row per option: what it means, the value
  * used and the default, with changed values marked. Options hidden by another
- * option (a fixed restart interval while Luby restarts are on) are left out
+ * option (the restart schedule and interval while restarts are off) are left out
  * because the solver ignored them.
  */
 export function SolverSettingsTable({ spec, options, extra = [] }: { spec: SolverSpec; options: Record<string, unknown> | undefined; extra?: ExtraSetting[] }) {

@@ -21,7 +21,7 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
    They are bugs in what already ships (security, a machine-freezing input,
    old results that cannot be opened).
 2. **Frontend tests:** [frontend-tests.md](frontend-tests.md), aimed at the
-   screens the features below will change.
+   screens the features below will change (done).
 3. **Features, in this order:**
    [run-metadata.md](run-metadata.md), then
    [pypy-solver-runner.md](pypy-solver-runner.md), then
@@ -39,7 +39,7 @@ being touched anyway:
 | File | What | Waits on |
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | A1-A12 whole-repo findings, B1-B17 solver simplification | nothing |
-| [frontend-tests.md](frontend-tests.md) | component tests for the result and settings screens | nothing |
+| [frontend-tests.md](frontend-tests.md) | component tests for the result and settings screens (done) | - |
 | [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |

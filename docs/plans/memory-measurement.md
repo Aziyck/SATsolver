@@ -101,6 +101,8 @@ after each run. For the child, run the same code with `subprocess.run([sys.execu
     `STAT_COLUMNS` in `sat_core/benchmark.py` (CSV).
   - Add a label and a one-line explanation for each in `STATS` in
     `frontend/src/lib/format.ts` (AGENTS.md rule).
+  - Once ARCH-2 and ARCH-3 ([architecture plan](architecture.md)) are done,
+    these lists are one catalog entry per statistic instead.
 - **UI:**
   - "Peak memory" in the run drawer and the solve job's Statistics tab.
   - An optional column in the Runs table.

@@ -16,12 +16,26 @@ in [`docs/adr/`](../adr/).
 
 Take the first open item, going down this list, that is not blocked and has no
 undecided `Needs decision`. Statuses are on the items themselves, not here.
+Finished work is not listed: closed items stay in their files, and finished
+plans move to [`done/`](done/).
 
-1. **Must-fix findings:** [audit](../reviews/2026-10-16-audit.md) A1, A2, A3.
-   They are bugs in what already ships (security, a machine-freezing input,
-   old results that cannot be opened).
-2. **Frontend tests:** [done/frontend-tests.md](done/frontend-tests.md), aimed at the
-   screens the features below will change (done).
+1. **Must-fix findings** in the [audit](../reviews/2026-10-16-audit.md):
+   bugs and a security hole in what already ships.
+   1. A13: another website can show the app in a frame (security).
+   2. A18: a Stop that lands after the result can end a job as cancelled.
+   3. A22: a compared run that is still running can miss rows.
+
+   A18 and A22 were read off the code. Reproduce each with a failing test
+   first; if it does not reproduce, drop the item with the reason.
+2. **Deepen what the features will change**, from
+   [architecture.md](architecture.md), with the audit items they wait on.
+   Each part removes copies of a rule that a feature below would otherwise
+   have to edit in several places.
+   1. ARCH-1: one place that judges a SAT answer.
+   2. ARCH-2, ARCH-3: one catalog of statistics.
+   3. A10, then ARCH-4: one owner of a solve request.
+   4. A7, then ARCH-5, ARCH-6: the job lifecycle as its own module. A7's
+      test is the safety net for ARCH-6.
 3. **Features, in this order:**
    [run-metadata.md](run-metadata.md), then
    [pypy-solver-runner.md](pypy-solver-runner.md), then
@@ -31,20 +45,22 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Free to do at any point after step 1, when there is time or when the code is
 being touched anyway:
 
-- the remaining audit findings, A4 onwards;
+- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25;
+- [architecture.md](architecture.md) parts 5 to 7 (ARCH-7 to ARCH-12).
+  ARCH-7 and ARCH-8 pay off most if done before the features add their
+  fields;
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
   items B6-B9 that touch the same code.
 
 | File | What | Waits on |
 |---|---|---|
-| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | A1-A12 whole-repo findings, B1-B17 solver simplification | nothing |
-| [done/frontend-tests.md](done/frontend-tests.md) | component tests for the result and settings screens (done) | - |
+| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | whole-repo findings (A), solver simplification (B1-B17) | nothing |
+| [architecture.md](architecture.md) | deeper modules for the rules the features change (ARCH-1 to ARCH-12) | A7, A10 for two tasks |
 | [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | audit B6-B9 |
-| [done/agent-workflow.md](done/agent-workflow.md) | how this workflow was chosen (done) | - |
 
 To list every open item: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.
 
@@ -82,7 +98,7 @@ Rules for writing one:
   signature, a command to run. No implementation code: it goes stale and gets
   copied even when wrong.
 - IDs are stable. Review items keep their letter and number (A3, B7); plan
-  tasks use the plan's prefix (META-2, RUNNER-3, MEM-1, OPT-1, FE-2).
+  tasks use the plan's prefix (META-2, RUNNER-3, MEM-1, OPT-1, ARCH-4).
 
 ## Difficulty
 

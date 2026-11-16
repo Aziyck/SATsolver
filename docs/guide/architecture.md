@@ -736,8 +736,8 @@ when its port is busy instead of moving to the next one.
   are not a password.
 - A page on another website can still make the user's browser send requests
   to `127.0.0.1`, so the middleware `LocalOnlyGuard` (`sat_web/api.py`) makes
-  two checks in front of every route, static files and the WebSocket
-  included.
+  three checks in front of every route, static files and the WebSocket
+  included, and adds two headers to every reply.
   - It answers 403 when an `Origin` header names a host that is not allowed.
     A script on another site can send a POST or open a WebSocket to the
     server; the browser adds `Origin` to those, and the script cannot change
@@ -747,6 +747,20 @@ when its port is busy instead of moving to the next one.
     stops DNS rebinding: a hostile site changes its own name to resolve to
     127.0.0.1, so that its page and the server look like one site to the
     browser. The request then still carries the hostile name in `Host`.
+  - It answers 403 to a request under `/api` whose `Sec-Fetch-Site` header
+    is `cross-site`. A browser sends no `Origin` when another site loads a
+    URL as an image or a frame, but it does send this header, and a page
+    cannot change it. The pages themselves are not checked, so a link from
+    another site still opens the app; curl sends no `Sec-Fetch-Site`.
+    Browsers send the header only to `localhost`, `127.0.0.1` and https
+    sites, so a server reached under `--host` by a plain-http LAN name does
+    not get this check (audit item A26).
+  - Every reply (except the bare 500 of an unhandled error, which is sent
+    outside the middleware) carries `Content-Security-Policy: frame-ancestors 'self'`
+    and `X-Frame-Options: SAMEORIGIN`, so only the app itself may show its
+    pages in a frame (the Learn page frames `/visualisations/`). Another
+    site cannot lay the app under a transparent overlay and steer the
+    user's clicks onto Cancel or Delete.
 
   The allowed names are `Settings.allowed_hosts`: `localhost`, `127.0.0.1`
   and `[::1]`, plus the names in `WIZSAT_ALLOWED_HOSTS`, compared exactly
@@ -754,8 +768,8 @@ when its port is busy instead of moving to the next one.
   port use the API; it also means every page served from `localhost` is
   trusted. The launcher adds its `--host` value to that variable, and a
   value that is not a plain name or address stops the start. The reasons are
-  in [ADR 0002](../adr/0002-origin-and-host-checks.md). Not covered yet:
-  another site can still show the app in a frame (audit item A13).
+  in [ADR 0002](../adr/0002-origin-and-host-checks.md); the last two checks
+  come from audit item A13.
 - Size limits refuse a request before it can exhaust memory:
 
   | Limit | Defined in | Bounds |

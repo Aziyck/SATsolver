@@ -20,8 +20,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from starlette.datastructures import Headers
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES, ProblemSpec
@@ -222,6 +222,21 @@ class LocalOnlyGuard:
       otherwise). Browsers add it to every cross-site POST, fetch and
       WebSocket, and a page cannot forge it. Requests without it (curl,
       scripts, same-origin page loads) pass.
+
+    A browser sends no Origin on a navigation, a frame or an image load, so
+    two more rules cover those (audit item A13):
+
+    - /api refuses Sec-Fetch-Site: cross-site (403), which stops another
+      site from loading API URLs as images or frames. The page itself stays
+      open to links from other sites; curl sends no Sec-Fetch-Site and passes.
+    - Every reply forbids framing by another site, so a page cannot lay the
+      app under a transparent overlay and steer the user's clicks. (The bare
+      500 for an unhandled error is sent outside this middleware; it has
+      nothing to click.)
+
+    Browsers send Sec-Fetch-Site only to trustworthy origins (localhost,
+    127.0.0.1, https), so under --host on a plain-http LAN name only the
+    framing headers apply (audit item A26).
     """
 
     def __init__(self, app: ASGIApp, allowed_hosts: Collection[str]) -> None:
@@ -234,19 +249,36 @@ class LocalOnlyGuard:
             return
         headers = Headers(scope=scope)
         origin = headers.get("origin")
+        path = scope["path"]
         refusal: Response
         if header_host(headers.get("host")) not in self.allowed_hosts:
             refusal = PlainTextResponse(HOST_REFUSED, status_code=400)
         elif origin is not None and origin_host(origin) not in self.allowed_hosts:
             refusal = JSONResponse({"detail": "Requests from this Origin are not allowed"}, status_code=403)
+        elif (path == "/api" or path.startswith("/api/")) and headers.get("sec-fetch-site") == "cross-site":
+            refusal = JSONResponse({"detail": "Requests from another site are not allowed"}, status_code=403)
         else:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, _no_foreign_frames(send))
             return
         if scope["type"] == "websocket":
             # A close before accept() refuses the handshake (HTTP 403).
             await send({"type": "websocket.close", "code": 1008})
         else:
-            await refusal(scope, receive, send)
+            await refusal(scope, receive, _no_foreign_frames(send))
+
+
+def _no_foreign_frames(send: Send) -> Send:
+    """Add the headers that forbid framing by another site to an HTTP reply."""
+
+    async def wrapped(message: Message) -> None:
+        if message["type"] == "http.response.start":
+            headers = MutableHeaders(scope=message)
+            # frame-ancestors for current browsers, X-Frame-Options for those that ignore CSP.
+            headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+            headers["X-Frame-Options"] = "SAMEORIGIN"
+        await send(message)
+
+    return wrapped
 
 
 HOST_REFUSED = (

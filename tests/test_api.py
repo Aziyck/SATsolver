@@ -46,8 +46,12 @@ def local_client(settings: Settings) -> TestClient:
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
-        self.client = local_client(make_settings(self.folder.name))
+        self.client = local_client(make_settings(self.folder.name, self.make_dist(Path(self.folder.name))))
         self.client.__enter__()
+
+    def make_dist(self, folder: Path) -> Path | None:
+        """A built frontend to serve, for tests that need the page; none by default."""
+        return None
 
     def tearDown(self):
         self.client.__exit__(None, None, None)
@@ -367,6 +371,47 @@ class OriginAndHostTests(ApiTestCase):
             allow_host("0.0.0.0")
             allow_host("::")
             self.assertEqual(Settings().allowed_hosts[3:], ["wizsat.lan", "192.168.1.20"])
+
+
+class FramingAndFetchSiteTests(ApiTestCase):
+    """Another site may neither frame the app nor make the browser call the API (audit item A13)."""
+
+    def make_dist(self, folder):
+        dist = folder / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text("<html>app</html>")
+        return dist
+
+    def assert_not_frameable(self, response):
+        self.assertEqual(response.headers.get("content-security-policy"), "frame-ancestors 'self'", response.url)
+        self.assertEqual(response.headers.get("x-frame-options"), "SAMEORIGIN", response.url)
+
+    def test_page_and_api_replies_refuse_foreign_frames(self):
+        # The Learn page frames /visualisations/ itself, which 'self' allows.
+        for path in ("/", "/benchmarks/results", "/api/jobs", "/api/missing", "/visualisations/cdcl/"):
+            self.assert_not_frameable(self.client.get(path))
+        # Refusals too: a frame showing an error page is still a frame.
+        self.assert_not_frameable(self.client.get("/api/jobs", headers={"Origin": "http://evil.example"}))
+
+    def test_cross_site_api_request_is_refused(self):
+        # An <img src="http://127.0.0.1:8000/api/..."> on another site sends no Origin, only this.
+        response = self.client.get("/api/jobs", headers={"Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(response.status_code, 403)
+        self.assert_not_frameable(response)
+        for site in (None, "same-origin", "same-site", "none"):
+            headers = {"Sec-Fetch-Site": site} if site else {}
+            self.assertEqual(self.client.get("/api/jobs", headers=headers).status_code, 200, site)
+
+    def test_cross_site_websocket_is_refused(self):
+        with self.assertRaises(WebSocketDisconnect):
+            with self.client.websocket_connect(f"ws://{LOCAL}/api/ws", headers={"Sec-Fetch-Site": "cross-site"}) as socket:
+                self.fail(f"connected and received {socket.receive_json()['type']}")
+
+    def test_link_from_another_site_still_opens_the_app(self):
+        headers = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+        response = self.client.get("/", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("app", response.text)
 
 
 class PersistenceTests(unittest.TestCase):

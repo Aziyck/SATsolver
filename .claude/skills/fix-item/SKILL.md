@@ -3,6 +3,7 @@ name: fix-item
 description: "Fix one review item (A3, B7) or one reported bug: reproduce it red, fix it, verify, close the item."
 argument-hint: "[item ID such as A3, or a pasted bug report]"
 disable-model-invocation: true
+model: sonnet
 ---
 
 Fix exactly one item: $ARGUMENTS
@@ -77,10 +78,11 @@ column matches the baseline).
 
 ## 5. Verify
 
-Run every check of "Before you finish" in `AGENTS.md` that applies, after the
-last edit. For a medium or hard item, also run `/code-review` on the diff and
-fix what it confirms; a confirmed finding outside this item is filed as a new
-finding instead.
+For a medium or hard item, first run `/code-review` on the diff, at `medium`
+for a medium item and `high` for a hard one, and fix what it confirms; a
+confirmed finding outside this item is filed as a new finding instead. Then
+run every check of "Before you finish" in `AGENTS.md` that applies, once,
+after the last edit.
 
 If the loop will not go green after three different attempts, stop: write the
 `Escalate:` line on the item, leave it open, and report what was tried.

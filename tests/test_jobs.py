@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 
 from sat_core.dimacs import parse_dimacs
-from sat_core.jobs import execute_job
+from sat_core.jobs import execute_job, solve_job
+from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_DONE,
@@ -71,6 +72,13 @@ class JobTests(unittest.TestCase):
     def test_unknown_kind_or_problem(self):
         self.assertEqual(run("dance", {})[-1].type, EVENT_ERROR)
         self.assertEqual(run("solve", {"problem": "chess"})[-1].type, EVENT_ERROR)
+
+    def test_solve_job_refuses_a_negative_timeout(self):
+        # The API refuses it too, but solve_job is also reached without the API (audit item A10).
+        for timeout in (-1, "abc"):
+            with self.subTest(timeout=timeout), self.assertRaises(ParamError) as caught:
+                solve_job({"problem": "n_queens", "params": {"size": 4}, "solver": "cdcl", "timeout": timeout}, None, lambda event: None, RunToken())
+            self.assertIn("timeout", caught.exception.errors)
 
     def test_timeout_is_reported_as_a_result(self):
         events = run("solve", {"problem": "n_queens", "params": {"size": 8}, "solver": "cdcl", "timeout": 0})

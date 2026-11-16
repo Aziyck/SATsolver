@@ -246,7 +246,9 @@ def _parse_rules(raw_rules: Any) -> list[LimitRule]:
     return rules
 
 
-def _parse_timeout(raw: Any) -> float | None:
+def parse_timeout(raw: Any) -> float | None:
+    """A timeout in seconds; blank means none. Shared by benchmarks, solve jobs and the API."""
+
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
     try:
@@ -328,7 +330,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
     workers = _parse_workers(raw.get("workers", 1))
     solvers = _parse_solvers(raw.get("solvers"))
     rules = _parse_rules(raw.get("rules"))
-    timeout = _parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
+    timeout = parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
 
     cases: list[BenchmarkCase] = []
     for segment_index, segment in enumerate(segments):

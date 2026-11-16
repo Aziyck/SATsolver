@@ -120,16 +120,23 @@ def _json_default(value: Any) -> Any:
 
 
 def check_field_order(fields: Iterable[ParamField]) -> None:
-    """show_if may only reference fields declared earlier (keeps expansion simple)."""
+    """show_if may only reference fields declared earlier (keeps expansion simple), and only
+    fields that are always shown: the server gives a hidden field its default while the frontend
+    keeps reading the value the form still holds, so the two would disagree on a chain (A21)."""
 
     seen: set[str] = set()
+    conditional: set[str] = set()
     for field in fields:
         for other, _allowed in field.show_if:
             if other not in seen:
                 raise ValueError(f"{field.name} depends on {other}, which must be declared before it")
+            if other in conditional:
+                raise ValueError(f"{field.name} depends on {other}, which has a show_if of its own")
         if field.name in seen:
             raise ValueError(f"Duplicate parameter name {field.name}")
         seen.add(field.name)
+        if field.show_if:
+            conditional.add(field.name)
 
 
 # ---------------------------------------------------------------------------

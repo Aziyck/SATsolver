@@ -134,8 +134,10 @@ Python is enough.
 | `short="n"` | the field is part of the case label (`n=50 r=4.26 ...`) |
 | `advanced=True` | the field sits under "Advanced options" |
 
-A field may only depend (`show_if`) on fields declared before it;
-`check_field_order` enforces this when the problem is registered. Report bad
+A field may only depend (`show_if`) on fields declared before it and
+shown always (no `show_if` of their own: the server and the form would
+disagree about a field hidden behind a hidden one); `check_field_order`
+enforces both when the problem is registered. Report bad
 values as `ParamError({field_name: message})`: the API returns them as
 `422 {"message", "errors"}` and the forms show each message at its field.
 

@@ -1,5 +1,7 @@
 import unittest
 
+from problems import all_problems
+from problems.base import ProblemSpec, register_problem
 from sat_core.params import (
     Choice,
     ParamError,
@@ -87,6 +89,22 @@ class SweepTests(unittest.TestCase):
     def test_field_order_is_checked(self):
         with self.assertRaises(ValueError):
             check_field_order((ParamField("p", "P", "float", show_if=(("mode", ("a",)),)),))
+
+    def test_show_if_may_not_name_a_conditional_field(self):
+        # The server resets a hidden field to its default, the frontend reads the value the form
+        # still holds, so a condition on a conditional field is shown differently by the two (A21).
+        class Chained(ProblemSpec):
+            key = "chained_show_if"
+            title = "Chained show_if"
+            fields = (
+                ParamField("a", "A", "choice", default="x", choices=(Choice("x", "X"), Choice("y", "Y"))),
+                ParamField("b", "B", "choice", default="b0", choices=(Choice("b0", "B0"), Choice("b1", "B1")), show_if=(("a", ("x",)),)),
+                ParamField("c", "C", "int", default=1, show_if=(("b", ("b1",)),)),
+            )
+
+        with self.assertRaisesRegex(ValueError, "c depends on b"):
+            register_problem(Chained)
+        self.assertNotIn("chained_show_if", [spec.key for spec in all_problems()])
 
 
 class StructuredValueTests(unittest.TestCase):

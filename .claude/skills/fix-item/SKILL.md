@@ -4,6 +4,7 @@ description: "Fix one review item (A3, B7) or one reported bug: reproduce it red
 argument-hint: "[item ID such as A3, or a pasted bug report]"
 disable-model-invocation: true
 model: sonnet
+effort: high
 ---
 
 Fix exactly one item: $ARGUMENTS
@@ -91,9 +92,10 @@ If the loop will not go green after three different attempts, stop: write the
 
 1. Close the item in its file and update the docs for the area, as
    `docs/plans/README.md` and the docs table in `AGENTS.md` describe.
-2. Commit with the ID first in the subject (`A3: reopen old ProbSAT
-   benchmarks`). The body states the cause in one sentence and lists any
-   rulings.
-3. Branch and pull request as "Working on items" in `AGENTS.md` says.
-4. Report to the owner: what was wrong, what changed, each check with its
-   result, rulings, and any new items you filed.
+2. Hand the writing to the `pr-writer` agent (`.claude/agents/pr-writer.md`).
+   Its brief: the item ID, the branch, the cause in one sentence, each check
+   with its result, rulings, review findings left and why, and new items
+   filed.
+3. Commit and open the pull request with its `COMMIT` and `PR BODY` text
+   unchanged, as "Working on items" in `AGENTS.md` says.
+4. Report to the owner: its `REPORT` text, with the pull request link.

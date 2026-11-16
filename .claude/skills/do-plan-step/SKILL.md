@@ -4,6 +4,7 @@ description: "Build one task of a plan in docs/plans (the next open one, or a na
 argument-hint: "[plan file name or task ID; empty for the next task in the work queue]"
 disable-model-invocation: true
 model: sonnet
+effort: high
 ---
 
 Build exactly one plan task: $ARGUMENTS
@@ -85,8 +86,10 @@ the `Escalate:` line on the task, leave it open, and report what was tried.
    line to done. Update the docs the task names and those for the area
    (`docs/plans/README.md`, docs table in `AGENTS.md`). Measured numbers go
    where the plan says.
-2. Commit with the ID first in the subject (`META-1: collect the run
-   environment`). The body lists any rulings and measurements.
-3. Branch and pull request as "Working on items" in `AGENTS.md` says.
-4. Report to the owner: what was built, each check with its result, rulings,
-   measurements, new findings filed, and which task can start next.
+2. Hand the writing to the `pr-writer` agent (`.claude/agents/pr-writer.md`).
+   Its brief: the task ID, the branch, each check with its result, rulings,
+   measurements, review findings left and why, new findings filed, and which
+   task can start next.
+3. Commit and open the pull request with its `COMMIT` and `PR BODY` text
+   unchanged, as "Working on items" in `AGENTS.md` says.
+4. Report to the owner: its `REPORT` text, with the pull request link.

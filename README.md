@@ -39,19 +39,11 @@ results are kept in a small SQLite database under `output/`.
 
 ## Screenshots
 
-> [Screenshot placeholder: `docs/images/solve.png` - the Solve page with a
-> 3-colored random graph and the "Verified" badge]
+![The Solve page with a 3-colored random graph](docs/images/solve.png)
 
-> [Screenshot placeholder: `docs/images/benchmark-results.png` - results of the
-> "Random 3-SAT phase transition" preset: median time and SAT/UNSAT share by
-> ratio]
+![Results of the "Random 3-SAT phase transition" preset](docs/images/benchmark-results.png)
 
-> [Screenshot placeholder: `docs/images/benchmark-builder.png` - the benchmark
-> builder with a parameter grid, two solvers and the DPLL limit rule]
-
-To add them, save the images under `docs/images/` (see
-[docs/images/README.md](docs/images/README.md)) and replace each placeholder
-with `![Description](docs/images/<name>.png)`.
+![the benchmark builder with a parameter grid and two solvers](docs/images/benchmark-builder.png)
 
 ## Requirements
 

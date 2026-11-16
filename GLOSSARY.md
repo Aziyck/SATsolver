@@ -48,8 +48,10 @@ documents; this file only pins the meaning.
 | instance | One concrete CNF built from a problem and its parameters (`ProblemInstance`). |
 | solver | A registered `SolverSpec`: `cdcl`, `dpll`, `walksat`, `probsat`. |
 | solver options | The values of a solver's parameter fields for one run. |
+| registry | The table, keyed by name, of everything of one kind the app knows: problems (`problems/base.py`, filled by `@register_problem`) and solvers (`sat_core/solver_registry.py`). Code looks a thing up by its key instead of branching on names. Filled when the module is imported. |
 | job | One unit of work the server runs in its own process: a solve, an encode (kind `generate`) or a benchmark. Shown as J1, J2, ... |
 | job id | The number in J12. Not reused while any job exists. |
+| daemon | Python's meaning, not the Unix one. A daemon process is killed when its parent exits and may not start child processes; a daemon thread does not keep its process alive. Job processes are not daemons. See [architecture](docs/guide/architecture.md#daemons-and-the-watchdog). |
 | seed | The number that makes a random instance or a random solver choice reproducible. |
 | planted SAT | A random formula built around a hidden model, so it is satisfiable by construction. |
 | forced UNSAT | A random formula with a small contradictory core added, so it is unsatisfiable by construction. |
@@ -71,7 +73,7 @@ documents; this file only pins the meaning.
 | limit rule | "For this solver, from this many variables on: cap the time, or skip." Skip wins over cap; the smallest cap applies. |
 | `size_variables` | The size a limit rule compares against: n for Random 3-SAT, the header count for DIMACS, else the number of distinct variables. |
 | preset | A ready-made benchmark request. |
-| workers | How many cases a benchmark solves at the same time (default 1). Changes timings, never rows. |
+| workers | How many cases a benchmark solves at the same time (default 1). Changes the measured times and the order in which rows arrive, never which rows exist, their indices or their answers. |
 | graph suite | Several graph problems in one benchmark, run on the same graphs. |
 
 ## Search solvers (DPLL, CDCL)

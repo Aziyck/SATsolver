@@ -610,7 +610,10 @@ Two mechanisms make the result correct regardless of order:
   incoming `instance`, `result` and `row` events for that job and merges
   them into the reply when it arrives. Nothing is delayed; this happens in
   the browser, only during the fetch. Rows are merged by index, so a row
-  that arrives twice is stored once.
+  that arrives twice is stored once. The merge only happens for fetches
+  wrapped in `trackFetch`, so every fetch of `["rows", id]` goes through
+  `rowsOptions(id)` (`api/queries.ts`): `useRows` and the runs compared on
+  the results page alike.
 
 Logs use neither. Live lines are appended in arrival order, and a fetched
 log replaces the live one only when it is longer.

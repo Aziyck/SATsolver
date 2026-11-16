@@ -76,7 +76,7 @@ tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),
                  adr/ (decisions), report/ (thesis material)
-.claude/         skills/ (fix-item, do-plan-step, writing-for-agents), hooks/
+.claude/         skills/ (fix-item, do-plan-step, writing-for-agents), hooks/, agents/ (pr-writer)
 ```
 
 ## How a request flows
@@ -263,6 +263,10 @@ and on pull requests: lint and Python tests on Ubuntu (3.10, 3.13) and Windows
 
 ## Conventions
 
+- Replies and progress updates in a session: shortest form that stays
+  clear. Grammar may go for concision (fragments, no articles). Commit
+  messages, pull requests and docs are read later without the session's
+  context: full sentences there.
 - Python 3.10+, standard library `unittest`, no new runtime dependencies
   without a good reason (the solvers are pure Python on purpose).
 - Use ASCII in Python source and docs. The UI may use typographic symbols

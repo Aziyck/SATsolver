@@ -41,10 +41,13 @@ one-line edit:
 
 | Difficulty | Model | Review before the item is closed |
 |---|---|---|
-| easy | Sonnet, high effort | the checks in "Before you finish" |
+| easy | Sonnet, medium effort | the checks in "Before you finish" |
 | medium | Sonnet, high effort | plus `/code-review` on the diff; fix what it confirms |
 | hard | the strongest model available (Opus), or Sonnet followed by a `/code-review` run on the stronger model | plus, for solver items, unchanged conflict counts and timings |
 
+- `/fix-item` and `/do-plan-step` run on Sonnet at high effort for every
+  item: a skill's effort is set when it starts, before it has read the
+  item's difficulty.
 - If the session's model is below the item's level, say so before starting
   and let the owner choose: switch model, or proceed with the stronger review.
 - After three failed attempts at an item's "done when", stop and write the
@@ -56,7 +59,8 @@ one-line edit:
   no context and re-reads the codebase, so parallel implementers multiply the
   token cost without making a one-item change faster.
 - Use a subagent for read-only research, for the long wait described below,
-  or when the owner asks for one. One at a time unless the owner asks for
+  for the closing text (`pr-writer`, on Opus: the commit message, pull
+  request and owner report), or when the owner asks for one. One at a time unless the owner asks for
   more.
 
 ## Long-running work

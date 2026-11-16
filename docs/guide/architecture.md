@@ -330,8 +330,8 @@ change to the rule must be made in all three. One set of cases,
 (`tests/test_show_if_agreement.py`, `frontend/src/lib/visibility.test.ts`)
 and must give the same visible fields. The sides agree for direct
 conditions only: a field that depends on a field that is itself conditional
-would be shown differently, so no registered field may do that (audit item
-A21).
+would be shown differently, so `check_field_order` refuses such a field
+when its problem or solver is registered.
 
 ## Jobs
 

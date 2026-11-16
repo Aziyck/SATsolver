@@ -40,10 +40,10 @@ from typing import Any, Iterable
 
 from problems import get_problem
 from problems.base import ProblemSpec
+from sat_core.answers import judge_answer
 from sat_core.models import (
     STATUS_CANCELLED,
     STATUS_ERROR,
-    STATUS_SAT,
     STATUS_SKIPPED,
     BenchmarkRow,
 )
@@ -61,7 +61,6 @@ from sat_core.runtime import (
 )
 from sat_core.seeds import fresh_seed, repeat_seed
 from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
-from sat_core.verify import check_assignment
 
 
 MAX_BENCHMARK_RUNS = 200_000
@@ -598,20 +597,7 @@ def run_case(plan: BenchmarkPlan, case: BenchmarkCase, add, event_callback=None,
         if result.status == STATUS_CANCELLED:
             return False
 
-        verified = None
-        check_errors: list[str] = []
-        decoded = None
-        if result.status == STATUS_SAT:
-            verified = check_assignment(instance.clauses, result.solution)
-            if not verified:
-                check_errors.append("the model does not satisfy every clause")
-            try:
-                decoded = spec.decode(instance, result.solution)
-                if decoded is not None:
-                    check_errors.extend(spec.check(instance, decoded))
-            except Exception as exc:  # noqa: BLE001
-                check_errors.append(f"decoding failed: {exc}")
-            verified = verified and not check_errors
+        verdict = judge_answer(spec, instance, result)
 
         add(
             _row(
@@ -622,13 +608,13 @@ def run_case(plan: BenchmarkPlan, case: BenchmarkCase, add, event_callback=None,
                 index,
                 status=result.status,
                 elapsed=result.elapsed,
-                verified=verified,
-                check_errors=check_errors,
+                verified=verdict.verified,
+                check_errors=verdict.errors,
                 stats=result.stats,
                 timeout=timeout,
                 rule="skipped by user" if result.status == STATUS_SKIPPED else rule_text,
                 error=result.error,
-                decoded=_small(decoded),
+                decoded=_small(verdict.decoded),
             )
         )
 

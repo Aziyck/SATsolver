@@ -177,7 +177,7 @@ Who imports whom, module by module:
 flowchart TD
     frontend["frontend/"]
     web["sat_web/<br/>api, manager, store, config"]
-    engine["sat_core engine<br/>jobs, benchmark, solver_registry, parallel, presets"]
+    engine["sat_core engine<br/>answers, jobs, benchmark, solver_registry, parallel, presets"]
     problems["problems/"]
     solvers["solvers/"]
     base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify"]
@@ -344,7 +344,7 @@ server process directly, on a worker thread.
 | Kind | Body (`sat_core/jobs.py`) | Produces |
 |---|---|---|
 | `generate` | build the instance | instance event, `instance.cnf` |
-| `solve` | build, run the solver, decode, verify | instance and result events, `instance.cnf`, `model.txt` |
+| `solve` | build, run the solver, judge the answer (`sat_core/answers.py`) | instance and result events, `instance.cnf`, `model.txt` |
 | `benchmark` | expand the plan, run every case with every solver | one row event per run |
 
 Why processes and not threads:

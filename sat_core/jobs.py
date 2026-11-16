@@ -20,9 +20,10 @@ from typing import Any, Callable
 
 from problems import get_problem
 from problems.base import ProblemSpec
+from sat_core.answers import judge_answer
 from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
-from sat_core.models import STATUS_CANCELLED, STATUS_SAT, ProblemInstance
+from sat_core.models import STATUS_CANCELLED, ProblemInstance
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -36,7 +37,6 @@ from sat_core.runtime import (
     RunToken,
 )
 from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
-from sat_core.verify import check_assignment
 
 
 JOB_KINDS = ("solve", "generate", "benchmark")
@@ -139,26 +139,16 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
         cancel_token=token,
     )
 
-    decoded = None
-    verified = None
-    check_errors: list[str] = []
+    verdict = judge_answer(spec, instance, result)
     model_file = None
-    if result.status == STATUS_SAT and result.solution is not None:
-        verified = check_assignment(instance.clauses, result.solution)
-        if not verified:
-            check_errors.append("the model does not satisfy every clause")
-        try:
-            decoded = spec.decode(instance, result.solution)
-            if decoded is not None:
-                check_errors.extend(spec.check(instance, decoded))
-        except Exception as exc:  # noqa: BLE001
-            check_errors.append(f"decoding failed: {exc}")
-        verified = verified and not check_errors
+    if verdict.verified is not None:
         model_file = write_model(workdir, result.solution)
         emit_event(
             RunEvent(
                 EVENT_LOG,
-                "Verified: every clause is satisfied" if verified else "Verification FAILED: " + "; ".join(check_errors[:3]),
+                "Verified: every clause is satisfied"
+                if verdict.verified
+                else "Verification FAILED: " + "; ".join(verdict.errors[:3]),
             )
         )
 
@@ -177,9 +167,9 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
                 "status": result.status,
                 "elapsed": result.elapsed,
                 "stats": result.stats,
-                "decoded": decoded,
-                "verified": verified,
-                "check_errors": check_errors,
+                "decoded": verdict.decoded,
+                "verified": verdict.verified,
+                "check_errors": verdict.errors,
                 "expected": expected,
                 "timeout": timeout,
                 "error": result.error,

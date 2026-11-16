@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-11-13)
 - **Decided by:** the repository owner, after the research recorded in
-  `docs/plans/agent-workflow.md`
+  `docs/plans/done/agent-workflow.md`
 
 ## Context
 

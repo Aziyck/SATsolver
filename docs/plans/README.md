@@ -20,7 +20,7 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 1. **Must-fix findings:** [audit](../reviews/2026-10-16-audit.md) A1, A2, A3.
    They are bugs in what already ships (security, a machine-freezing input,
    old results that cannot be opened).
-2. **Frontend tests:** [frontend-tests.md](frontend-tests.md), aimed at the
+2. **Frontend tests:** [done/frontend-tests.md](done/frontend-tests.md), aimed at the
    screens the features below will change (done).
 3. **Features, in this order:**
    [run-metadata.md](run-metadata.md), then
@@ -39,12 +39,12 @@ being touched anyway:
 | File | What | Waits on |
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | A1-A12 whole-repo findings, B1-B17 solver simplification | nothing |
-| [frontend-tests.md](frontend-tests.md) | component tests for the result and settings screens (done) | - |
+| [done/frontend-tests.md](done/frontend-tests.md) | component tests for the result and settings screens (done) | - |
 | [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | audit B6-B9 |
-| [agent-workflow.md](agent-workflow.md) | how this workflow was chosen (done) | - |
+| [done/agent-workflow.md](done/agent-workflow.md) | how this workflow was chosen (done) | - |
 
 To list every open item: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.
 
@@ -119,7 +119,8 @@ as the work.
   the `Escalate:` line and leave the item open. A wrong fix that looks done
   costs more than an open item.
 - When every task of a plan is closed, set its status line to
-  `done (date)` and move decisions worth keeping into an ADR.
+  `done (date)`, move decisions worth keeping into an ADR, and move the file
+  to `docs/plans/done/` (fix its relative links and the links to it).
 - A **new finding** met along the way (a bug, a weak spot, a review finding
   left unfixed) is filed the moment it is found: a new item at the end of the
   newest file in `docs/reviews/`, next free ID, marked

@@ -1,13 +1,13 @@
 # Plan: a workflow for agent-driven fixes and features
 
 - **Status:** done (2026-11-13). The decisions are recorded in
-  [ADR 0001](../adr/0001-agent-workflow.md); the rules live in
-  [README.md](README.md), `AGENTS.md` and `CLAUDE.md`.
+  [ADR 0001](../../adr/0001-agent-workflow.md); the rules live in
+  [README.md](../README.md), `AGENTS.md` and `CLAUDE.md`.
 - **Written:** 2026-10-23, against commit `189c2bf`
-- **Related:** [2026-10-16 audit](../reviews/2026-10-16-audit.md),
-  [solver optimisations](solver-optimisations.md),
-  [PyPy solver runner](pypy-solver-runner.md), [run metadata](run-metadata.md),
-  [memory measurement](memory-measurement.md)
+- **Related:** [2026-10-16 audit](../../reviews/2026-10-16-audit.md),
+  [solver optimisations](../solver-optimisations.md),
+  [PyPy solver runner](../pypy-solver-runner.md), [run metadata](../run-metadata.md),
+  [memory measurement](../memory-measurement.md)
 
 This file is kept as the record of the research and of what was decided. The
 sections up to "What was done" describe the state on 2026-10-23, before the
@@ -124,12 +124,12 @@ and a done-when test), only if that is done by hand often.
 
 ## What was done (2026-11-13)
 
-- [x] **WF-1. Item format with "done when", "needs decision", "blocked by" and difficulty** - Done 2026-11-13. Defined in [README.md](README.md); applied to the audit and every plan.
+- [x] **WF-1. Item format with "done when", "needs decision", "blocked by" and difficulty** - Done 2026-11-13. Defined in [README.md](../README.md); applied to the audit and every plan.
 - [x] **WF-2. One owner per item** - Done 2026-11-13. Audit A2 owns the renumbering (OPT-4 points to it); A11 owns `cdcl_debug` (B14 points to it).
-- [x] **WF-3. A "what's next" index** - Done 2026-11-13. "Order of work" in [README.md](README.md).
+- [x] **WF-3. A "what's next" index** - Done 2026-11-13. "Order of work" in [README.md](../README.md).
 - [x] **WF-4. Steps sized to one commit** - Done 2026-11-13. The runner is RUNNER-1 to RUNNER-10; the run metadata became its own plan (META-1 to META-5).
-- [x] **WF-5. Closing rule and statuses** - Done 2026-11-13. In [README.md](README.md); "Before you finish" in `AGENTS.md` points to it.
-- [x] **WF-6. Names instead of line numbers** - Done 2026-11-13. The audit was rewritten; the rule is in [README.md](README.md).
+- [x] **WF-5. Closing rule and statuses** - Done 2026-11-13. In [README.md](../README.md); "Before you finish" in `AGENTS.md` points to it.
+- [x] **WF-6. Names instead of line numbers** - Done 2026-11-13. The audit was rewritten; the rule is in [README.md](../README.md).
 - [x] **WF-7. Tooling** - Done 2026-11-13. SessionStart hook for cloud sessions, `WIZSAT_REQUIRE_API_TESTS`, `ruff` with `pyproject.toml`, both in CI.
 - [x] **WF-8. Glossary and ADRs** - Done 2026-11-13. `GLOSSARY.md`; `docs/adr/` with a template and ADR 0001.
 - [x] **WF-9. Leaner `AGENTS.md` and a code-to-docs table** - Done 2026-11-13.

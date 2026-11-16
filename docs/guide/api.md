@@ -60,6 +60,7 @@ Everything the UI needs to draw its forms:
   "version": "2.0.0",
   "problems": [ProblemSpec, ...],
   "solvers": [SolverSpec, ...],
+  "stats": [StatSpec, ...],
   "presets": [Preset, ...],
   "log_levels": ["normal", "periodic", "debug"],
   "limits": {"max_clauses": 2000000, "max_benchmark_runs": 200000, "max_workers": 4},
@@ -74,7 +75,11 @@ Everything the UI needs to draw its forms:
 A `ProblemSpec` has `key`, `title`, `summary`, `description`, `category`,
 `image`, `result_view` (`sudoku`, `queens`, `graph` or `assignment`),
 `graph_based` and `fields`. A `SolverSpec` has `key`, `title`, `complete`,
-`summary`, `description` and `fields`. Each field:
+`summary`, `description` and `fields`. A `StatSpec` declares one statistic a
+solver reports: `key`, `label`, `short` (the name in the log line; empty when
+the log leaves it out), `help` (one line), `unit`, `csv` (a column of the
+benchmark CSV) and `chart` (a chart measure). The list is in the order of the
+log summary and the CSV columns. Each field:
 
 ```json
 {

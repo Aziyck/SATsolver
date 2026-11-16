@@ -261,9 +261,10 @@ instance = spec.build(params)
 
 Everything about Sudoku lives in `problems/sudoku.py`.
 
-`GET /api/catalog` sends both registries to the browser. The frontend builds
-forms, the benchmark builder, CSV columns and labels from the field
-declarations, so adding a problem or solver option needs no frontend change
+`GET /api/catalog` sends both registries, and the list of solver statistics
+(`STAT_SPECS` in `sat_core/solver_registry.py`, which also decides the CSV
+columns and the log summary), to the browser. The frontend builds forms and
+the benchmark builder from the field declarations, so adding a problem or solver option needs no frontend change
 unless the answer needs a new kind of drawing. See
 [Adding a problem or solver](adding-a-problem.md).
 

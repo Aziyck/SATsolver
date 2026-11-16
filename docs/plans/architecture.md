@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** proposed, not started
+- **Status:** in progress (ARCH-1 and ARCH-2 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -120,7 +120,7 @@ fails. Parameter fields solved the same problem by being declared once in
 Python and sent with `GET /api/catalog`; statistics should travel the same
 way.
 
-- [ ] **ARCH-2. Every statistic is declared once, in Python**
+- [x] **ARCH-2. Every statistic is declared once, in Python** - Done 2026-11-16.
   - **Difficulty:** medium
   - **How:** a `StatSpec` per statistic in `sat_core/solver_registry.py`,
     next to `public_stats`:
@@ -140,6 +140,18 @@ way.
     `STAT_COLUMNS` and `_STATS_SUMMARY_KEYS` are derived from the list, in
     its order. `GET /api/catalog` returns it as `"stats"`. Mirror the shape in
     `frontend/src/api/types.ts`.
+
+    Built as written, with details the plan left open. A statistic the log
+    summary leaves out has `short=""`. `elapsed` is in the catalog because
+    solvers report it (the frontend keeps it a built-in measure, as ARCH-3
+    says). The catalog order is the log-summary order, and the CSV entries
+    are a subset in that same order, so both outputs are unchanged.
+    `chart=True` is set on the five measures `METRICS` lists today
+    (decisions, conflicts, propagations, learned clauses, flips). The sort
+    columns of `BenchmarkResults.tsx` are only three of them, so ARCH-3
+    changes what the table can sort by when it derives both from `chart`.
+    `STATS` in `format.ts` also has `timeout`, which no solver reports;
+    ARCH-3 decides where it goes.
   - **Done when:** a test runs every registered solver on a small SAT and a
     small UNSAT formula and finds every key of its `public_stats` in the
     catalog; the CSV of a fixed benchmark is byte-identical before and after

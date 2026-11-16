@@ -2,6 +2,7 @@ import csv
 import dataclasses
 import io
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from sat_core.benchmark import (
@@ -318,6 +319,33 @@ class CsvTests(unittest.TestCase):
         self.assertNotIn("sat_percent", table[0])
         self.assertEqual(table[0]["status"], "SAT")
         self.assertEqual(table[0]["verified"], "True")
+
+    def test_csv_of_a_fixed_benchmark_is_unchanged(self):
+        # Recorded before the statistics became a catalog (ARCH-2); the columns and values must not move.
+        # The elapsed column varies between runs, so it is blanked. The counts of the seeded local searches
+        # depend on the Python version's random module, so only whether they are filled is kept ("x").
+        raw = request(
+            problems=["random_3sat"],
+            segments=[{"variables": 20, "ratio": "3, 5", "seed": 1}],
+            solvers=[
+                {"solver": "cdcl"},
+                {"solver": "dpll"},
+                {"solver": "walksat", "options": {"random_seed": 3, "max_tries": 2, "max_flips": 500}},
+                {"solver": "probsat", "options": {"random_seed": 3, "max_tries": 2, "max_flips": 500}},
+            ],
+        )
+        table = list(csv.reader(io.StringIO(rows_to_csv(run_benchmark(parse_request(raw)), run_label="J1"))))
+        column = {name: index for index, name in enumerate(table[0])}
+        for row in table[1:]:
+            row[column["elapsed"]] = ""
+            if row[column["solver"]] in ("walksat", "probsat"):
+                for name in ("tries", "flips", "best_unsatisfied"):
+                    row[column[name]] = "x" if row[column[name]] != "" else ""
+        buffer = io.StringIO()
+        csv.writer(buffer, lineterminator="\n").writerows(table)
+
+        golden = Path(__file__).parent / "fixtures" / "benchmark_csv.golden.csv"
+        self.assertEqual(buffer.getvalue(), golden.read_text(encoding="utf-8").replace("\r\n", "\n"))
 
 
 if __name__ == "__main__":

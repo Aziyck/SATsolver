@@ -84,6 +84,23 @@ class CatalogTests(ApiTestCase):
         graph_fields = next(p for p in data["problems"] if p["key"] == "clique")["fields"]
         self.assertEqual(graph_fields[2]["show_if"], {"graph_mode": ["manual"]})
 
+    def test_catalog_declares_the_statistics(self):
+        stats = {entry["key"]: entry for entry in self.client.get("/api/catalog").json()["stats"]}
+
+        self.assertEqual(
+            stats["learned_clauses"],
+            {
+                "key": "learned_clauses",
+                "label": "Learned clauses",
+                "short": "learned",
+                "help": "Clauses CDCL derived from conflicts so it never repeats the same mistake.",
+                "unit": "",
+                "csv": True,
+                "chart": True,
+            },
+        )
+        self.assertFalse(stats["flip_break_total"]["csv"])
+
     def test_preview_and_field_errors(self):
         response = self.client.post("/api/problems/graph_coloring/preview", json={"params": {"nodes": 5, "probability": 1}})
         data = response.json()

@@ -18,6 +18,7 @@ const CATALOG: Catalog = {
       fields: [field({ name: "restarts", label: "Restarts", kind: "bool", default: true })],
     },
   ],
+  stats: [],
   presets: [],
   log_levels: ["normal"],
   limits: { max_clauses: 1, max_benchmark_runs: 1, max_workers: 1 },

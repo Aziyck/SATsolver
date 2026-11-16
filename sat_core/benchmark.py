@@ -60,7 +60,7 @@ from sat_core.runtime import (
     skip_requested,
 )
 from sat_core.seeds import fresh_seed, repeat_seed
-from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
+from sat_core.solver_registry import LOG_LEVELS, STAT_SPECS, get_solver, options_summary, run_solver
 
 
 MAX_BENCHMARK_RUNS = 200_000
@@ -629,16 +629,7 @@ def run_case(plan: BenchmarkPlan, case: BenchmarkCase, add, event_callback=None,
 # Export
 # ---------------------------------------------------------------------------
 
-STAT_COLUMNS = (
-    "decisions",
-    "conflicts",
-    "propagations",
-    "learned_clauses",
-    "restarts",
-    "tries",
-    "flips",
-    "best_unsatisfied",
-)
+STAT_COLUMNS = tuple(spec.key for spec in STAT_SPECS if spec.csv)
 BASE_COLUMNS = (
     "run",
     "case",

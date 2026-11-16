@@ -437,7 +437,7 @@ stateDiagram-v2
     running --> done: done event, process exited
     running --> failed: error event, or the process died or could not start
     cancelling --> cancelled: process exited
-    cancelling --> done: the done event was already on its way
+    cancelling --> done: the work was already finished
     cancelling --> failed: error event
     queued --> interrupted: server stopped
     running --> interrupted: server stopped
@@ -450,9 +450,13 @@ stateDiagram-v2
 - `running -> failed` has three causes: the job sent an error event, the
   process ended without sending any final event, or the process could not
   be started.
-- `cancelling -> done` is a matter of timing. The job had finished and sent
-  `done` before it could see the Stop; the event was still in the queue when
-  the user clicked.
+- `cancelling -> done` is a matter of timing: the Stop came after the work
+  was finished. A job body returns whether it did all its work, and
+  `execute_job` (`sat_core/jobs.py`) sends `done` or `cancelled` from that,
+  not from the cancel flag. A solve that has its result, an encode that has
+  its instance, or a benchmark that has every row ends `done`; a solve whose
+  solver returned `CANCELLED`, or a benchmark with rows missing, ends
+  `cancelled`.
 - `interrupted` is reached by two routes. On a normal shutdown the manager
   marks the jobs it stops. After a crash, the next start finds jobs saved as
   `queued`, `running` or `cancelling` and marks them. A job that was still

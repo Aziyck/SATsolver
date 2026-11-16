@@ -5,9 +5,11 @@ from pathlib import Path
 from sat_core.dimacs import parse_dimacs
 from sat_core.jobs import execute_job
 from sat_core.runtime import (
+    EVENT_CANCELLED,
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_INSTANCE,
+    EVENT_PROGRESS,
     EVENT_RESULT,
     EVENT_ROW,
     RunToken,
@@ -74,6 +76,81 @@ class JobTests(unittest.TestCase):
         events = run("solve", {"problem": "n_queens", "params": {"size": 8}, "solver": "cdcl", "timeout": 0})
 
         self.assertEqual(of_type(events, EVENT_RESULT)[0].payload["status"], "TIMEOUT")
+        self.assertEqual(events[-1].type, EVENT_DONE)
+
+
+def stop_on(kind, request, should_stop):
+    """Run a job and press Stop as soon as the job emits an event for which should_stop is true."""
+
+    token = RunToken()
+    events = []
+
+    def emit(event):
+        events.append(event)
+        if should_stop(event):
+            token.cancel()
+
+    execute_job(kind, request, None, emit, token)
+    return events
+
+
+class StopTimingTests(unittest.TestCase):
+    """A Stop ends a job as cancelled only when it cut the work short (audit item A18)."""
+
+    request = {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}
+
+    def test_stop_after_the_result_ends_done(self):
+        events = stop_on("solve", self.request, lambda event: event.type == EVENT_RESULT)
+
+        self.assertEqual(of_type(events, EVENT_RESULT)[0].payload["status"], "SAT")
+        self.assertEqual(events[-1].type, EVENT_DONE)
+
+    def test_stop_during_the_search_ends_cancelled(self):
+        # The Stop lands after the solver has asked the token a few times: inside the search,
+        # not at run_solver's check before it starts. 20 queens takes about 30 checks.
+        class StopMidSearch(RunToken):
+            checks = None
+
+            def is_cancelled(self):
+                if self.checks is not None:
+                    self.checks += 1
+                    if self.checks == 5:
+                        self.cancel()
+                return super().is_cancelled()
+
+        token = StopMidSearch()
+        events = []
+
+        def emit(event):
+            events.append(event)
+            if event.type == EVENT_PROGRESS and event.message.startswith("Solving"):
+                token.checks = 0
+
+        execute_job("solve", {**self.request, "params": {"size": 20}}, None, emit, token)
+
+        self.assertEqual(of_type(events, EVENT_RESULT)[0].payload["status"], "CANCELLED")
+        self.assertGreater(token.checks, 5)
+        self.assertEqual(events[-1].type, EVENT_CANCELLED)
+
+    def test_stop_before_the_search_ends_cancelled(self):
+        events = stop_on("solve", self.request, lambda event: event.type == EVENT_INSTANCE)
+
+        self.assertEqual(of_type(events, EVENT_RESULT), [])
+        self.assertEqual(events[-1].type, EVENT_CANCELLED)
+
+    benchmark = {"problems": ["n_queens"], "segments": [{"size": "4,5,6"}], "solvers": ["cdcl"]}
+
+    def test_stopped_benchmark_still_ends_cancelled(self):
+        # run_benchmark returns normally after a Stop, with the rows it finished.
+        events = stop_on("benchmark", self.benchmark, lambda event: event.type == EVENT_ROW)
+
+        self.assertLess(len(of_type(events, EVENT_ROW)), 3)
+        self.assertEqual(events[-1].type, EVENT_CANCELLED)
+
+    def test_stop_after_the_last_benchmark_row_ends_done(self):
+        events = stop_on("benchmark", self.benchmark, lambda event: event.type == EVENT_ROW and event.current == event.total)
+
+        self.assertEqual(len(of_type(events, EVENT_ROW)), 3)
         self.assertEqual(events[-1].type, EVENT_DONE)
 
 

@@ -22,7 +22,7 @@ from problems import get_problem
 from problems.base import ProblemSpec
 from sat_core.benchmark import display_params, parse_request, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
-from sat_core.models import STATUS_SAT, ProblemInstance
+from sat_core.models import STATUS_CANCELLED, STATUS_SAT, ProblemInstance
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -105,13 +105,14 @@ def _build_instance(request: dict[str, Any], workdir: str | None, emit_event: Em
     return spec, instance
 
 
-def generate_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> None:
+def generate_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> bool:
     emit_event(RunEvent(EVENT_PROGRESS, "Encoding", current=0, total=1))
     _build_instance(request, workdir, emit_event)
     emit_event(RunEvent(EVENT_PROGRESS, "Encoded", current=1, total=1))
+    return True
 
 
-def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> None:
+def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> bool:
     solver = get_solver(request.get("solver", "cdcl"))
     try:
         options = solver.parse_options(request.get("options"))
@@ -126,7 +127,7 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
     emit_event(RunEvent(EVENT_PROGRESS, "Encoding", current=0, total=2))
     spec, instance = _build_instance(request, workdir, emit_event)
     if token.is_cancelled():
-        return
+        return False
     emit_event(RunEvent(EVENT_PROGRESS, f"Solving with {solver.title}", current=1, total=2))
 
     result = run_solver(
@@ -188,33 +189,40 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
         )
     )
     emit_event(RunEvent(EVENT_PROGRESS, f"Finished: {result.status}", current=2, total=2))
+    # The solver reports a Stop during the search as a CANCELLED result.
+    return result.status != STATUS_CANCELLED
 
 
-def benchmark_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> None:
+def benchmark_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> bool:
     plan = parse_request(request)
-    run_benchmark(plan, event_callback=emit_event, cancel_token=token)
+    # run_benchmark returns normally after a Stop, with the rows it finished.
+    return len(run_benchmark(plan, event_callback=emit_event, cancel_token=token)) == plan.total_runs
 
 
 JOB_FUNCTIONS = {"solve": solve_job, "generate": generate_job, "benchmark": benchmark_job}
 
 
 def execute_job(kind: str, request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> None:
-    """Run a job in the current process and always finish with done/cancelled/error."""
+    """Run a job in the current process and always finish with done/cancelled/error.
+
+    A job body returns True when it did all its work, and the job then ends
+    done even if a Stop arrived after the work was finished (audit item A18).
+    """
 
     try:
         if kind not in JOB_FUNCTIONS:
             raise ValueError(f"Unknown job kind: {kind}")
-        JOB_FUNCTIONS[kind](request, workdir, emit_event, token)
+        completed = JOB_FUNCTIONS[kind](request, workdir, emit_event, token)
     except ParamError as exc:
         emit_event(RunEvent(EVENT_ERROR, str(exc), payload={"errors": exc.errors}))
         return
     except Exception as exc:  # noqa: BLE001 - reported to the UI
         emit_event(RunEvent(EVENT_ERROR, f"{type(exc).__name__}: {exc}", payload={"traceback": traceback.format_exc()}))
         return
-    if token.is_cancelled():
-        emit_event(RunEvent(EVENT_CANCELLED, "Cancelled."))
-    else:
+    if completed:
         emit_event(RunEvent(EVENT_DONE, "Finished."))
+    else:
+        emit_event(RunEvent(EVENT_CANCELLED, "Cancelled."))
 
 
 def run_job(kind: str, request: dict[str, Any], workdir: str | None, event_queue, cancel_event, skip_event) -> None:

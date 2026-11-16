@@ -58,6 +58,7 @@ sat_core/
   runtime.py       RunEvent protocol, RunToken (cancel / skip / timeout)
   dimacs.py        DIMACS parser and writer (with line-numbered errors)
   verify.py        check a model against the clauses
+  answers.py       judge_answer: the one rule for "verified" (model, decode, problem check)
   seeds.py         deterministic seeding helpers
 sat_web/
   api.py           FastAPI app factory, REST endpoints, WebSocket, static files

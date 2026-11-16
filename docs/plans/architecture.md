@@ -77,7 +77,7 @@ it, runs the problem's own `check`, and combines the result into `verified`.
 The two copies already differ: the solve job also requires
 `result.solution is not None`, the benchmark does not.
 
-- [ ] **ARCH-1. One function judges a SAT answer**
+- [x] **ARCH-1. One function judges a SAT answer** - Done 2026-11-16.
   - **Difficulty:** medium (it defines what "verified" means in every result)
   - **How:** a new engine module `sat_core/answers.py` (add it to `ENGINE`
     in `tests/test_layers.py`):

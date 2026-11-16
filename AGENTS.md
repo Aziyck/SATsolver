@@ -177,10 +177,11 @@ The invariants code must keep:
 - The server binds to `127.0.0.1` by default. Keep it that way.
 - The server has no login. The middleware `LocalOnlyGuard`
   (`sat_web/api.py`) refuses a foreign `Host` (400) and a foreign `Origin`
-  (403) for every route and the WebSocket; the allowed names are
-  `Settings.allowed_hosts`. Do not add a route, a mount or CORS headers that
-  bypass it. Tests reach the app as `localhost:8000` (`local_client` in
-  `tests/test_api.py`).
+  (403) for every route and the WebSocket, and a cross-site `Sec-Fetch-Site`
+  (403) under `/api`; it adds headers that forbid framing by another site
+  to every reply. The allowed names are `Settings.allowed_hosts`. Do not add
+  a route, a mount or CORS headers that bypass it. Tests reach the app as
+  `localhost:8000` (`local_client` in `tests/test_api.py`).
 
 ## Frontend rules
 

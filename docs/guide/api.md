@@ -32,10 +32,15 @@ below and are the most precise reference.
   header is not `localhost`, `127.0.0.1`, `[::1]` or a name in
   `WIZSAT_ALLOWED_HOSTS` (any port) returns **400** with a plain-text
   message. A request whose `Origin` header names any other host returns
-  **403** (`{"detail": "Requests from this Origin are not allowed"}`). The
-  WebSocket handshake is refused with 403 in both cases. Requests without an
-  `Origin` header (curl, scripts) are accepted, so the examples below work
-  unchanged.
+  **403** (`{"detail": "Requests from this Origin are not allowed"}`), and so
+  does a request under `/api` whose `Sec-Fetch-Site` header is `cross-site`
+  (`{"detail": "Requests from another site are not allowed"}`). The
+  WebSocket handshake is refused with 403 in these cases. Requests without
+  `Origin` and `Sec-Fetch-Site` headers (curl, scripts) are accepted, so the
+  examples below work unchanged.
+- Every reply carries `Content-Security-Policy: frame-ancestors 'self'` and
+  `X-Frame-Options: SAMEORIGIN` (a 500 for an unhandled error excepted): no
+  other site may show the app in a frame.
 
 ## Catalog
 

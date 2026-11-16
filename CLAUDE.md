@@ -41,7 +41,7 @@ one-line edit:
 
 | Difficulty | Model | Review before the item is closed |
 |---|---|---|
-| easy | Sonnet, medium effort | the checks in "Before you finish" |
+| easy | Sonnet, high effort | the checks in "Before you finish" |
 | medium | Sonnet, high effort | plus `/code-review` on the diff; fix what it confirms |
 | hard | the strongest model available (Opus), or Sonnet followed by a `/code-review` run on the stronger model | plus, for solver items, unchanged conflict counts and timings |
 

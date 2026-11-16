@@ -134,7 +134,9 @@ or solver; it has the checklists and the tests to write. What it cannot show:
 - Every solver is in `tests/test_solver_agreement.py`: complete solvers must
   agree with brute force; incomplete ones must find every model and never
   claim one for an UNSAT formula (give them a small budget there).
-- Every new stat key gets a label and a one-line explanation in `STATS`
+- Every new stat key is declared once as a `StatSpec` in `STAT_SPECS`
+  (`sat_core/solver_registry.py`): label, log name, one-line explanation, CSV
+  and chart flags. Until ARCH-3 it also needs an entry in `STATS`
   (`frontend/src/lib/format.ts`).
 
 ## Statuses

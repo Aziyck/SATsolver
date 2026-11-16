@@ -275,8 +275,13 @@ def my_solver(clauses, *, return_stats=False, event_callback=None, cancel_token=
   `UNKNOWN` for an incomplete solver that gave up.
 - Numeric stats (`decisions`, `conflicts`, `propagations`, `flips`, ...)
   appear in the UI and the CSV; use the existing names where they fit. For a
-  new name, add a label and a one-line explanation to `STATS` in
-  `frontend/src/lib/format.ts`.
+  new name, declare it once as a `StatSpec` in `STAT_SPECS`
+  (`sat_core/solver_registry.py`): label, short name for the log line, one-line
+  explanation, and whether it is a CSV column or a chart measure.
+  `tests/test_stat_catalog.py` fails for a key a solver reports that the
+  catalog lacks. Until [ARCH-3](../plans/architecture.md) the frontend still
+  has its own labels in `STATS` in `frontend/src/lib/format.ts`; add the entry
+  there too.
 - If you keep arrays indexed by variable, renumber the variables 1..n first:
   the encoders' readable numbers are sparse (see `solvers/walksat.py`).
   `run_solver()` does it for a solver registered with

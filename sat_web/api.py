@@ -30,7 +30,7 @@ from sat_core.dimacs import clauses_to_dimacs, app_header_comment
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload
 from sat_core.params import ParamError
 from sat_core.presets import all_presets
-from sat_core.solver_registry import LOG_LEVELS, all_solvers, get_solver
+from sat_core.solver_registry import LOG_LEVELS, STAT_SPECS, all_solvers, get_solver
 from sat_web.config import Settings
 from sat_web.manager import Job, JobManager
 from sat_web.store import Store
@@ -280,6 +280,7 @@ def catalog() -> dict[str, Any]:
         "version": VERSION,
         "problems": [spec.to_dict() for spec in all_problems()],
         "solvers": [spec.to_dict() for spec in all_solvers()],
+        "stats": [spec.to_dict() for spec in STAT_SPECS],
         "presets": [preset.to_dict() for preset in all_presets()],
         "log_levels": list(LOG_LEVELS),
         "limits": {"max_clauses": MAX_CLAUSES, "max_benchmark_runs": MAX_BENCHMARK_RUNS, "max_workers": max_workers()},

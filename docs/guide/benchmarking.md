@@ -230,6 +230,9 @@ Every benchmark exports the same format, whatever the problem:
 | `tries`, `flips`, `best_unsatisfied` | WalkSAT/ProbSAT statistics |
 | `error` | the error message for ERROR rows |
 
+The statistic columns are the entries of `STAT_SPECS`
+(`sat_core/solver_registry.py`) marked `csv`, in the order of that list.
+
 Download a single benchmark with **CSV** on its results page, or several at
 once by comparing them first; the API also offers
 `GET /api/export.csv?jobs=3,4,5`.

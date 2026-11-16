@@ -416,25 +416,169 @@ register_solver(
 # Running
 # ---------------------------------------------------------------------------
 
-_STATS_SUMMARY_KEYS = (
-    ("decisions", "decisions"),
-    ("conflicts", "conflicts"),
-    ("propagations", "propagations"),
-    ("learned_clauses", "learned"),
-    ("deleted_learned_clauses", "deleted learned"),
-    ("avg_lbd", "avg LBD"),
-    ("restarts", "restarts"),
-    ("reductions", "cleanups"),
-    ("max_depth", "max depth"),
-    ("tries", "tries"),
-    ("flips", "flips"),
-    ("best_unsatisfied", "best unsatisfied"),
-    ("termination_reason", "reason"),
-    ("final_noise", "final noise"),
-    ("free_flips", "free"),
-    ("noise_flips", "noise"),
-    ("greedy_flips", "greedy"),
+@dataclass(frozen=True)
+class StatSpec:
+    """One statistic a solver reports. The catalog below is the only list of them."""
+
+    key: str
+    label: str  # "Learned clauses"
+    short: str  # "learned", for the log summary; empty keeps the statistic out of it
+    help: str  # one line
+    unit: str = ""
+    csv: bool = False  # a column in the benchmark CSV
+    chart: bool = False  # a measure in the charts and a sortable column
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "short": self.short,
+            "help": self.help,
+            "unit": self.unit,
+            "csv": self.csv,
+            "chart": self.chart,
+        }
+
+
+# The order is the order of the log summary and of the CSV columns. Adding a
+# statistic to a solver means adding it here; tests/test_stat_catalog.py fails
+# for a key a solver reports that is missing.
+STAT_SPECS: tuple[StatSpec, ...] = (
+    StatSpec("decisions", "Decisions", "decisions", "Times the solver guessed a value for a variable.", csv=True, chart=True),
+    StatSpec(
+        "conflicts",
+        "Conflicts",
+        "conflicts",
+        "Times a guess led to a clause with every literal false, forcing a backtrack.",
+        csv=True,
+        chart=True,
+    ),
+    StatSpec(
+        "propagations",
+        "Propagations",
+        "propagations",
+        "Values forced by unit propagation (a clause with one literal left).",
+        csv=True,
+        chart=True,
+    ),
+    StatSpec(
+        "learned_clauses",
+        "Learned clauses",
+        "learned",
+        "Clauses CDCL derived from conflicts so it never repeats the same mistake.",
+        csv=True,
+        chart=True,
+    ),
+    StatSpec(
+        "active_learned_clauses",
+        "Active learned clauses",
+        "",
+        "Learned clauses still kept at the end (the rest were cleaned up).",
+    ),
+    StatSpec(
+        "deleted_learned_clauses",
+        "Deleted learned clauses",
+        "deleted learned",
+        "Learned clauses thrown away by the clean-ups to keep propagation fast.",
+    ),
+    StatSpec(
+        "avg_lbd",
+        "Average LBD",
+        "avg LBD",
+        "Average number of decision levels in a learned clause; lower means a more useful clause.",
+    ),
+    StatSpec(
+        "restarts",
+        "Restarts",
+        "restarts",
+        "Times CDCL dropped all its guesses (keeping what it learned) to start the search again.",
+        csv=True,
+    ),
+    StatSpec("reductions", "Clause cleanups", "cleanups", "Times CDCL deleted its least useful learned clauses."),
+    StatSpec("max_depth", "Max decision depth", "max depth", "Most guesses DPLL had open at the same time."),
+    StatSpec(
+        "tries",
+        "Tries",
+        "tries",
+        "Random starting assignments used; each try runs at most 'max flips' flips.",
+        csv=True,
+    ),
+    StatSpec("flips", "Flips", "flips", "Variables flipped in total over all tries.", csv=True, chart=True),
+    StatSpec(
+        "best_unsatisfied",
+        "Best unsatisfied",
+        "best unsatisfied",
+        "Fewest clauses left false at any moment; 0 means a model was found.",
+        csv=True,
+    ),
+    StatSpec("termination_reason", "Stopped because", "reason", "Why the search ended."),
+    StatSpec("selection_mode", "Strategy", "", "How a variable is picked from a false clause."),
+    StatSpec(
+        "adaptive_noise",
+        "Adaptive noise",
+        "",
+        "Whether WalkSAT tuned its noise during the run instead of keeping it fixed.",
+    ),
+    StatSpec(
+        "final_noise",
+        "Final noise",
+        "final noise",
+        "Noise at the end of the run (differs from the setting only with adaptive noise).",
+    ),
+    StatSpec(
+        "stagnation_limit",
+        "Stagnation limit",
+        "",
+        "Flips without progress before adaptive noise raises the noise.",
+    ),
+    StatSpec(
+        "free_flips",
+        "Free flips",
+        "free",
+        "Flips that broke no clause; WalkSAT always takes such a move when it has one.",
+    ),
+    StatSpec(
+        "noise_flips",
+        "Random flips",
+        "noise",
+        "Flips of a random variable of the clause (taken with probability 'noise').",
+    ),
+    StatSpec(
+        "greedy_flips",
+        "Greedy flips",
+        "greedy",
+        "Flips of the variable that breaks the fewest clauses.",
+    ),
+    StatSpec(
+        "cb",
+        "cb",
+        "",
+        "Base of ProbSAT's weight function: a higher value avoids flips that break clauses more strongly.",
+    ),
+    StatSpec(
+        "weight_function",
+        "Weight function",
+        "",
+        "ProbSAT's formula for turning a break count into a probability weight.",
+    ),
+    StatSpec(
+        "flip_break_total",
+        "Break total",
+        "",
+        "Sum of the break counts of every flip: clauses made false along the way.",
+    ),
+    StatSpec("last_break", "Last break", "", "Break count of the last flip."),
+    StatSpec(
+        "elapsed",
+        "Solver time",
+        "",
+        "Time spent inside the solver, without encoding and checking.",
+        unit="s",
+    ),
 )
+_STAT_SPEC_KEYS = [spec.key for spec in STAT_SPECS]
+if len(_STAT_SPEC_KEYS) != len(set(_STAT_SPEC_KEYS)):
+    raise ValueError("A statistic is declared twice in STAT_SPECS")
 
 
 def public_stats(stats: dict[str, Any]) -> dict[str, Any]:
@@ -453,10 +597,10 @@ def public_stats(stats: dict[str, Any]) -> dict[str, Any]:
 
 def stats_summary(stats: dict[str, Any]) -> str:
     parts = []
-    for key, label in _STATS_SUMMARY_KEYS:
-        if key in stats and stats[key] is not None:
-            value = stats[key]
-            parts.append(f"{label}={value:.3g}" if isinstance(value, float) else f"{label}={value}")
+    for spec in STAT_SPECS:
+        if spec.short and stats.get(spec.key) is not None:
+            value = stats[spec.key]
+            parts.append(f"{spec.short}={value:.3g}" if isinstance(value, float) else f"{spec.short}={value}")
     return ", ".join(parts)
 
 

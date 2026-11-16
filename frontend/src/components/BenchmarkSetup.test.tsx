@@ -18,6 +18,7 @@ const CATALOG: Catalog = {
   version: "test",
   problems: [],
   solvers: [CDCL],
+  stats: [],
   presets: [],
   log_levels: ["normal"],
   limits: { max_clauses: 1, max_benchmark_runs: 1, max_workers: 1 },

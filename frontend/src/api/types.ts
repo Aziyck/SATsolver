@@ -88,10 +88,21 @@ export interface Preset {
   rules: string[];
 }
 
+export interface StatSpec {
+  key: string;
+  label: string;
+  short: string;
+  help: string;
+  unit: string;
+  csv: boolean;
+  chart: boolean;
+}
+
 export interface Catalog {
   version: string;
   problems: ProblemSpec[];
   solvers: SolverSpec[];
+  stats: StatSpec[];
   presets: Preset[];
   log_levels: string[];
   limits: { max_clauses: number; max_benchmark_runs: number; max_workers: number };

@@ -754,7 +754,9 @@ when its port is busy instead of moving to the next one.
     another site still opens the app; curl sends no `Sec-Fetch-Site`.
     Browsers send the header only to `localhost`, `127.0.0.1` and https
     sites, so a server reached under `--host` by a plain-http LAN name does
-    not get this check (audit item A26).
+    not get this check: another site can still load its GET routes as
+    images (it cannot read the answer, and framing stays forbidden). This
+    is accepted, like the rest of `--host` use (audit item A26).
   - Every reply (except the bare 500 of an unhandled error, which is sent
     outside the middleware) carries `Content-Security-Policy: frame-ancestors 'self'`
     and `X-Frame-Options: SAMEORIGIN`, so only the app itself may show its

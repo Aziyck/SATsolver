@@ -236,7 +236,7 @@ class LocalOnlyGuard:
 
     Browsers send Sec-Fetch-Site only to trustworthy origins (localhost,
     127.0.0.1, https), so under --host on a plain-http LAN name only the
-    framing headers apply (audit item A26).
+    framing headers apply; accepted, see audit item A26.
     """
 
     def __init__(self, app: ASGIApp, allowed_hosts: Collection[str]) -> None:

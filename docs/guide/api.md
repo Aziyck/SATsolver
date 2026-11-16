@@ -34,7 +34,10 @@ below and are the most precise reference.
   message. A request whose `Origin` header names any other host returns
   **403** (`{"detail": "Requests from this Origin are not allowed"}`), and so
   does a request under `/api` whose `Sec-Fetch-Site` header is `cross-site`
-  (`{"detail": "Requests from another site are not allowed"}`). The
+  (`{"detail": "Requests from another site are not allowed"}`). Browsers
+  send `Sec-Fetch-Site` only to `localhost`, `127.0.0.1` and https, so a
+  server reached by a plain-http LAN name under `--host` does not get that
+  second check. The
   WebSocket handshake is refused with 403 in these cases. Requests without
   `Origin` and `Sec-Fetch-Site` headers (curl, scripts) are accepted, so the
   examples below work unchanged.

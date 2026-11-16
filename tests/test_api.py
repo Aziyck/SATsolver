@@ -197,6 +197,29 @@ class JobTests(ApiTestCase):
         self.client.post(f"/api/jobs/{job['id']}/cancel")
         self.assertEqual(self.wait(job["id"], timeout=15)["status"], "cancelled")
 
+    def test_a_worker_that_dies_without_reporting_fails_its_job(self):
+        # For example killed for memory: no final event ever arrives (audit item A7).
+        job = self.submit(
+            "benchmark",
+            {
+                "problems": ["random_3sat"],
+                "segments": [{"variables": 250, "ratio": 4.26, "mode": "random", "seed": 3}],
+                "solvers": ["dpll"],
+                "timeout": None,
+            },
+        )
+        manager = self.client.app.state.manager
+        deadline = time.monotonic() + 30
+        while (manager.get(job["id"]).process is None or not manager.get(job["id"]).process.is_alive()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        manager.get(job["id"]).process.kill()
+
+        finished = self.wait(job["id"], timeout=15)
+        self.assertEqual(finished["status"], "failed")
+        self.assertIn("stopped unexpectedly", finished["error"])
+        # The slot is free again: the next job runs.
+        self.assertEqual(self.wait(self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})["id"])["status"], "done")
+
     def test_parallel_benchmark_job_runs_and_cancels(self):
         job = self.submit(
             "benchmark",

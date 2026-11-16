@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 import { api, ApiError } from "./client";
 import { mergeJobSnapshot, mergeRowsSnapshot, trackFetch, useLive } from "./live";
@@ -31,12 +31,21 @@ export function useJob(id: number | null | undefined) {
   });
 }
 
-export function useRows(id: number | null | undefined) {
-  return useQuery({
+/**
+ * The row list of benchmark `id`, for useQuery and useQueries alike. Every fetch
+ * of ["rows", id] must go through trackFetch: a row streamed while the request is
+ * in flight is in neither the reply nor a cached list it could patch (A22).
+ */
+export function rowsOptions(id: number | null | undefined) {
+  return queryOptions({
     queryKey: ["rows", id],
     queryFn: async () => mergeRowsSnapshot(id as number, await trackFetch(id as number, () => api.rows(id as number))),
     enabled: typeof id === "number" && id > 0,
   });
+}
+
+export function useRows(id: number | null | undefined) {
+  return useQuery(rowsOptions(id));
 }
 
 function notifyError(title: string) {

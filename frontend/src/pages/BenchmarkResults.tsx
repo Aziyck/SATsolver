@@ -44,7 +44,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useNavigate, useParams } from "react-router-dom";
 import { api, urls } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
-import { useCatalog, useJob, useJobActions, useRows } from "../api/queries";
+import { rowsOptions, useCatalog, useJob, useJobActions, useRows } from "../api/queries";
 import type { BenchmarkRequest, BenchmarkRow, Catalog } from "../api/types";
 import {
   AggregateTable,
@@ -85,7 +85,7 @@ export default function BenchmarkResults() {
     [liveJobs, jobId],
   );
   const compareQueries = useQueries({
-    queries: compare.map((compareId) => ({ queryKey: ["rows", Number(compareId)], queryFn: () => api.rows(Number(compareId)) })),
+    queries: compare.map((compareId) => rowsOptions(Number(compareId))),
   });
 
   const ownRows = useMemo(() => (rowsQuery.data?.rows ?? []).map((row) => ({ ...row, run_label: job?.label ?? "" })), [rowsQuery.data, job?.label]);

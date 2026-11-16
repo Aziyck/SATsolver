@@ -19,15 +19,7 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Finished work is not listed: closed items stay in their files, and finished
 plans move to [`done/`](done/).
 
-1. **Must-fix findings** in the [audit](../reviews/2026-10-16-audit.md):
-   bugs and a security hole in what already ships.
-   1. A13: another website can show the app in a frame (security).
-   2. A18: a Stop that lands after the result can end a job as cancelled.
-   3. A22: a compared run that is still running can miss rows.
-
-   A18 and A22 were read off the code. Reproduce each with a failing test
-   first; if it does not reproduce, drop the item with the reason.
-2. **Deepen what the features will change**, from
+1. **Deepen what the features will change**, from
    [architecture.md](architecture.md), with the audit items they wait on.
    Each part removes copies of a rule that a feature below would otherwise
    have to edit in several places.
@@ -36,16 +28,17 @@ plans move to [`done/`](done/).
    3. A10, then ARCH-4: one owner of a solve request.
    4. A7, then ARCH-5, ARCH-6: the job lifecycle as its own module. A7's
       test is the safety net for ARCH-6.
-3. **Features, in this order:**
+2. **Features, in this order:**
    [run-metadata.md](run-metadata.md), then
    [pypy-solver-runner.md](pypy-solver-runner.md), then
    [memory-measurement.md](memory-measurement.md) (its memory limit, MEM-8,
    last).
 
-Free to do at any point after step 1, when there is time or when the code is
-being touched anyway:
+Free to do at any point, when there is time or when the code is being
+touched anyway:
 
-- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25;
+- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25,
+  A27-A31;
 - [architecture.md](architecture.md) parts 5 to 7 (ARCH-7 to ARCH-12).
   ARCH-7 and ARCH-8 pay off most if done before the features add their
   fields;

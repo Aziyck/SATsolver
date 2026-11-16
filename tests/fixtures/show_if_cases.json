@@ -1,0 +1,43 @@
+{
+  "note": "Shared by tests/test_show_if_agreement.py and frontend/src/lib/visibility.test.ts: the server and the frontend must name the same visible fields for every case. 'fields' use the JSON shape of GET /api/catalog. No field here depends on a field that is itself conditional (audit item A21).",
+  "fields": [
+    {"name": "mode", "kind": "choice", "default": "gnp", "sweepable": true,
+     "choices": [{"value": "gnp", "label": "gnp", "help": ""}, {"value": "gnm", "label": "gnm", "help": ""}, {"value": "manual", "label": "manual", "help": ""}]},
+    {"name": "n", "kind": "int", "default": 5, "sweepable": true},
+    {"name": "p", "kind": "float", "default": 0.3, "sweepable": true, "show_if": {"mode": ["gnp"]}},
+    {"name": "m", "kind": "int", "default": 10, "sweepable": true, "show_if": {"mode": ["gnm"]}},
+    {"name": "seed", "kind": "seed", "default": 1, "optional": true, "sweepable": true, "show_if": {"mode": ["gnp", "gnm"]}},
+    {"name": "edges", "kind": "edges", "default": "1-2", "show_if": {"mode": ["manual"]}},
+    {"name": "restarts", "kind": "bool", "default": true},
+    {"name": "restart_base", "kind": "int", "default": 100, "show_if": {"restarts": [true]}},
+    {"name": "both", "kind": "int", "default": 1, "show_if": {"mode": ["gnp"], "restarts": [true]}}
+  ],
+  "single": [
+    {"name": "the defaults",
+     "values": {"mode": "gnp", "n": 5, "p": 0.3, "m": 10, "seed": 1, "edges": "1-2", "restarts": true, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "p", "seed", "restarts", "restart_base", "both"]},
+    {"name": "another choice",
+     "values": {"mode": "gnm", "n": 5, "p": 0.3, "m": 10, "seed": 1, "edges": "1-2", "restarts": true, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "m", "seed", "restarts", "restart_base"]},
+    {"name": "a switch turned off",
+     "values": {"mode": "gnp", "n": 5, "p": 0.3, "m": 10, "seed": 1, "edges": "1-2", "restarts": false, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "p", "seed", "restarts"]},
+    {"name": "both conditions fail",
+     "values": {"mode": "manual", "n": 5, "p": 0.3, "m": 10, "seed": 1, "edges": "1-2 2-3", "restarts": false, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "edges", "restarts"]}
+  ],
+  "sweep": [
+    {"name": "two choices, each showing its own fields",
+     "values": {"mode": ["gnp", "manual"], "n": "5", "p": "0.1, 0.2", "m": "10", "seed": "1", "edges": "1-2", "restarts": true, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "p", "seed", "edges", "restarts", "restart_base", "both"]},
+    {"name": "one choice in a list",
+     "values": {"mode": ["manual"], "n": "5", "p": "0.1, 0.2", "m": "10", "seed": "1", "edges": "1-2", "restarts": true, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "edges", "restarts", "restart_base"]},
+    {"name": "two random modes and a range",
+     "values": {"mode": ["gnp", "gnm"], "n": "1..3", "p": "0.3", "m": "10, 20", "seed": "1", "edges": "1-2", "restarts": true, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "p", "m", "seed", "restarts", "restart_base", "both"]},
+    {"name": "a swept choice with a switch turned off",
+     "values": {"mode": ["gnp", "gnm"], "n": "5", "p": "0.3", "m": "10", "seed": "1", "edges": "1-2", "restarts": false, "restart_base": 100, "both": 1},
+     "visible": ["mode", "n", "p", "m", "seed", "restarts"]}
+  ]
+}

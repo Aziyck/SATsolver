@@ -200,7 +200,9 @@ frontend cannot import Python, so its only link to the backend is the JSON
 API.
 
 Every arrow points down: code may import what is below it, never what is
-above it.
+above it. `tests/test_layers.py` checks every import statement against this
+diagram, the ones inside functions included, and a new `sat_core` module has
+to be placed in one of the two halves there.
 
 `sat_core` is one folder drawn as two boxes, because as one box the rule
 could not hold. Problems need things from `sat_core` (`ParamField`,
@@ -323,7 +325,13 @@ checks them with `parse_params`.
 `show_if` is evaluated in three places: `sat_core/params.py`, `isVisible`
 in `frontend/src/lib/params.ts`, and `isVisibleSweep` in
 `frontend/src/lib/benchmark.ts` (the version that understands sweeps). A
-change to the rule must be made in all three.
+change to the rule must be made in all three. One set of cases,
+`tests/fixtures/show_if_cases.json`, is run on both sides
+(`tests/test_show_if_agreement.py`, `frontend/src/lib/visibility.test.ts`)
+and must give the same visible fields. The sides agree for direct
+conditions only: a field that depends on a field that is itself conditional
+would be shown differently, so no registered field may do that (audit item
+A21).
 
 ## Jobs
 

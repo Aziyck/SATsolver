@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from problems import get_problem
 from problems.base import ProblemSpec
-from sat_core.benchmark import display_params, parse_request, run_benchmark
+from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
 from sat_core.models import STATUS_CANCELLED, STATUS_SAT, ProblemInstance
 from sat_core.params import ParamError
@@ -118,8 +118,7 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
         options = solver.parse_options(request.get("options"))
     except ParamError as exc:
         raise ParamError({f"options.{name}": message for name, message in exc.errors.items()}) from None
-    timeout = request.get("timeout", DEFAULT_SOLVE_TIMEOUT)
-    timeout = None if timeout in (None, "") else float(timeout)
+    timeout = parse_timeout(request.get("timeout", DEFAULT_SOLVE_TIMEOUT))
     log_level = request.get("log_level", "normal")
     if log_level not in LOG_LEVELS:
         raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})

@@ -25,7 +25,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES, ProblemSpec
-from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, rows_to_csv
+from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, parse_timeout, rows_to_csv
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload
 from sat_core.params import ParamError
@@ -71,18 +71,6 @@ def _problem(key: str | None) -> ProblemSpec:
 
 def visible_params(spec: ProblemSpec, params: dict[str, Any]) -> dict[str, Any]:
     return {field.name: params[field.name] for field in spec.fields if field.visible(params) and field.name in params}
-
-
-def _timeout(value: Any) -> float | None:
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return None
-    try:
-        timeout = float(value)
-    except (TypeError, ValueError):
-        raise ParamError({"timeout": "must be a number of seconds"}) from None
-    if timeout < 0:
-        raise ParamError({"timeout": "must not be negative"})
-    return timeout
 
 
 def _current_options(solver: Any, options: Any) -> Any:
@@ -142,7 +130,7 @@ def validate_job(kind: str, request: dict[str, Any], title: str | None) -> tuple
         normalized.update(
             solver=solver.key,
             options=options,
-            timeout=_timeout(request.get("timeout", DEFAULT_SOLVE_TIMEOUT)),
+            timeout=parse_timeout(request.get("timeout", DEFAULT_SOLVE_TIMEOUT)),
             log_level=log_level,
         )
         return normalized, title or f"{spec.title}: {label} ({solver.title})"

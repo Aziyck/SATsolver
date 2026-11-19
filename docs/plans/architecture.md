@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7, ARCH-11 and ARCH-12 done)
+- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7, ARCH-8, ARCH-11 and ARCH-12 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -289,7 +289,7 @@ RUNNER-6, MEM-2 and MEM-6 each add a field here.
     shapes in `sat_web/manager.py` and `BenchmarkRow` are not part of this
     task.
 
-- [ ] **ARCH-8. A test keeps `types.ts` in step with the Python shapes**
+- [x] **ARCH-8. A test keeps `types.ts` in step with the Python shapes** - Done 2026-11-19.
   - **Difficulty:** medium
   - **Blocked by:** ARCH-7
   - **Decided (2026-11-19):** option 1, sample payloads checked against the
@@ -312,6 +312,27 @@ RUNNER-6, MEM-2 and MEM-6 each add a field here.
     file, or a cast checked another way) is settled while building it.
   - **Done when:** removing a field from one Python payload fails CI, and
     renaming a field in `types.ts` fails CI.
+
+    Built as decided, with two details the plan left open. The samples are one
+    generated TypeScript file, `frontend/src/api/wireSamples.ts`, written and
+    compared by `tests/test_wire_samples.py`; there is no separate
+    `wire_samples.json`, because it would hold the same text twice. Each sample
+    is declared `satisfies <its type>`, which keeps `"done"` a literal that
+    fits a status union (a JSON import would type it as `string`) and also
+    rejects a field the type does not declare, so the vitest check of "every
+    key of a sample is a key the frontend reads" was not needed. The three
+    samples are a job summary, a job detail (its instance and result are
+    checked inside it, so they are not repeated) and a benchmark row, from a
+    fixed Sudoku solve and a one-case benchmark, with the timings zeroed.
+    Values typed `any` or `Record<string, unknown>` are not looked into, and
+    each payload has one sample, so a field that is null in it is not checked
+    against a real value. The detail sample is checked as
+    `Omit<JobDetail, "request"> & { request: SolveRequest }` because
+    `JobDetail.request` is typed as a solve and a benchmark request at once
+    (filed as A33). Checked by hand, then reverted: renaming `elapsed` in
+    `JobSummary`, removing a field from `SolveOutcome`, and adding a field to
+    `InstanceSummary` each failed CI (the `tsc` run, the Python test, and the
+    `tsc` run again).
 
 ## Part 6: benchmark cases without the solvers
 

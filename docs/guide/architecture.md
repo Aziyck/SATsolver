@@ -357,6 +357,14 @@ event a `SolveOutcome` (`sat_core/models.py`): frozen dataclasses, turned into
 the JSON dict by one `to_dict()` each, so the field list is written once in
 Python. A new field goes there and in `frontend/src/api/types.ts`
 (`InstanceInfo`, `SolveResult`) and `docs/guide/api.md`.
+`tests/test_wire_samples.py` keeps the first two together: it records a real
+job summary, job detail (with its instance and result) and benchmark row in
+`frontend/src/api/wireSamples.ts`, each declared `satisfies` its type, so the
+test fails when a Python payload changes and `npm run typecheck` fails when a
+type misses a field or has none that the payload sends. Values typed `any` or
+`Record<string, unknown>` (`decoded`, `visual`, `params`, `options`) are not
+looked into. After a deliberate change, re-record with
+`WIZSAT_RECORD_GOLDEN=1`.
 
 Why processes and not threads:
 

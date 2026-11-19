@@ -39,11 +39,11 @@ from sat_core.runtime import (
     RunEvent,
 )
 from sat_web.config import Settings
+from sat_web.lifecycle import FINISHED, Happening, next_status
 from sat_web.store import Store
 
 
 ACTIVE = ("queued", "running", "cancelling")
-FINISHED = ("done", "failed", "cancelled", "interrupted")
 CANCEL_GRACE_SECONDS = 3.0
 LOG_LINES_PER_SECOND = 60
 LOG_TAIL_STORED = 1000
@@ -78,7 +78,6 @@ class Job:
     cancel_event: Any = None
     skip_event: Any = None
     terminal_seen: bool = False
-    cancel_requested: bool = False
     dirty: bool = False
     # Bumped every time a summary is published, so clients can drop stale copies
     # (an HTTP response can arrive after newer WebSocket events).
@@ -149,7 +148,7 @@ class JobManager:
             status = record["status"]
             error = record.get("error")
             if status in ACTIVE:
-                status = "interrupted"
+                status = next_status(status, "found_at_startup")
                 error = "The server stopped while this job was running."
                 self.store.update_job(record["id"], status=status, error=error)
             job = Job(
@@ -183,6 +182,17 @@ class JobManager:
         }
         values.update(extra)
         self.store.update_job(job.id, **values)
+
+    def _transition(self, job: Job, happening: Happening, **kwargs: Any) -> bool:
+        """Move `job` to the status the lifecycle gives for `happening`; True when it changed.
+
+        The only place that assigns `job.status` (call it under the lock).
+        """
+
+        status = next_status(job.status, happening, **kwargs)
+        changed = status != job.status
+        job.status = status
+        return changed
 
     # -- pub/sub ---------------------------------------------------------------
 
@@ -311,7 +321,7 @@ class JobManager:
             # parent (sat_core.parallel.exit_when_parent_dies).
             daemon=False,
         )
-        job.status = "running"
+        self._transition(job, "slot_free")
         job.started_at = now_iso()
         self._log(job, "Starting worker process...")
         self._persist(job)
@@ -319,7 +329,7 @@ class JobManager:
         try:
             job.process.start()
         except Exception as exc:  # noqa: BLE001
-            job.status = "failed"
+            self._transition(job, "start_failed")
             job.error = f"Could not start a worker process: {exc}"
             job.finished_at = now_iso()
             self._persist(job)
@@ -404,35 +414,32 @@ class JobManager:
                 return
             if kind == EVENT_ERROR:
                 job.terminal_seen = True
-                job.status = "failed"
-                job.error = event.message
-                job.errors = event.payload.get("errors")
+                # A job that already finished stays as it is; the message is
+                # still logged.
+                if self._transition(job, "error_event"):
+                    job.error = event.message
+                    job.errors = event.payload.get("errors")
                 self._log(job, f"ERROR: {event.message}")
                 return
             if kind == EVENT_CANCELLED:
                 # Sent by benchmarks when they stop, and by the job wrapper at the end.
                 job.terminal_seen = True
+                self._transition(job, "cancelled_event")
                 self._log(job, event.message or "Cancelled.")
                 return
             if kind == EVENT_DONE:
                 job.terminal_seen = True
-                if job.status in ("running", "cancelling"):
-                    job.status = "done"
+                self._transition(job, "done_event")
                 return
 
     def _finalize(self, job: Job, exitcode: int | None) -> None:
         with self.lock:
-            if job.status in ("running", "cancelling") and self.closing:
-                job.status = "interrupted"
+            if self.closing and self._transition(job, "server_stopping"):
                 job.error = "The server stopped while this job was running."
-            if job.status in ("running", "cancelling"):
-                if job.cancel_requested:
-                    job.status = "cancelled"
-                elif not job.terminal_seen:
-                    job.status = "failed"
-                    job.error = f"The worker process stopped unexpectedly (exit code {exitcode})."
-                else:
-                    job.status = "done"
+            # A stopped job ends cancelled, a worker that died without a final
+            # event ends failed (the lifecycle decides which).
+            if self._transition(job, "process_exited", terminal_seen=job.terminal_seen) and job.status == "failed":
+                job.error = f"The worker process stopped unexpectedly (exit code {exitcode})."
             if job.status == "done" and job.progress.get("total"):
                 job.progress = {**job.progress, "current": job.progress["total"]}
             job.finished_at = now_iso()
@@ -450,18 +457,14 @@ class JobManager:
     def cancel(self, job_id: int) -> Job:
         job = self.get(job_id)
         with self.lock:
-            if job.status == "queued":
-                job.status = "cancelled"
+            if not self._transition(job, "stop"):
+                return job
+            if job.status == "cancelled":
                 job.finished_at = now_iso()
-                job.cancel_requested = True
                 self._log(job, "Cancelled before it started.")
                 self._persist(job)
                 self.publish_job(job)
                 return job
-            if job.status != "running":
-                return job
-            job.cancel_requested = True
-            job.status = "cancelling"
             job.cancel_event.set()
             self._log(job, "Cancel requested; stopping at the next solver checkpoint.")
             self.publish_job(job)
@@ -529,7 +532,7 @@ class JobManager:
         with self.lock:
             for job in self.jobs.values():
                 if job.status == "queued":
-                    job.status = "interrupted"
+                    self._transition(job, "server_stopping")
                     job.error = "The server stopped before this job started."
                     self._persist(job)
             running = [job for job in self.jobs.values() if job.process is not None]

@@ -108,7 +108,7 @@ class DiagramTests(unittest.TestCase):
         self.assertEqual(set(re.findall(r"^\s*(\w+) --> \[\*\]", diagram, flags=re.MULTILINE)), set(FINISHED))
 
     def test_the_manager_and_the_lifecycle_name_the_same_statuses(self):
-        # The manager keeps its own tuples until ARCH-6; a new status must reach both.
+        # The manager keeps ACTIVE; a new status must reach it and the lifecycle.
         self.assertEqual(set(manager.FINISHED), set(FINISHED))
         self.assertEqual(set(manager.ACTIVE) | set(manager.FINISHED), set(STATUSES))
 

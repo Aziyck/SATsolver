@@ -101,7 +101,7 @@ after each run. For the child, run the same code with `subprocess.run([sys.execu
     as `StatSpec` entries in `STAT_SPECS` (`sat_core/solver_registry.py`):
     label, one-line explanation, `csv=True` for the CSV column, and
     `chart=True` for the two that are chart measures. ARCH-2 and ARCH-3
-    ([architecture plan](architecture.md)) made that the only list: the CSV,
+    ([architecture plan](done/architecture.md)) made that the only list: the CSV,
     the log line, the labels, the chart measures and the Runs table columns
     all derive from it.
 - **UI:**

@@ -19,16 +19,7 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Finished work is not listed: closed items stay in their files, and finished
 plans move to [`done/`](done/).
 
-1. **Deepen what the features will change**, from
-   [architecture.md](architecture.md), with the audit items they wait on.
-   Each part removes copies of a rule that a feature below would otherwise
-   have to edit in several places.
-   1. ARCH-1: one place that judges a SAT answer.
-   2. ARCH-2, ARCH-3: one catalog of statistics.
-   3. A10, then ARCH-4: one owner of a solve request.
-   4. A7, then ARCH-5, ARCH-6: the job lifecycle as its own module. A7's
-      test is the safety net for ARCH-6.
-2. **Features, in this order:**
+1. **Features, in this order:**
    [run-metadata.md](run-metadata.md), then
    [pypy-solver-runner.md](pypy-solver-runner.md), then
    [memory-measurement.md](memory-measurement.md) (its memory limit, MEM-8,
@@ -38,10 +29,7 @@ Free to do at any point, when there is time or when the code is being
 touched anyway:
 
 - the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25,
-  A27-A33;
-- [architecture.md](architecture.md) parts 5 to 7 (ARCH-7 to ARCH-12).
-  ARCH-7 and ARCH-8 pay off most if done before the features add their
-  fields;
+  A27-A34;
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
   items B6-B9 that touch the same code.
@@ -49,7 +37,6 @@ touched anyway:
 | File | What | Waits on |
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | whole-repo findings (A), solver simplification (B1-B17) | nothing |
-| [architecture.md](architecture.md) | deeper modules for the rules the features change (ARCH-1 to ARCH-12) | A7, A10 for two tasks |
 | [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |

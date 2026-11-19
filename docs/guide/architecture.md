@@ -445,12 +445,16 @@ cannot deadlock.
 
 ### Statuses
 
-The status a job can have, and what moves it on. The rule is written as the
-pure function `next_status` in `sat_web/lifecycle.py`, and
+The status a job can have, and what moves it on. The rule is the pure
+function `next_status` in `sat_web/lifecycle.py`, and
 `tests/test_lifecycle.py` fails when its table and the arrows below differ.
-Until ARCH-6 the manager (`sat_web/manager.py`) does not call it: it still
-assigns `job.status` itself, in the places the table lists, so a change there
-needs the table, the diagram and the manager changed together.
+The manager (`sat_web/manager.py`) assigns `job.status` in one place,
+`JobManager._transition`, which asks `next_status`; every other part of the
+manager reports what happened (a slot is free, a Stop, an event, the process
+ended) and never picks a status itself. A happening on a finished job changes
+nothing, so a late `error` event cannot turn a `done` job into `failed`.
+To add a status or an arrow: change the table, the diagram and `next_status`
+together, and the tests tell you when one of them is behind.
 
 ```mermaid
 stateDiagram-v2

@@ -344,16 +344,22 @@ class JobTests(ApiTestCase):
             job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
             seen = set()
             revs = []
+            environments = []
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 message = socket.receive_json()
                 for event in message["events"]:
                     seen.add(event["type"])
+                    if event["type"] == "environment":
+                        environments.append(event)
                     if event["type"] == "job" and event["job"]["id"] == job["id"]:
                         revs.append(event["job"]["rev"])
                         if event["job"]["status"] == "done":
                             deadline = 0
-            self.assertTrue({"job", "log", "instance", "result"} <= seen)
+            self.assertTrue({"job", "log", "instance", "result", "environment"} <= seen)
+            # A page opened while the job was queued gets the environment here (A38); it is not in the summaries.
+            self.assertEqual([event["job_id"] for event in environments], [job["id"]])
+            self.assertEqual(environments[0]["environment"]["python_implementation"], platform.python_implementation())
             # Every published summary is newer than the last, so clients can drop stale copies.
             self.assertEqual(revs, sorted(set(revs)))
             self.assertIn(job["rev"], revs)

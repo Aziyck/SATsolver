@@ -148,8 +148,8 @@ The **Result** tab shows:
     options are marked. The time limit and log detail are listed too.
     Below the table, **Machine** names the Python, operating system,
     processor, cores, memory and WizSAT commit the job ran on, or says it
-    was not recorded: a job saved by an older version, or, for now, a job
-    whose page was open before it started (reload the page to see it).
+    was not recorded (a job saved by an older version). A job shows it as
+    soon as its worker starts, also on a page that was open before.
   - **Statistics**: decisions, conflicts, propagations, learned clauses,
     restarts (CDCL/DPLL) or tries, flips, free/random/greedy flips, best
     number of unsatisfied clauses (WalkSAT/ProbSAT). Hover a name for a

@@ -100,10 +100,9 @@ the job ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)):
     block sits below the options table in the solve job's Settings tab and
     between the limit rules and the solvers in the benchmark Setup tab. A
     fact that could not be read shows "unknown". `docs/guide/user-guide.md`
-    has a line for each tab; META-5 checks the rest. **Known gap:** every
-    job started from the UI opens while it is queued, keeps `environment:
-    null` and shows "not recorded" until the page is reloaded (reproduced in
-    the e2e test); A38 fixes it.
+    has a line for each tab; META-5 checks the rest. A job opened while it was
+    queued showed "not recorded" until a reload (found by the e2e test when
+    this task was built); A38 fixed it with a live `environment` event.
   - **How:** `environment` on `JobDetail` in `frontend/src/api/types.ts`
     (nullable). A "Machine" block in the solve job's Settings tab and in the
     benchmark Setup tab (`components/SolverSettingsTable.tsx`,

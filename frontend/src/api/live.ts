@@ -54,6 +54,7 @@ export function isNewer(incoming: Pick<JobSummary, "rev">, current: Pick<JobSumm
 // the snapshot the server is about to return. They are kept here and merged into
 // the snapshot when it lands (see mergeJobSnapshot / mergeRowsSnapshot).
 interface Pending {
+  environment?: JobDetail["environment"];
   instance?: JobDetail["instance"];
   result?: JobDetail["result"];
   rows: BenchmarkRow[];
@@ -96,7 +97,12 @@ export function mergeJobSnapshot(job: JobDetail): JobDetail {
   let merged = job;
   if (summary && (summary.rev ?? 0) > (job.rev ?? 0)) merged = { ...merged, ...summary };
   if (extra) {
-    merged = { ...merged, instance: merged.instance ?? extra.instance ?? null, result: merged.result ?? extra.result ?? null };
+    merged = {
+      ...merged,
+      environment: merged.environment ?? extra.environment ?? null,
+      instance: merged.instance ?? extra.instance ?? null,
+      result: merged.result ?? extra.result ?? null,
+    };
   }
   return merged;
 }
@@ -136,6 +142,12 @@ export function applyEvents(events: LiveEvent[], queryClient: QueryClient) {
         const batch = logBatches.get(event.job_id) ?? [];
         batch.push(event.line);
         logBatches.set(event.job_id, batch);
+        break;
+      }
+      case "environment": {
+        const entry = stash(event.job_id);
+        if (entry) entry.environment = event.environment;
+        queryClient.setQueryData<JobDetail>(["job", event.job_id], (old) => (old ? { ...old, environment: event.environment } : old));
         break;
       }
       case "instance": {

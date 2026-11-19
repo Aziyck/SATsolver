@@ -90,9 +90,10 @@ test("solver options reset to their defaults and show up in the job's settings",
   await expect(row).toContainText("0.3");
   await expect(row).toContainText("changed");
   await expect(row).toContainText("0.567");
-  // The Machine block (META-3). Its contents are not checked here yet: the page opens
-  // while the job is queued and keeps `environment: null` (A38).
+  // The Machine block: the page opened while the job was queued and still shows what the
+  // worker reported (A38).
   await expect(page.getByText("Machine", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^(CPython|PyPy) \d+\.\d+/)).toBeVisible();
 });
 
 test("Ctrl+Enter solves from inside a field, and the Solve button stays in view", async ({ page }) => {

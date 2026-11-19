@@ -402,9 +402,12 @@ class JobManager:
                 job.dirty = True
                 return
             if kind == EVENT_ENVIRONMENT:
-                # Part of the detail only: no summary changes, nothing to publish.
+                # Part of the detail, not of the summary. It is published as its own
+                # event: a page opened while the job was queued never fetches the
+                # detail again (A38).
                 job.environment = event.payload
                 self.store.update_job(job.id, environment=job.environment)
+                self.publish({"type": "environment", "job_id": job.id, "environment": job.environment})
                 return
             if kind == EVENT_INSTANCE:
                 job.instance = event.payload

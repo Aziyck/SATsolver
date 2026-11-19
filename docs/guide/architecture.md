@@ -608,8 +608,10 @@ The worker never talks to the browser. Events flow:
 2. the manager's reader thread applies each event to the in-memory `Job`
    (under `JobManager.lock`). The environment, the instance summary, the
    result and benchmark rows are written to SQLite at once; log lines are
-   saved when the job ends. The environment is only part of the job detail
-   and is not published. Every other message is handed to the asyncio loop with
+   saved when the job ends. The environment is not part of the summary, but
+   it is published as its own `environment` event: a page opened while the
+   job was queued fetched the detail before the worker reported it and never
+   fetches it again. Every message is handed to the asyncio loop with
    `call_soon_threadsafe`, because the WebSocket side belongs to the loop's
    own thread and the reader is a different one;
 3. each WebSocket subscriber (one per open tab) has a bounded queue of
@@ -657,7 +659,7 @@ Two mechanisms make the result correct regardless of order:
   patch, so those events would be dropped, and the reply, taken before they
   existed, would leave the page waiting for a result that never comes. So
   while a fetch of a job or its rows is in flight, `live.ts` also records
-  incoming `instance`, `result` and `row` events for that job and merges
+  incoming `environment`, `instance`, `result` and `row` events for that job and merges
   them into the reply when it arrives. Nothing is delayed; this happens in
   the browser, only during the fetch. Rows are merged by index, so a row
   that arrives twice is stored once. The merge only happens for fetches

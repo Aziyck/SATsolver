@@ -29,6 +29,7 @@ from sat_core.jobs import run_job
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_DONE,
+    EVENT_ENVIRONMENT,
     EVENT_ERROR,
     EVENT_INSTANCE,
     EVENT_LOG,
@@ -69,6 +70,9 @@ class Job:
     result: dict[str, Any] | None = None
     error: str | None = None
     errors: dict[str, str] | None = None
+    # sat_core.environment.run_environment() as the worker reported it; None
+    # for jobs that never started and for jobs stored before it was recorded.
+    environment: dict[str, Any] | None = None
     logs: deque = field(default_factory=lambda: deque(maxlen=5000))
     rows: list[dict[str, Any]] | None = None
     row_count: int = 0
@@ -120,6 +124,7 @@ class Job:
                 "instance": self.instance,
                 "result": self.result,
                 "errors": self.errors,
+                "environment": self.environment,
                 "logs": list(self.logs)[-log_tail:],
                 "log_count": len(self.logs),
             }
@@ -165,6 +170,7 @@ class JobManager:
                 result=record.get("result"),
                 error=error,
                 errors=record.get("errors"),
+                environment=record.get("environment"),
                 row_count=counts.get(record["id"], 0),
             )
             job.logs = deque(record.get("logs") or [], maxlen=self.settings.log_lines_per_job)
@@ -389,6 +395,11 @@ class JobManager:
                 if kind == EVENT_PLAN:
                     self._log(job, event.message)
                 job.dirty = True
+                return
+            if kind == EVENT_ENVIRONMENT:
+                # Part of the detail only: no summary changes, nothing to publish.
+                job.environment = event.payload
+                self.store.update_job(job.id, environment=job.environment)
                 return
             if kind == EVENT_INSTANCE:
                 job.instance = event.payload

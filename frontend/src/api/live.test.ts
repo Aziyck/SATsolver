@@ -27,7 +27,7 @@ function summary(partial: Partial<JobSummary>): JobSummary {
 }
 
 function detail(partial: Partial<JobDetail>): JobDetail {
-  return { ...summary(partial), request: {} as JobDetail["request"], instance: null, result: null, errors: null, logs: [], log_count: 0, ...partial };
+  return { ...summary(partial), request: {} as JobDetail["request"], instance: null, result: null, errors: null, environment: null, logs: [], log_count: 0, ...partial };
 }
 
 const RESULT = { status: "SAT" } as SolveResult;

@@ -1,6 +1,6 @@
 # Plan: record where and how every run happened
 
-- **Status:** in progress (META-1 done 2026-11-19)
+- **Status:** in progress (META-1 and META-2 done 2026-11-19)
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
 - **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
@@ -62,9 +62,21 @@ PyPy when PyPy is used):
     returns `None` values instead of raising when `/proc/cpuinfo` and git are
     patched away.
 
-- [ ] **META-2. Jobs store and return their environment**
+- [x] **META-2. Jobs store and return their environment** - Done 2026-11-19.
   - **Difficulty:** hard (database migration, job events)
   - **Blocked by:** META-1
+  - **Built as:** `execute_job` sends `EVENT_ENVIRONMENT` before the job body,
+    before the request is checked, so `run_job` and the in-process tests see
+    the same events. The payload is `run_environment()` as it is. `workers`
+    stays in the stored benchmark request and `started_at` on the job; both
+    are already in the detail reply, so they are not copied into
+    `environment`. `CREATE TABLE` keeps the first schema and `ADDED_COLUMNS`
+    in `sat_web/store.py` adds the column, for new and old files alike.
+    `RunEnvironment` and `JobDetail.environment` are already in
+    `frontend/src/api/types.ts`, because the wire-sample check needs them;
+    META-3 adds the Machine block. `docs/guide/api.md` has the detail field.
+    Found along the way: A38 (the UI keeps a stale `null`), A39 (time per
+    job).
   - **How:** `run_job` in `sat_core/jobs.py` sends the environment once at the
     start (a new `EVENT_ENVIRONMENT` in `sat_core/runtime.py`).
     `sat_web/store.py` gets a JSON column `environment` on `jobs`; the table

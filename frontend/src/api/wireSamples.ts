@@ -547,6 +547,18 @@ export const jobDetail = {
     "model_file": null
   },
   "errors": null,
+  "environment": {
+    "python_implementation": "CPython",
+    "python_version": "3.12.0",
+    "os": "Linux 6.8.0 (x86_64)",
+    "cpu_model": "Example CPU @ 3.00GHz",
+    "cpu_logical_cores": 8,
+    "cpu_physical_cores": 4,
+    "ram_total_gb": 15.5,
+    "wizsat_version": "2.0.0",
+    "git_commit": "0000000",
+    "git_dirty": false
+  },
   "logs": [
     [
       "10:00:00",

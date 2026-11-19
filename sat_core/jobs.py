@@ -3,7 +3,7 @@ Job entry points, run inside worker processes.
 
 The web server starts one process per job with run_job(). A job reports
 everything through RunEvent objects put on a multiprocessing queue:
-logs, progress, the encoded instance, the solver result or benchmark rows,
+the environment it runs in (first), logs, progress, the encoded instance, the solver result or benchmark rows,
 and finally done / cancelled / error. Payloads are plain JSON-friendly dicts;
 the instance and result payloads are built as InstanceSummary and SolveOutcome
 (sat_core/models.py) and sent through their to_dict().
@@ -25,11 +25,13 @@ from problems.base import ProblemSpec
 from sat_core.answers import judge_answer
 from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
+from sat_core.environment import run_environment
 from sat_core.models import STATUS_CANCELLED, InstanceSummary, ProblemInstance, SolveOutcome
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_DONE,
+    EVENT_ENVIRONMENT,
     EVENT_ERROR,
     EVENT_INSTANCE,
     EVENT_LOG,
@@ -260,6 +262,8 @@ def execute_job(kind: str, request: dict[str, Any], workdir: str | None, emit_ev
     """
 
     try:
+        # First, before the request is checked: a job that fails still records where it ran.
+        emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment()))
         if kind not in JOB_FUNCTIONS:
             raise ValueError(f"Unknown job kind: {kind}")
         completed = JOB_FUNCTIONS[kind](request, workdir, emit_event, token)

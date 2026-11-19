@@ -166,7 +166,9 @@ def _git(*args: str) -> str | None:
 
 
 def _git_dirty() -> bool | None:
-    status = _git("status", "--porcelain")
+    # Without --no-optional-locks, status may take .git/index.lock to refresh the
+    # index, and a commit made at the same moment fails.
+    status = _git("--no-optional-locks", "status", "--porcelain")
     return None if status is None else bool(status.strip())
 
 

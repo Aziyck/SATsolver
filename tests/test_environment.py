@@ -111,6 +111,23 @@ class RunEnvironmentTests(unittest.TestCase):
         self.assertEqual(facts["git_commit"], "abc1234")
         self.assertIs(facts["git_dirty"], True)
 
+    def test_git_status_takes_no_lock_on_the_index(self):
+        # Every job asks, so a plain "git status" would hold .git/index.lock while
+        # the owner commits (found by the review of META-2).
+        commands = []
+
+        def fake_run(cmd, **_):
+            commands.append(cmd)
+            return mock.Mock(returncode=0, stdout="abc1234\n" if "rev-parse" in cmd else "")
+
+        with (
+            mock.patch.object(environment, "_has_git_checkout", return_value=True),
+            mock.patch.object(environment.subprocess, "run", side_effect=fake_run),
+        ):
+            run_environment()
+        status = next(cmd for cmd in commands if "status" in cmd)
+        self.assertLess(status.index("--no-optional-locks"), status.index("status"))
+
     def test_outside_a_git_checkout_git_is_not_asked(self):
         with (
             mock.patch.object(environment, "_has_git_checkout", return_value=False),

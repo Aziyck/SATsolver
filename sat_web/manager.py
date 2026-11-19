@@ -329,6 +329,8 @@ class JobManager:
         try:
             job.process.start()
         except Exception as exc:  # noqa: BLE001
+            # Drop the unstarted Process: shutdown() joins every job that has one.
+            job.process = None
             self._transition(job, "start_failed")
             job.error = f"Could not start a worker process: {exc}"
             job.finished_at = now_iso()

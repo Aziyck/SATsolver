@@ -6,6 +6,7 @@ max_parallel_jobs=0 a submitted job stays queued, and the tests put it into the
 status they need and call the same methods the reader thread calls.
 """
 
+import multiprocessing as mp
 import re
 import tempfile
 import unittest
@@ -187,6 +188,23 @@ class ActionTests(ManagerCase):
 
         self.assertEqual(job.status, "failed")
         self.assertIn("Could not start a worker process: no memory", job.error)
+
+    def test_shutdown_after_a_worker_could_not_start_does_not_raise(self):
+        # A real, unstarted Process: joining it raises AssertionError, as in A34.
+        class Unstartable(mp.get_context("spawn").Process):
+            def start(self):
+                raise OSError("no memory")
+
+        manager = self.new_manager(max_parallel_jobs=1)
+        self.addCleanup(manager.store.close)
+        manager.context = mock.Mock()
+        manager.context.Process.side_effect = lambda **kwargs: Unstartable(**kwargs)
+        job = manager.submit("solve", {"problem": "n_queens"}, "t")
+
+        manager.shutdown()
+
+        self.assertEqual(job.status, "failed")
+        self.assertIsNone(job.process)
 
 
 class StartupTests(ManagerCase):

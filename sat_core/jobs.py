@@ -4,7 +4,9 @@ Job entry points, run inside worker processes.
 The web server starts one process per job with run_job(). A job reports
 everything through RunEvent objects put on a multiprocessing queue:
 logs, progress, the encoded instance, the solver result or benchmark rows,
-and finally done / cancelled / error. Payloads are plain JSON-friendly dicts.
+and finally done / cancelled / error. Payloads are plain JSON-friendly dicts;
+the instance and result payloads are built as InstanceSummary and SolveOutcome
+(sat_core/models.py) and sent through their to_dict().
 
 Large artifacts are written to the job's work directory instead of being
 sent through the queue: instance.cnf (DIMACS, with a "c wizsat" header so it
@@ -23,7 +25,7 @@ from problems.base import ProblemSpec
 from sat_core.answers import judge_answer
 from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
-from sat_core.models import STATUS_CANCELLED, ProblemInstance
+from sat_core.models import STATUS_CANCELLED, InstanceSummary, ProblemInstance, SolveOutcome
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -112,21 +114,21 @@ def parse_solve_request(raw: dict[str, Any]) -> dict[str, Any]:
     return _parse_solve(raw)[3]
 
 
-def instance_payload(spec: ProblemSpec, instance: ProblemInstance, encode_seconds: float, cnf_file: str | None) -> dict[str, Any]:
-    return {
-        "name": instance.name,
-        "problem": spec.key,
-        "params": display_params(instance.params, spec),
-        "variables": instance.variable_count,
-        "clauses": instance.clause_count,
-        "size_variables": instance.size_variables,
-        "max_variable": instance.max_variable,
-        "facts": spec.describe(instance),
-        "visual": spec.visual(instance),
-        "expected": spec.expected_status(instance),
-        "encode_seconds": round(encode_seconds, 6),
-        "cnf_file": cnf_file,
-    }
+def instance_summary(spec: ProblemSpec, instance: ProblemInstance, encode_seconds: float, cnf_file: str | None) -> InstanceSummary:
+    return InstanceSummary(
+        name=instance.name,
+        problem=spec.key,
+        params=display_params(instance.params, spec),
+        variables=instance.variable_count,
+        clauses=instance.clause_count,
+        size_variables=instance.size_variables,
+        max_variable=instance.max_variable,
+        facts=spec.describe(instance),
+        visual=spec.visual(instance),
+        expected=spec.expected_status(instance),
+        encode_seconds=round(encode_seconds, 6),
+        cnf_file=cnf_file,
+    )
 
 
 def write_cnf(workdir: str | None, spec: ProblemSpec, instance: ProblemInstance) -> str | None:
@@ -166,7 +168,7 @@ def _build_instance(spec: ProblemSpec, params: dict[str, Any], workdir: str | No
         )
     )
     cnf_file = write_cnf(workdir, spec, instance)
-    emit_event(RunEvent(EVENT_INSTANCE, payload=instance_payload(spec, instance, encode_seconds, cnf_file)))
+    emit_event(RunEvent(EVENT_INSTANCE, payload=instance_summary(spec, instance, encode_seconds, cnf_file).to_dict()))
     return instance
 
 
@@ -218,22 +220,22 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
     emit_event(
         RunEvent(
             EVENT_RESULT,
-            payload={
-                "solver": solver.key,
-                "solver_label": solver.title,
-                "options": options,
-                "options_summary": options_summary(solver, options),
-                "status": result.status,
-                "elapsed": result.elapsed,
-                "stats": result.stats,
-                "decoded": verdict.decoded,
-                "verified": verdict.verified,
-                "check_errors": verdict.errors,
-                "expected": expected,
-                "timeout": timeout,
-                "error": result.error,
-                "model_file": model_file,
-            },
+            payload=SolveOutcome(
+                solver=solver.key,
+                solver_label=solver.title,
+                options=options,
+                options_summary=options_summary(solver, options),
+                status=result.status,
+                elapsed=result.elapsed,
+                stats=result.stats,
+                decoded=verdict.decoded,
+                verified=verdict.verified,
+                check_errors=verdict.errors,
+                expected=expected,
+                timeout=timeout,
+                error=result.error,
+                model_file=model_file,
+            ).to_dict(),
         )
     )
     emit_event(RunEvent(EVENT_PROGRESS, f"Finished: {result.status}", current=2, total=2))

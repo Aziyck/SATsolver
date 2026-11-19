@@ -1,3 +1,5 @@
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -172,6 +174,71 @@ class SolveRequestTests(unittest.TestCase):
         with self.assertRaises(ParamError) as caught:
             solve_job({"problem": "hamiltonian_path", "params": {"nodes": 400, "probability": 0.1}, "solver": "cdcl"}, None, lambda event: None, RunToken())
         self.assertIn("_", caught.exception.errors)
+
+
+class PayloadShapeTests(unittest.TestCase):
+    """The JSON of a solve job's instance and result events, byte for byte (ARCH-7)."""
+
+    golden = Path(__file__).parent / "fixtures" / "solve_payloads.golden.json"
+
+    def test_solve_events_keep_their_json(self):
+        events = run("solve", {"problem": "sudoku", "params": {"size": 9}, "solver": "cdcl"})
+        payloads = {event.type: event.payload for event in events if event.type in (EVENT_INSTANCE, EVENT_RESULT)}
+
+        # Timings are the only values that differ between runs; they must still be there.
+        for container, key in ((payloads["instance"], "encode_seconds"), (payloads["result"], "elapsed"), (payloads["result"]["stats"], "elapsed")):
+            self.assertIsInstance(container[key], float)
+            container[key] = 0.0
+
+        recorded = json.dumps(payloads, indent=1) + "\n"
+        if os.environ.get("WIZSAT_RECORD_GOLDEN"):
+            # A deliberate change of a payload (a new statistic, a new field): record it and review the diff.
+            self.golden.write_text(recorded, encoding="utf-8", newline="\n")
+        expected = self.golden.read_text(encoding="utf-8").replace("\r\n", "\n")
+        self.assertEqual(recorded, expected)
+
+
+class PayloadTypeTests(unittest.TestCase):
+    def test_instance_summary_is_frozen_and_serialises_in_its_field_order(self):
+        from dataclasses import FrozenInstanceError
+
+        from sat_core.models import InstanceSummary
+
+        summary = InstanceSummary(
+            name="N", problem="p", params={"a": 1}, variables=2, clauses=3, size_variables=2, max_variable=2,
+            facts=[], visual={}, expected=None, encode_seconds=0.5, cnf_file=None,
+        )
+
+        self.assertEqual(
+            list(summary.to_dict()),
+            ["name", "problem", "params", "variables", "clauses", "size_variables", "max_variable", "facts", "visual", "expected", "encode_seconds", "cnf_file"],
+        )
+        self.assertEqual(summary.to_dict()["params"], {"a": 1})
+        with self.assertRaises(FrozenInstanceError):
+            summary.name = "other"
+
+    def test_solve_outcome_is_frozen_and_serialises_in_its_field_order(self):
+        from dataclasses import FrozenInstanceError
+
+        from sat_core.models import SolveOutcome
+
+        outcome = SolveOutcome(
+            solver="cdcl", solver_label="CDCL", options={}, options_summary="defaults", status="SAT", elapsed=0.1, stats={},
+            decoded=None, verified=True, check_errors=[], expected=None, timeout=60.0, error=None, model_file=None,
+        )
+
+        self.assertEqual(
+            list(outcome.to_dict()),
+            ["solver", "solver_label", "options", "options_summary", "status", "elapsed", "stats", "decoded", "verified", "check_errors", "expected", "timeout", "error", "model_file"],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            outcome.status = "UNSAT"
+
+    def test_the_job_module_builds_no_payload_dict_literal(self):
+        source = (Path(__file__).parent.parent / "sat_core" / "jobs.py").read_text(encoding="utf-8")
+
+        for key in ("encode_seconds", "options_summary", "model_file", "size_variables"):
+            self.assertFalse(f'"{key}":' in source, f"sat_core/jobs.py still builds a payload dict with the key {key!r}")
 
 
 def stop_on(kind, request, should_stop):

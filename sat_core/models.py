@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Callable
 
 
@@ -92,6 +92,62 @@ class SolveResult:
     clauses: int = 0
     variables: int = 0
     error: str | None = None
+
+
+def _to_dict(value: Any) -> dict[str, Any]:
+    """
+    The fields of a dataclass as a dict, in field order.
+
+    Not asdict(): that deep-copies every value, including the large grids of a
+    visual, for a dict that goes straight onto a queue. The values are shared,
+    so do not change them.
+    """
+
+    return {item.name: getattr(value, item.name) for item in fields(value)}
+
+
+@dataclass(frozen=True)
+class InstanceSummary:
+    """What an encoded instance looks like to the UI: the payload of an instance event."""
+
+    name: str
+    problem: str
+    params: dict[str, Any]
+    variables: int
+    clauses: int
+    size_variables: int
+    max_variable: int
+    facts: list[dict[str, Any]]
+    visual: Any
+    expected: str | None
+    encode_seconds: float
+    cnf_file: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return _to_dict(self)
+
+
+@dataclass(frozen=True)
+class SolveOutcome:
+    """What a solve job's run came to: the payload of a result event."""
+
+    solver: str
+    solver_label: str
+    options: dict[str, Any]
+    options_summary: str
+    status: str
+    elapsed: float
+    stats: dict[str, Any]
+    decoded: Any
+    verified: bool | None
+    check_errors: list[str]
+    expected: str | None
+    timeout: float | None
+    error: str | None
+    model_file: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return _to_dict(self)
 
 
 @dataclass

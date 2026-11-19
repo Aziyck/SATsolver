@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-11 and ARCH-12 done)
+- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7, ARCH-11 and ARCH-12 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -269,7 +269,7 @@ that travels is a dict with a different shape from the `SolveResult`
 dataclass in `sat_core/models.py`. Nothing compares the two languages. META-2,
 RUNNER-6, MEM-2 and MEM-6 each add a field here.
 
-- [ ] **ARCH-7. The travelling shapes are typed in Python**
+- [x] **ARCH-7. The travelling shapes are typed in Python** - Done 2026-11-19.
   - **Difficulty:** medium
   - **How:** frozen dataclasses for the instance summary and the solve
     outcome (today `instance_payload` and the result dict in `solve_job`),
@@ -277,6 +277,17 @@ RUNNER-6, MEM-2 and MEM-6 each add a field here.
   - **Done when:** `sat_core/jobs.py` builds no payload dict literal; the
     JSON of a solve job's instance and result events is identical before and
     after for a fixed Sudoku (record it first, as a test).
+
+    Built as written, with details the plan left open. The classes are
+    `InstanceSummary` and `SolveOutcome` in `sat_core/models.py`; `to_dict()`
+    is shallow (the values are shared, not copied) and keeps field order, so
+    the JSON is byte-identical. `instance_payload` became
+    `instance_summary(...)`, which returns the dataclass; the two callers
+    (`jobs.py` and the case-rebuild endpoint in `sat_web/api.py`) call
+    `.to_dict()`. The recorded JSON is `tests/fixtures/solve_payloads.golden.json`
+    (the three timing values are zeroed before comparing). The job and row
+    shapes in `sat_web/manager.py` and `BenchmarkRow` are not part of this
+    task.
 
 - [ ] **ARCH-8. A test keeps `types.ts` in step with the Python shapes**
   - **Difficulty:** medium

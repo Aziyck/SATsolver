@@ -276,6 +276,12 @@ rows = run_benchmark(plan)
 print(rows_to_csv(rows))
 ```
 
+`parse_cases(request)` gives only the cases (problems, grids, repeats, seeds),
+in row order, and does not look at the solvers or limit rules. The server uses
+it to rebuild the formula of one stored row, so an old job still opens after a
+solver option has been removed. Pass it a saved request: one without a seed
+gets a fresh seed on every call.
+
 ## Checklist for report-quality experiments
 
 1. Use the same time limit for every solver in a series, and write down the

@@ -25,7 +25,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES
-from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, rows_to_csv
+from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_cases, parse_request, rows_to_csv
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
@@ -460,10 +460,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         row = next((row for row in rows if row["index"] == index), None)
         if row is None:
             raise HTTPException(404, "Row not found")
-        # The cases do not depend on the solvers, so the saved solver list and
-        # rules are replaced: options a solver has since lost cannot fail this.
-        plan = parse_request({**job.request, "solvers": ["cdcl"], "rules": []})
-        case = plan.cases[row["case_index"]]
+        # Cases do not depend on solvers: options a solver has since lost cannot fail this.
+        case = parse_cases(job.request)[row["case_index"]]
         spec = get_problem(case.problem)
         instance = spec.build(case.params)
         return row, case, spec, instance

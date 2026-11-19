@@ -283,7 +283,28 @@ def _graph_signature(spec: ProblemSpec, params: dict[str, Any]) -> str:
     return json.dumps(graph_values, sort_keys=True, default=str)
 
 
-def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
+@dataclass
+class _Expansion:
+    """What expanding a request's problems and grids gives, with the inputs it settled."""
+
+    cases: list[BenchmarkCase]
+    specs: list[ProblemSpec]
+    segments: list[Any]
+    repeats: int
+    seed: int
+
+
+def parse_cases(raw: dict[str, Any]) -> list[BenchmarkCase]:
+    """The cases of a benchmark request, without looking at its solvers or rules.
+
+    The order is part of the contract: it sets every row index. A request
+    without a seed gets a fresh one, so a caller that needs the same cases
+    again passes a saved (normalized) request, which always carries its seed.
+    """
+    return _expand_cases(raw).cases
+
+
+def _expand_cases(raw: dict[str, Any], solver_count: int = 1) -> _Expansion:
     if not isinstance(raw, dict):
         raise ParamError({"_": "the benchmark request must be an object"})
 
@@ -314,10 +335,6 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
     if repeats < 1 or repeats > 1000:
         raise ParamError({"repeats": "must be between 1 and 1000"})
 
-    log_level = raw.get("log_level", "normal")
-    if log_level not in LOG_LEVELS:
-        raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
-
     base_seed = raw.get("seed")
     if base_seed is None or (isinstance(base_seed, str) and not base_seed.strip()):
         base_seed = fresh_seed()
@@ -325,11 +342,6 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
         base_seed = int(base_seed)
     except (TypeError, ValueError):
         raise ParamError({"seed": "must be a whole number"}) from None
-
-    workers = _parse_workers(raw.get("workers", 1))
-    solvers = _parse_solvers(raw.get("solvers"))
-    rules = _parse_rules(raw.get("rules"))
-    timeout = parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
 
     cases: list[BenchmarkCase] = []
     for segment_index, segment in enumerate(segments):
@@ -375,33 +387,52 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
                         case_params = with_seed(spec, params, repeat)
                         cases.append(BenchmarkCase(0, spec.key, case_params, repeat, segment_index, spec.case_label(case_params)))
 
-        if len(cases) * len(solvers) > MAX_BENCHMARK_RUNS:
+        # Stops a huge grid early. parse_cases counts one run per case, the
+        # least a case can cost; parse_request passes the real solver count.
+        if len(cases) * solver_count > MAX_BENCHMARK_RUNS:
             raise ParamError({"_": f"more than {MAX_BENCHMARK_RUNS:,} solver runs; narrow the grid"})
 
     for index, case in enumerate(cases):
         case.index = index
+    return _Expansion(cases, specs, segments, repeats, base_seed)
+
+
+def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
+    if not isinstance(raw, dict):
+        raise ParamError({"_": "the benchmark request must be an object"})
+
+    # The cheap checks come before the grid is expanded.
+    log_level = raw.get("log_level", "normal")
+    if log_level not in LOG_LEVELS:
+        raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
+    workers = _parse_workers(raw.get("workers", 1))
+    solvers = _parse_solvers(raw.get("solvers"))
+    rules = _parse_rules(raw.get("rules"))
+    timeout = parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
+
+    expansion = _expand_cases(raw, len(solvers))
 
     normalized = {
-        "problems": [spec.key for spec in specs],
-        "segments": segments,
+        "problems": [spec.key for spec in expansion.specs],
+        "segments": expansion.segments,
         "solvers": [solver.to_dict() for solver in solvers],
-        "repeats": repeats,
+        "repeats": expansion.repeats,
         "timeout": timeout,
         "rules": [rule.to_dict() for rule in rules],
         "log_level": log_level,
-        "seed": base_seed,
+        "seed": expansion.seed,
         "title": str(raw.get("title") or ""),
         "workers": workers,
     }
     return BenchmarkPlan(
-        problems=[spec.key for spec in specs],
-        cases=cases,
+        problems=[spec.key for spec in expansion.specs],
+        cases=expansion.cases,
         solvers=solvers,
         rules=rules,
         timeout=timeout,
-        repeats=repeats,
+        repeats=expansion.repeats,
         log_level=log_level,
-        seed=base_seed,
+        seed=expansion.seed,
         title=str(raw.get("title") or ""),
         normalized=normalized,
         workers=workers,

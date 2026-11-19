@@ -1,12 +1,15 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4 and ARCH-7 to ARCH-12 done; ARCH-5 and ARCH-6 open)
+- **Status:** done (2026-11-19). Every task is closed. No ADR: the choices that
+  mattered (statistics owned by Python, the request kept a plain dict, the
+  manager not split) are under "Considered and rejected" below and in the
+  task notes.
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
-- **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
-  [memory measurement](memory-measurement.md) (all three add fields and
-  statistics to the code below), [architecture guide](../guide/architecture.md),
-  [audit](../reviews/2026-10-16-audit.md) A7, A10, A15, A16, A22
-- Item format, difficulty and closing rule: [README.md](README.md)
+- **Related:** [run metadata](../run-metadata.md), [PyPy solver runner](../pypy-solver-runner.md),
+  [memory measurement](../memory-measurement.md) (all three add fields and
+  statistics to the code below), [architecture guide](../../guide/architecture.md),
+  [audit](../../reviews/2026-10-16-audit.md) A7, A10, A15, A16, A22
+- Item format, difficulty and closing rule: [README.md](../README.md)
 
 ## Goal
 
@@ -39,7 +42,7 @@ lives. **Locality** means a change or a bug lands in one place.
 ## Order inside this plan
 
 The parts are independent unless a task says `Blocked by`. Parts 1 to 4 come
-before the features ([README.md](README.md), order of work). Parts 5 to 7 are
+before the features ([README.md](../README.md), order of work). Parts 5 to 7 are
 worth doing when the code is touched anyway.
 
 | Part | Tasks | Strength | Why now |
@@ -165,7 +168,7 @@ way.
     a built-in measure, it is not a solver statistic). An unknown key still
     falls back to its own name. Update the rule in `AGENTS.md` ("Every new
     stat key gets a label...") to name the catalog, and the "Where the
-    numbers live" part of [memory-measurement.md](memory-measurement.md).
+    numbers live" part of [memory-measurement.md](../memory-measurement.md).
 
     Built as written, with details the plan left open. `statLabel` and
     `statHelp` take the catalog's list as a second argument; components get it
@@ -231,7 +234,7 @@ matches it.
 Separate the rule from the machinery. The manager keeps processes, threads
 and the lock, and asks a small pure module what the next status is.
 
-- [ ] **ARCH-5. The status rule is a pure function with a table test**
+- [x] **ARCH-5. The status rule is a pure function with a table test** - Done 2026-11-19.
   - **Difficulty:** hard (job statuses, cancellation)
   - **How:** a new module `sat_web/lifecycle.py`, imported by nothing but
     the manager:
@@ -252,13 +255,50 @@ and the lock, and asks a small pure module what the next status is.
     every happening; the guide's diagram and the test table list the same
     arrows.
 
-- [ ] **ARCH-6. The manager takes every status from the lifecycle**
+    Built as written, with details the plan left open. `Happening` is a
+    `Literal` of the nine names and an unknown status or happening raises
+    `ValueError` (a typo must not read as "nothing happens"). `terminal_seen`
+    defaults to `False`, not `True` as the plan's signature has it: it is the
+    default of `Job.terminal_seen`, and a caller that forgets it gets
+    "failed", not a false "done". `terminal_seen` matters only for
+    `process_exited` of a running job; a cancelling job ends `cancelled`
+    either way, as `_finalize` does today. The diagram gained
+    `cancelling --> interrupted`, which `_finalize` already does on shutdown
+    and the guide did not draw. A happening on a finished status, and
+    `cancelled_event` on any status, change nothing. `tests/test_lifecycle.py`
+    also reads the guide's diagram and compares its arrows with the table,
+    and checks that the manager's `ACTIVE` and `FINISHED` match the module.
+    The manager does not call the module yet; ARCH-6 does that. One
+    difference ARCH-6 must decide with a test: `_apply` today sets `failed`
+    on any error event, even for a job already `done`, while the table ignores
+    it (a finished job is final).
+
+- [x] **ARCH-6. The manager takes every status from the lifecycle** - Done 2026-11-19.
   - **Difficulty:** hard (processes, threads, cancellation)
   - **Blocked by:** ARCH-5, A7 (its test is the safety net for this change)
   - **How:** every `job.status = ...` in `sat_web/manager.py` becomes a call
     to `next_status`. Persisting and publishing stay where they are.
   - **Done when:** `job.status` is assigned in one helper of the manager (a
     repo search); the API tests, A7's test and the end-to-end tests pass.
+
+    Built as written, with details the plan left open. The helper is
+    `JobManager._transition(job, happening, **kwargs)`, which returns whether
+    the status changed; the callers use that to decide what else to set
+    (`error`, `finished_at`). `FINISHED` now comes from `sat_web/lifecycle.py`.
+    The decision ARCH-5 left open is settled: an `error` event for a job that
+    is already finished changes nothing but the log, so a late error cannot
+    turn a `done` job into `failed` (before, `_apply` set `failed` and
+    overwrote `error` whatever the status was). Everything else behaves as
+    before. The `Job.cancel_requested` flag is gone: it was only ever true for
+    a job in `cancelling` (or a queued job cancelled at once), so `_finalize`
+    now reads the status instead. As before, a job that sent `cancelled`
+    without a Stop ends `done` when its process exits (the lifecycle table
+    pins it). A stored status the lifecycle does not know raises `ValueError`
+    when the job is touched; only this code writes statuses, so none is
+    expected. `tests/test_manager_status.py`
+    builds a manager without a worker process (`max_parallel_jobs=0`) and
+    covers each happening the manager reports, and checks by a source search
+    that `job.status =` appears once in `sat_web/manager.py`.
 
 ## Part 5: job, result and row shapes declared once
 

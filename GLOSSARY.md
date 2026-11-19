@@ -52,7 +52,7 @@ documents; this file only pins the meaning.
 | job | One unit of work the server runs in its own process: a solve, an encode (kind `generate`) or a benchmark. Shown as J1, J2, ... |
 | happening | One of the nine things that can change a job's status (`slot_free`, `stop`, `process_exited`, ...), the arrows of the status diagram in [architecture](docs/guide/architecture.md#statuses). Not a `RunEvent`: the job's `done`, `error` and `cancelled` events are three of the happenings, the others come from the manager, the user or the process. See `sat_web/lifecycle.py`. |
 | job id | The number in J12. Not reused while any job exists. |
-| daemon | Python's meaning, not the Unix one. A daemon process is killed when its parent exits and may not start child processes; a daemon thread does not keep its process alive. Job processes are not daemons. See [architecture](docs/guide/architecture.md#daemons-and-the-watchdog). |
+| daemon | Python's meaning, not the Unix one. A daemon process is killed when its parent exits and may not start child processes; a daemon thread does not keep its process alive. Job processes are not daemons. See [architecture](docs/guide/how-it-works.md#daemons-and-the-watchdog). |
 | seed | The number that makes a random instance or a random solver choice reproducible. |
 | planted SAT | A random formula built around a hidden model, so it is satisfiable by construction. |
 | forced UNSAT | A random formula with a small contradictory core added, so it is unsatisfiable by construction. |

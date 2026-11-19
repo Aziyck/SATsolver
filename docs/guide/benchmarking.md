@@ -100,7 +100,7 @@ cores) solves that many cases at the same time:
 
 On a 4-core machine, 24 cases took 16.7 s with 1 worker, 9.4 s with 2 and
 6.9 s with 4. How the processes are organised is described in
-[Architecture](architecture.md#parallel-benchmark-runs).
+[How it works](how-it-works.md#parallel-benchmark-runs).
 
 ## Presets
 

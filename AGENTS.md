@@ -241,8 +241,8 @@ needs a routine edit.
 | a problem or an encoding (`problems/`) | `docs/algorithms/encodings.md`; `docs/guide/user-guide.md` |
 | how problems or solvers are added | `docs/guide/adding-a-problem.md` |
 | benchmark engine, presets, CSV (`sat_core/benchmark.py`, `export.py`, `parallel.py`, `presets.py`) | `docs/guide/benchmarking.md` |
-| server, jobs, storage, events (`sat_web/`, `sat_core/jobs.py`, `runtime.py`) | `docs/guide/architecture.md`; `docs/guide/api.md` for endpoints, JSON and events |
-| a page or a component (`frontend/src/`) | `docs/guide/user-guide.md`; "Frontend" in `docs/guide/architecture.md` if the structure changed |
+| server, jobs, storage, events (`sat_web/`, `sat_core/jobs.py`, `runtime.py`) | `docs/guide/architecture.md` when a part, layer, rule's home, status or database column changes; `docs/guide/how-it-works.md` for how it behaves; `docs/guide/api.md` for endpoints, JSON and events |
+| a page or a component (`frontend/src/`) | `docs/guide/user-guide.md`; "Frontend" in `docs/guide/how-it-works.md` if the structure changed |
 | launcher, settings, dependencies, CI | `README.md`, this file |
 | a term's meaning, or a new term | `GLOSSARY.md` |
 | the workflow or the item format | `docs/plans/README.md` |

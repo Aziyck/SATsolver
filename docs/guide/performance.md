@@ -181,7 +181,7 @@ When the timings are the result you report, keep it at 1: parallel runs
 compete for the CPU, caches and memory bandwidth, so individual times get
 noisier (and turbo clock speeds drop when every core is busy). See
 [Benchmarking](benchmarking.md#parallel-runs) and
-[Architecture](architecture.md#parallel-benchmark-runs).
+[How it works](how-it-works.md#parallel-benchmark-runs).
 
 ## Ideas for later
 

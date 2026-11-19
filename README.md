@@ -211,7 +211,8 @@ legacy/         the original Tkinter app and Romanian documents, kept for refere
 | [User guide](docs/guide/user-guide.md) | every page of the app, input formats, reading results |
 | [Benchmarking](docs/guide/benchmarking.md) | sweeps, limit rules, presets, parallel runs, CSV columns, fair comparisons |
 | [Solver performance](docs/guide/performance.md) | how fast the solvers are, what made them faster, how to measure |
-| [Architecture](docs/guide/architecture.md) | how the pieces fit together, job lifecycle, live events |
+| [Architecture](docs/guide/architecture.md) | the parts, the layers, where each rule lives, job statuses, the database |
+| [How it works](docs/guide/how-it-works.md) | the long explanation: one solve step by step, processes, locks, live events, serving, safety |
 | [HTTP API](docs/guide/api.md) | endpoints and WebSocket messages |
 | [Adding a problem or solver](docs/guide/adding-a-problem.md) | step-by-step extension guide |
 | [Encodings](docs/algorithms/encodings.md) | how each problem becomes CNF, with sizes |

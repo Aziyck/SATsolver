@@ -281,17 +281,24 @@ RUNNER-6, MEM-2 and MEM-6 each add a field here.
 - [ ] **ARCH-8. A test keeps `types.ts` in step with the Python shapes**
   - **Difficulty:** medium
   - **Blocked by:** ARCH-7
-  - **Needs decision:** how the two sides are tied. Option 1: a Python test
-    writes real payloads (a job summary, a job detail, an instance, a result,
-    a row) to `tests/fixtures/wire_samples.json` and fails when they change;
-    a TypeScript file assigns each sample to its type, so `npm run typecheck`
-    fails when a field the type requires is missing. It does not catch a new
-    Python field that the type lacks. Option 2: generate `types.ts` from the
-    Python dataclasses with a script, checked in CI. Catches everything, adds
-    a generation step. Option 3: leave it. Recommendation: option 1, the
-    pattern of `tests/fixtures/show_if_cases.json`, then add to it a vitest
-    check that every key of a sample is a key the frontend reads.
-  - **How:** as decided.
+  - **Decided (2026-11-19):** option 1, sample payloads checked against the
+    types. Rejected: option 2, generating `types.ts` from the Python
+    dataclasses (it catches every drift, but only the instance summary, the
+    solve outcome and `BenchmarkRow` are dataclasses so far, the job summary
+    and detail are still dict literals in `sat_web/manager.py`, and it adds a
+    generator and a build step); option 3, leaving it (drift stays silent while
+    the features add fields). Option 1 does not stop a move to option 2 later,
+    once the job shapes are typed too.
+  - **How:** a Python test writes real payloads (a job summary, a job detail,
+    an instance, a result, a row) to `tests/fixtures/wire_samples.json` and
+    fails when they change, in the pattern of
+    `tests/fixtures/show_if_cases.json`. A TypeScript file assigns each sample
+    to its type, so `npm run typecheck` fails when a field the type requires
+    is missing. This alone does not catch a new Python field that the type
+    lacks, so a vitest check also requires every key of a sample to be a key
+    the frontend reads. JSON imports type `"SAT"` as `string`, not as
+    `RunStatus`; how the samples reach the type check (a generated `.ts`
+    file, or a cast checked another way) is settled while building it.
   - **Done when:** removing a field from one Python payload fails CI, and
     renaming a field in `types.ts` fails CI.
 

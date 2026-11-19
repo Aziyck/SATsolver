@@ -39,11 +39,10 @@ from sat_core.runtime import (
     RunEvent,
 )
 from sat_web.config import Settings
-from sat_web.lifecycle import FINISHED, Happening, next_status
+from sat_web.lifecycle import ACTIVE, FINISHED, Happening, next_status
 from sat_web.store import Store
 
 
-ACTIVE = ("queued", "running", "cancelling")
 CANCEL_GRACE_SECONDS = 3.0
 LOG_LINES_PER_SECOND = 60
 LOG_TAIL_STORED = 1000

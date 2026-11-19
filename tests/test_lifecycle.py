@@ -7,8 +7,7 @@ import re
 import unittest
 from pathlib import Path
 
-from sat_web import manager
-from sat_web.lifecycle import FINISHED, HAPPENINGS, STATUSES, next_status
+from sat_web.lifecycle import ACTIVE, FINISHED, HAPPENINGS, STATUSES, next_status
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "guide" / "architecture.md"
 
@@ -107,10 +106,8 @@ class DiagramTests(unittest.TestCase):
         self.assertEqual(re.findall(r"^\s*\[\*\] --> (\w+)", diagram, flags=re.MULTILINE), ["queued"])
         self.assertEqual(set(re.findall(r"^\s*(\w+) --> \[\*\]", diagram, flags=re.MULTILINE)), set(FINISHED))
 
-    def test_the_manager_and_the_lifecycle_name_the_same_statuses(self):
-        # The manager keeps ACTIVE; a new status must reach it and the lifecycle.
-        self.assertEqual(set(manager.FINISHED), set(FINISHED))
-        self.assertEqual(set(manager.ACTIVE) | set(manager.FINISHED), set(STATUSES))
+    def test_active_is_every_status_that_is_not_finished(self):
+        self.assertEqual(ACTIVE, ("queued", "running", "cancelling"))
 
 
 if __name__ == "__main__":

@@ -28,6 +28,8 @@ Happening = Literal[
 STATUSES: tuple[str, ...] = get_args(Status)
 HAPPENINGS: tuple[str, ...] = get_args(Happening)
 FINISHED: tuple[str, ...] = ("done", "failed", "cancelled", "interrupted")
+# Derived, so a new status is either finished or active and cannot be neither.
+ACTIVE: tuple[str, ...] = tuple(status for status in STATUSES if status not in FINISHED)
 
 
 def next_status(status: Status, happening: Happening, *, terminal_seen: bool = False) -> Status:
@@ -76,6 +78,6 @@ def next_status(status: Status, happening: Happening, *, terminal_seen: bool = F
             return "cancelled"
         return "done" if terminal_seen else "failed"
     # cancelled_event only sets terminal_seen; the status changes when the
-    # process exits, and a running job nobody stopped then ends done, as
-    # _finalize does today.
+    # process exits, and a running job nobody stopped then ends done (its log
+    # still says "Cancelled.").
     return status

@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4 and ARCH-12 done)
+- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-11 and ARCH-12 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -333,7 +333,7 @@ filtered. None of it can be tested without rendering the whole page. A15 and
 A16 are the same move for two other components; A22 is a bug in how this page
 loads compared runs.
 
-- [ ] **ARCH-11. Merging the rows of compared runs is a tested function**
+- [x] **ARCH-11. Merging the rows of compared runs is a tested function** - Done 2026-11-19.
   - **Difficulty:** medium
   - **How:** a function in `frontend/src/lib/benchmark.ts` takes the own
     rows and the compared runs and returns the combined rows with
@@ -344,6 +344,17 @@ loads compared runs.
   - **Done when:** unit tests cover one run, a comparison of two, and a
     graph suite; the page contains no `slice(1)` on a label; the end-to-end
     tests pass.
+
+    Built as written, with details the plan left open. The function is
+    `mergeRuns(own, compared)` in `lib/benchmark.ts`; each run is a `RunRows`
+    (`jobId`, `label`, `rows`), and `job_id` is a new optional field of
+    `BenchmarkRow` next to `run_label`. `isGraphSuite(rows)` is exported so the
+    page's "show the Problem column" check and the merge agree. The drawer
+    takes the job from `row.job_id` and decides "own run" by comparing it with
+    the page's job id, not by comparing labels. `comparing` inside the merge
+    means "at least one compared run has loaded", so while a selected run is
+    still loading, the own rows have no `run` parameter yet (it would be a
+    single value and no axis anyway).
 
 - [x] **ARCH-12. Default chart axes, sorting and filtering are tested functions** - Done 2026-11-19.
   - **Difficulty:** medium

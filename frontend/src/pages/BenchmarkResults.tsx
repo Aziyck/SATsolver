@@ -58,7 +58,7 @@ import { BenchmarkSetup, entryForRow } from "../components/BenchmarkSetup";
 import { FactsList, LogViewer, StatTile } from "../components/Display";
 import { SolverSettingsTable, StatsTable } from "../components/SolverSettingsTable";
 import { AnswerView } from "../components/views/ProblemViews";
-import { draftFromRequest } from "../lib/benchmark";
+import { draftFromRequest, isGraphSuite, mergeRuns } from "../lib/benchmark";
 import { duration, formatCount, formatSeconds, formatStat } from "../lib/format";
 import { formatValue } from "../lib/params";
 import { CASE_X, defaultAxes, filterRows, sortRows, statusCounts, suspiciousRows, TIME_METRIC, varyingParams, type Aggregate, type SortKey } from "../lib/stats";
@@ -86,18 +86,17 @@ export default function BenchmarkResults() {
     queries: compare.map((compareId) => rowsOptions(Number(compareId))),
   });
 
-  const ownRows = useMemo(() => (rowsQuery.data?.rows ?? []).map((row) => ({ ...row, run_label: job?.label ?? "" })), [rowsQuery.data, job?.label]);
-  const compareRows = compareQueries.flatMap((query) => (query.data ? query.data.rows.map((row) => ({ ...row, run_label: query.data!.label })) : []));
+  const ownRows = useMemo(() => rowsQuery.data?.rows ?? [], [rowsQuery.data]);
   const comparing = compare.length > 0;
-  const suite = new Set(ownRows.map((row) => row.problem)).size > 1;
-  const rows = useMemo(() => {
-    const combined = [...ownRows, ...compareRows];
-    // Expose "problem" (graph suites) and "run" (comparisons) as chartable parameters.
-    return combined.map((row) => ({
-      ...row,
-      params: { ...row.params, ...(suite ? { problem: row.problem } : {}), ...(comparing ? { run: row.run_label } : {}) },
-    }));
-  }, [ownRows, compareQueries.map((query) => query.dataUpdatedAt).join(","), suite, comparing]);
+  const suite = isGraphSuite(ownRows);
+  const rows = useMemo(
+    () =>
+      mergeRuns(
+        { jobId, label: job?.label ?? "", rows: ownRows },
+        compareQueries.flatMap((query) => (query.data ? [{ jobId: query.data.job_id, label: query.data.label, rows: query.data.rows }] : [])),
+      ),
+    [jobId, job?.label, ownRows, compare, compareQueries.map((query) => query.dataUpdatedAt).join(",")],
+  );
 
   if (isLoading) return <Loader />;
   if (isError || !job) {
@@ -522,8 +521,8 @@ function Cell({ children, right = false }: { children: ReactNode; right?: boolea
 
 function RowDrawer({ row, jobId, request, catalog, onClose }: { row: BenchmarkRow | null; jobId: number; request: BenchmarkRequest; catalog: Catalog; onClose: () => void }) {
   const navigate = useNavigate();
-  const own = row !== null && (row.run_label === undefined || row.run_label === `J${jobId}`);
-  const sourceJob = row?.run_label ? Number(row.run_label.slice(1)) : jobId;
+  const sourceJob = row?.job_id ?? jobId;
+  const own = row !== null && sourceJob === jobId;
   const caseQuery = useQuery({
     queryKey: ["case", sourceJob, row?.index],
     queryFn: () => api.rowCase(sourceJob, row!.index),

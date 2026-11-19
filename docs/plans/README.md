@@ -38,7 +38,7 @@ Free to do at any point, when there is time or when the code is being
 touched anyway:
 
 - the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25,
-  A27-A31;
+  A27-A32;
 - [architecture.md](architecture.md) parts 5 to 7 (ARCH-7 to ARCH-12).
   ARCH-7 and ARCH-8 pay off most if done before the features add their
   fields;

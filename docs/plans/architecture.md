@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4 and ARCH-7 to ARCH-12 done; ARCH-5 and ARCH-6 open)
+- **Status:** in progress (ARCH-1 to ARCH-5 and ARCH-7 to ARCH-12 done; ARCH-6 open)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -231,7 +231,7 @@ matches it.
 Separate the rule from the machinery. The manager keeps processes, threads
 and the lock, and asks a small pure module what the next status is.
 
-- [ ] **ARCH-5. The status rule is a pure function with a table test**
+- [x] **ARCH-5. The status rule is a pure function with a table test** - Done 2026-11-19.
   - **Difficulty:** hard (job statuses, cancellation)
   - **How:** a new module `sat_web/lifecycle.py`, imported by nothing but
     the manager:
@@ -251,6 +251,24 @@ and the lock, and asks a small pure module what the next status is.
     `docs/guide/architecture.md` ("Statuses") and every final status ignores
     every happening; the guide's diagram and the test table list the same
     arrows.
+
+    Built as written, with details the plan left open. `Happening` is a
+    `Literal` of the nine names and an unknown status or happening raises
+    `ValueError` (a typo must not read as "nothing happens"). `terminal_seen`
+    defaults to `False`, not `True` as the plan's signature has it: it is the
+    default of `Job.terminal_seen`, and a caller that forgets it gets
+    "failed", not a false "done". `terminal_seen` matters only for
+    `process_exited` of a running job; a cancelling job ends `cancelled`
+    either way, as `_finalize` does today. The diagram gained
+    `cancelling --> interrupted`, which `_finalize` already does on shutdown
+    and the guide did not draw. A happening on a finished status, and
+    `cancelled_event` on any status, change nothing. `tests/test_lifecycle.py`
+    also reads the guide's diagram and compares its arrows with the table,
+    and checks that the manager's `ACTIVE` and `FINISHED` match the module.
+    The manager does not call the module yet; ARCH-6 does that. One
+    difference ARCH-6 must decide with a test: `_apply` today sets `failed`
+    on any error event, even for a job already `done`, while the table ignores
+    it (a finished job is final).
 
 - [ ] **ARCH-6. The manager takes every status from the lifecycle**
   - **Difficulty:** hard (processes, threads, cancellation)

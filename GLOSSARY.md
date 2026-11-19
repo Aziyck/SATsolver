@@ -50,6 +50,7 @@ documents; this file only pins the meaning.
 | solver options | The values of a solver's parameter fields for one run. |
 | registry | The table, keyed by name, of everything of one kind the app knows: problems (`problems/base.py`, filled by `@register_problem`) and solvers (`sat_core/solver_registry.py`). Code looks a thing up by its key instead of branching on names. Filled when the module is imported. |
 | job | One unit of work the server runs in its own process: a solve, an encode (kind `generate`) or a benchmark. Shown as J1, J2, ... |
+| happening | One of the nine things that can change a job's status (`slot_free`, `stop`, `process_exited`, ...), the arrows of the status diagram in [architecture](docs/guide/architecture.md#statuses). Not a `RunEvent`: the job's `done`, `error` and `cancelled` events are three of the happenings, the others come from the manager, the user or the process. See `sat_web/lifecycle.py`. |
 | job id | The number in J12. Not reused while any job exists. |
 | daemon | Python's meaning, not the Unix one. A daemon process is killed when its parent exits and may not start child processes; a daemon thread does not keep its process alive. Job processes are not daemons. See [architecture](docs/guide/architecture.md#daemons-and-the-watchdog). |
 | seed | The number that makes a random instance or a random solver choice reproducible. |

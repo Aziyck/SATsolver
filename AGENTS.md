@@ -63,6 +63,7 @@ sat_core/
   seeds.py         deterministic seeding helpers
 sat_web/
   api.py           FastAPI app factory, REST endpoints, WebSocket, static files
+  lifecycle.py     next_status(): the job status rule, pure (the manager adopts it in ARCH-6)
   manager.py       JobManager: worker processes, queue, event fan-out, persistence
   store.py         SQLite store (jobs and benchmark rows)
   config.py        Settings from environment variables

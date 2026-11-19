@@ -2,7 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import { notifications } from "@mantine/notifications";
 import { api, ApiError } from "./client";
 import { mergeJobSnapshot, mergeRowsSnapshot, trackFetch, useLive } from "./live";
-import type { JobKind, ProblemSpec, SolverSpec } from "./types";
+import type { JobKind, ProblemSpec, SolverSpec, StatSpec } from "./types";
 
 export function useCatalog() {
   return useQuery({ queryKey: ["catalog"], queryFn: api.catalog, staleTime: Infinity });
@@ -11,6 +11,14 @@ export function useCatalog() {
 export function useProblem(key: string | undefined): ProblemSpec | undefined {
   const { data } = useCatalog();
   return data?.problems.find((problem) => problem.key === key);
+}
+
+const NO_STATS: StatSpec[] = [];
+
+/** The statistics the solvers report (labels, explanations, which ones are charted). Empty until the catalog has loaded. */
+export function useStatSpecs(): readonly StatSpec[] {
+  const { data } = useCatalog();
+  return data?.stats ?? NO_STATS;
 }
 
 export function useSolverSpecs(): Record<string, SolverSpec> {

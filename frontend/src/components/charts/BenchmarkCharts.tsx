@@ -4,7 +4,8 @@ import type { BenchmarkRow } from "../../api/types";
 import { formatCount, formatSeconds } from "../../lib/format";
 import { formatValue } from "../../lib/params";
 import { CATEGORICAL, RUN_STATUS_ORDER, runStatusColor, type Scheme } from "../../lib/palette";
-import { seriesByX, statusShares, type Aggregate, type Metric, METRICS } from "../../lib/stats";
+import { useStatSpecs } from "../../api/queries";
+import { metricOption, seriesByX, statusShares, TIME_METRIC, type Aggregate, type Metric } from "../../lib/stats";
 import { baseOption, EChart, escapeHtml } from "./EChart";
 
 export interface ChartSettings {
@@ -24,7 +25,7 @@ function xAccessor(x: string) {
 
 function metricText(metric: Metric, value: number | null): string {
   if (value === null) return "-";
-  return metric === "elapsed" ? formatSeconds(value) : formatCount(Math.round(value));
+  return metric === TIME_METRIC ? formatSeconds(value) : formatCount(Math.round(value));
 }
 
 /** Solver series keep one colour per entity (in first-seen order), whatever the filter. */
@@ -47,7 +48,8 @@ export function MetricChart({
   title: string;
   height?: number;
 }) {
-  const metric = METRICS.find((item) => item.value === settings.metric)!;
+  const stats = useStatSpecs();
+  const metric = metricOption(stats, settings.metric);
   const data = useMemo(() => seriesByX(rows, xAccessor(settings.x), seriesOf, settings.metric, settings.aggregate), [rows, settings, seriesOf]);
   const numericX = settings.x !== CASE_X && data.xs.every((x) => typeof x === "number");
   const asLine = numericX && data.xs.length > 1;
@@ -87,7 +89,7 @@ export function MetricChart({
         ...base.axisCommon,
         axisLabel: {
           ...base.axisCommon.axisLabel,
-          formatter: (value: number) => (settings.metric === "elapsed" ? formatSeconds(value) : formatCount(value, "compact")),
+          formatter: (value: number) => (settings.metric === TIME_METRIC ? formatSeconds(value) : formatCount(value, "compact")),
         },
       };
       const categoryAxis = asLine
@@ -247,7 +249,8 @@ export function FacetedCharts({
   seriesOf: (row: BenchmarkRow) => string;
   seriesOrder: string[];
 }) {
-  const metricLabel = METRICS.find((item) => item.value === settings.metric)!.label;
+  const stats = useStatSpecs();
+  const metricLabel = metricOption(stats, settings.metric).label;
   const groups = useMemo(() => {
     if (!settings.facet) return [{ key: "all", label: "", rows }];
     const map = new Map<string, BenchmarkRow[]>();

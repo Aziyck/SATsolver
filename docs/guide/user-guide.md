@@ -252,8 +252,8 @@ benchmark and keeps the rows so far.
 - **Charts** tab:
   - **X axis**: any parameter that varies (or the case number);
   - **Split into panels by**: a second parameter, one small chart per value;
-  - **Measure**: time, decisions, conflicts, propagations, learned clauses or
-    flips;
+  - **Measure**: time, or any statistic the catalog marks for charts
+    (decisions, conflicts, propagations, learned clauses and flips today);
   - **Summary**: median, mean, minimum or maximum over the runs that share an
     x value;
   - **Log scale** for measures that span orders of magnitude.
@@ -262,8 +262,8 @@ benchmark and keeps the rows so far.
   x value for one solver (the phase transition is easy to see here). Every
   chart has a **Table view** with the same numbers and a download button for
   the image.
-- **Runs** tab: every run, sortable by any column, with search, status and
-  solver filters. Click a row (or press Enter on it) for details: parameters,
+- **Runs** tab: every run, sortable by any column (one column per charted
+  statistic), with search, status and solver filters. Click a row (or press Enter on it) for details: parameters,
   statistics, the solver's settings for that run, checks, and buttons to
   **Open in Solve** (rebuilds that exact instance on the Solve page) or
   **Download CNF**.

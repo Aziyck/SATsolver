@@ -16,6 +16,12 @@ from pathlib import Path
 VERSION = "2.0.0"
 
 CPUINFO = Path("/proc/cpuinfo")
+# Memory limit of the container, cgroup v2 then v1. "max" (v2) or a number near
+# 2**63 (v1) means no limit; taking the smaller of limit and host RAM drops both.
+CGROUP_MEMORY_FILES = (
+    Path("/sys/fs/cgroup/memory.max"),
+    Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUBPROCESS_TIMEOUT_SECONDS = 5
 
@@ -86,7 +92,7 @@ def _cpu_physical_cores() -> int | None:
     return len(pairs) or None
 
 
-def _ram_total_gb() -> float | None:
+def _host_ram_bytes() -> int | None:
     def posix():
         return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
 
@@ -119,7 +125,23 @@ def _ram_total_gb() -> float | None:
             return None
         return status.ullTotalPhys
 
-    total = _first(windows) if sys.platform == "win32" else _first(posix, macos)
+    return _first(windows) if sys.platform == "win32" else _first(posix, macos)
+
+
+def _cgroup_limit_bytes() -> int | None:
+    limits = []
+    for path in CGROUP_MEMORY_FILES:
+        try:
+            limits.append(int(path.read_text().strip()))
+        except (OSError, ValueError):
+            continue
+    return min(limits, default=None)
+
+
+def _ram_total_gb() -> float | None:
+    """RAM the run can use: the host's, or the container's limit when that is smaller."""
+
+    total = min(filter(None, (_host_ram_bytes(), _cgroup_limit_bytes())), default=None)
     return round(total / 1024**3, 1) if total else None
 
 

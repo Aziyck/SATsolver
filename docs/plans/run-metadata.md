@@ -34,7 +34,7 @@ PyPy when PyPy is used):
 | `cpu_model` | `AMD Ryzen 7 5800U` | Linux: `model name` in `/proc/cpuinfo`; macOS: `sysctl -n machdep.cpu.brand_string`; Windows: registry `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\ProcessorNameString` (`winreg`); fall back to `platform.processor()` |
 | `cpu_logical_cores` | `16` | `os.cpu_count()` |
 | `cpu_physical_cores` | `8` or `null` | Linux: distinct `(physical id, core id)` pairs in `/proc/cpuinfo`; elsewhere `null` unless cheap |
-| `ram_total_gb` | `15.5` | POSIX: `os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")`; Windows: `ctypes` `GlobalMemoryStatusEx` |
+| `ram_total_gb` | `15.5` | POSIX: `os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")`; Windows: `ctypes` `GlobalMemoryStatusEx`; macOS: `sysctl hw.memsize`. The container's cgroup memory limit counts when it is smaller (A37) |
 | `wizsat_version` | `2.0.0` | `VERSION` in `sat_core/environment.py` (`sat_web/api.py` imports it) |
 | `git_commit` | `9e11958` or `null` | `git rev-parse --short HEAD` in the repo root, if git is there |
 | `git_dirty` | `true` / `false` / `null` | `git status --porcelain` is not empty |
@@ -57,7 +57,6 @@ PyPy when PyPy is used):
   - **Built as:** `run_environment()` returns the ten facts it can read
     itself. `workers` and `started_at` are job facts (the request and the
     stored job), so META-2 adds them. The hostname opt-in is not built yet.
-    RAM inside a memory-limited container is A37.
   - **Done when:** tests show it returns every key of the table with
     JSON-serialisable values on the CI platforms (Ubuntu, Windows), and
     returns `None` values instead of raising when `/proc/cpuinfo` and git are

@@ -58,6 +58,23 @@ class RunEnvironmentTests(unittest.TestCase):
         for key in ("cpu_model", "cpu_physical_cores", "git_commit", "git_dirty"):
             self.assertIsNone(facts[key], key)
 
+    def test_a_cgroup_memory_limit_wins_over_the_host_ram(self):
+        host = 64 * 1024**3
+        for text, expected in [
+            ("2147483648\n", 2.0),  # cgroup v2 / v1 limit of 2 GiB
+            ("max\n", 64.0),  # cgroup v2: no limit
+            (str(2**63 - 4096), 64.0),  # cgroup v1: "no limit" is a huge number
+            ("garbage", 64.0),
+        ]:
+            with self.subTest(text=text):
+                environment._collect.cache_clear()
+                limit_file = mock.Mock(read_text=mock.Mock(return_value=text))
+                with (
+                    mock.patch.object(environment, "_host_ram_bytes", return_value=host),
+                    mock.patch.object(environment, "CGROUP_MEMORY_FILES", (limit_file,)),
+                ):
+                    self.assertEqual(run_environment()["ram_total_gb"], expected)
+
     def test_an_architecture_name_is_not_a_cpu_model(self):
         with (
             mock.patch.object(environment, "CPUINFO", Path("/nonexistent/cpuinfo")),

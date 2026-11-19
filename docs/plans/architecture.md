@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7, ARCH-8, ARCH-11 and ARCH-12 done)
+- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7 to ARCH-9, ARCH-11 and ARCH-12 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -344,7 +344,7 @@ list, `{"solvers": ["cdcl"], "rules": []}`, so that solver checks cannot
 fail. A caller working around an interface means the seam is in the wrong
 place.
 
-- [ ] **ARCH-9. The cases of a request can be asked for on their own**
+- [x] **ARCH-9. The cases of a request can be asked for on their own** - Done 2026-11-19.
   - **Difficulty:** medium (case order sets every row index)
   - **How:** `parse_cases(raw: dict) -> list[Case]` in
     `sat_core/benchmark.py` expands problems and parameters only;

@@ -8,6 +8,7 @@ from unittest import mock
 from sat_core.benchmark import (
     DPLL_FALLBACK_RULE,
     limits_for,
+    parse_cases,
     parse_request,
     rows_to_csv,
     run_benchmark,
@@ -109,6 +110,51 @@ class PlanTests(unittest.TestCase):
                 with self.assertRaises(ParamError) as context:
                     parse_request(raw)
                 self.assertIn(key, context.exception.errors)
+
+
+class ParseCasesTests(unittest.TestCase):
+    def test_cases_come_from_the_request_without_its_solvers(self):
+        raw = request(segments=[{"size": "4, 5"}], repeats=2, solvers=[{"solver": "no_such_solver"}], rules="garbage")
+
+        with self.assertRaises(ParamError):
+            parse_request(raw)
+        cases = parse_cases(raw)
+
+        self.assertEqual([case.index for case in cases], [0, 1, 2, 3])
+        self.assertEqual([case.params["size"] for case in cases], [4, 4, 5, 5])
+
+    def test_parse_request_uses_the_same_cases(self):
+        raw = request(problems=["random_3sat"], segments=[{"variables": 20, "ratio": "3, 4", "seed": ""}], repeats=2, seed=7)
+
+        self.assertEqual(parse_cases(raw), parse_request(raw).cases)
+
+    def test_the_cases_of_a_saved_request_do_not_change_with_its_solvers(self):
+        raw = request(solvers=["cdcl", "dpll"])
+        saved = parse_request(raw).normalized
+
+        self.assertEqual(parse_cases(saved), parse_request(raw).cases)
+
+    def test_case_errors_are_raised_without_solvers_too(self):
+        with self.assertRaises(ParamError) as context:
+            parse_cases(request(segments=[{"size": "0"}]))
+        self.assertIn("segments.0.size", context.exception.errors)
+
+    def test_a_grid_over_the_run_limit_is_refused_while_expanding(self):
+        with mock.patch("sat_core.benchmark.MAX_BENCHMARK_RUNS", 3):
+            with self.assertRaises(ParamError) as context:
+                parse_cases(request(segments=[{"size": "4, 5, 6, 7"}]))
+        self.assertIn("_", context.exception.errors)
+
+
+class RunLimitTests(unittest.TestCase):
+    def test_the_run_limit_counts_every_solver(self):
+        raw = request(segments=[{"size": "4, 5"}], solvers=["cdcl", "dpll"])
+        with mock.patch("sat_core.benchmark.MAX_BENCHMARK_RUNS", 3):
+            with self.assertRaises(ParamError) as context:
+                parse_request(raw)
+        self.assertIn("_", context.exception.errors)
+        with mock.patch("sat_core.benchmark.MAX_BENCHMARK_RUNS", 4):
+            self.assertEqual(parse_request(raw).total_runs, 4)
 
 
 class RuleTests(unittest.TestCase):

@@ -16,7 +16,7 @@ PACKAGES = ("solvers", "problems", "sat_core", "sat_web")
 
 # The two halves of sat_core, as drawn in the guide.
 BASE = {"models", "params", "seeds", "dimacs", "runtime", "verify"}
-ENGINE = {"answers", "jobs", "benchmark", "solver_registry", "parallel", "presets"}
+ENGINE = {"answers", "jobs", "benchmark", "solver_registry", "parallel", "presets", "export"}
 
 ALLOWED = {
     "base": {"base"},

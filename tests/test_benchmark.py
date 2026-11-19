@@ -10,9 +10,9 @@ from sat_core.benchmark import (
     limits_for,
     parse_cases,
     parse_request,
-    rows_to_csv,
     run_benchmark,
 )
+from sat_core.export import rows_to_csv
 from sat_core import solver_registry
 from sat_core.params import ParamError
 from sat_core.solver_registry import get_solver

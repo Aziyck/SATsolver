@@ -269,7 +269,8 @@ lists every endpoint.
 Without the server, the same engine is available in Python:
 
 ```python
-from sat_core.benchmark import parse_request, run_benchmark, rows_to_csv
+from sat_core.benchmark import parse_request, run_benchmark
+from sat_core.export import rows_to_csv
 
 plan = parse_request({...})            # the "request" object above
 rows = run_benchmark(plan)

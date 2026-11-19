@@ -25,8 +25,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES
-from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_cases, parse_request, rows_to_csv
+from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_cases, parse_request
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
+from sat_core.export import rows_to_csv
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
 from sat_core.presets import all_presets

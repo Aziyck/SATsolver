@@ -2,7 +2,7 @@
 
 import unittest
 
-from sat_core import benchmark
+from sat_core import export
 from sat_core.solver_registry import STAT_SPECS, all_solvers, run_solver, stats_summary
 
 SAT = [[1, 2], [-1, 2]]
@@ -42,7 +42,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_csv_columns_are_the_csv_entries_in_catalog_order(self):
         self.assertEqual(
-            benchmark.STAT_COLUMNS,
+            export.STAT_COLUMNS,
             (
                 "decisions",
                 "conflicts",
@@ -54,7 +54,7 @@ class CatalogTests(unittest.TestCase):
                 "best_unsatisfied",
             ),
         )
-        self.assertEqual(benchmark.STAT_COLUMNS, tuple(spec.key for spec in STAT_SPECS if spec.csv))
+        self.assertEqual(export.STAT_COLUMNS, tuple(spec.key for spec in STAT_SPECS if spec.csv))
 
     def test_summary_lists_the_entries_with_a_short_name_in_catalog_order(self):
         stats = {

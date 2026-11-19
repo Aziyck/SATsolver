@@ -87,7 +87,7 @@ PyPy when PyPy is used):
 - [ ] **META-4. The CSV carries the machine**
   - **Difficulty:** medium (changes a file format people keep)
   - **Blocked by:** META-2
-  - **How:** `rows_to_csv` in `sat_core/benchmark.py` adds a few columns per
+  - **How:** `rows_to_csv` in `sat_core/export.py` adds a few columns per
     row: `python`, `cpu`, `cores`, `ram_gb`, `os`, `wizsat_commit`. Per-row
     columns (not header comments) keep the file a valid CSV and keep the
     information when benchmarks from different machines are exported together

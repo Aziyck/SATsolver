@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4, ARCH-7 to ARCH-9, ARCH-11 and ARCH-12 done)
+- **Status:** in progress (ARCH-1 to ARCH-4 and ARCH-7 to ARCH-12 done; ARCH-5 and ARCH-6 open)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -355,7 +355,7 @@ place.
     for every preset in `sat_core/presets.py` the case labels and indices are
     identical before and after (record them first, as a test).
 
-- [ ] **ARCH-10. CSV export gets its own module**
+- [x] **ARCH-10. CSV export gets its own module** - Done 2026-11-19.
   - **Difficulty:** easy
   - **How:** move `STAT_COLUMNS`, `BASE_COLUMNS` and `rows_to_csv` to
     `sat_core/export.py` (add it to `ENGINE` in `tests/test_layers.py`). If

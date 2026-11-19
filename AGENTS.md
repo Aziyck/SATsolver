@@ -51,7 +51,8 @@ sat_core/
   params.py        ParamField schema: parsing, validation, sweeps ("1..30", "0.1..0.5:0.1")
   models.py        ProblemInstance, SolveResult, BenchmarkRow, STATUS_* constants
   solver_registry.py  SolverSpec registry and run_solver()
-  benchmark.py     request parsing, plan expansion, limit rules, run_benchmark/run_case, CSV
+  benchmark.py     request parsing, plan expansion, limit rules, run_benchmark/run_case
+  export.py        CSV export of benchmark rows (rows_to_csv, one format for all problems)
   parallel.py      opt-in process pool for benchmarks ("workers" > 1), parent watchdog
   presets.py       benchmark presets (plain request dicts)
   jobs.py          job bodies run in worker processes (solve, generate, benchmark)
@@ -238,7 +239,7 @@ needs a routine edit.
 | a solver (`solvers/`, `sat_core/solver_registry.py`) | `docs/algorithms/<solver>.md`; `docs/guide/performance.md` when speed or the search changed; solver options in `docs/guide/user-guide.md` |
 | a problem or an encoding (`problems/`) | `docs/algorithms/encodings.md`; `docs/guide/user-guide.md` |
 | how problems or solvers are added | `docs/guide/adding-a-problem.md` |
-| benchmark engine, presets, CSV (`sat_core/benchmark.py`, `parallel.py`, `presets.py`) | `docs/guide/benchmarking.md` |
+| benchmark engine, presets, CSV (`sat_core/benchmark.py`, `export.py`, `parallel.py`, `presets.py`) | `docs/guide/benchmarking.md` |
 | server, jobs, storage, events (`sat_web/`, `sat_core/jobs.py`, `runtime.py`) | `docs/guide/architecture.md`; `docs/guide/api.md` for endpoints, JSON and events |
 | a page or a component (`frontend/src/`) | `docs/guide/user-guide.md`; "Frontend" in `docs/guide/architecture.md` if the structure changed |
 | launcher, settings, dependencies, CI | `README.md`, this file |

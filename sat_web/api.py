@@ -27,7 +27,7 @@ from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES
 from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, rows_to_csv
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
-from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload, lookup_problem, parse_problem_request, parse_solve_request, visible_params
+from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
 from sat_core.presets import all_presets
 from sat_core.solver_registry import LOG_LEVELS, STAT_SPECS, all_solvers, get_solver
@@ -479,7 +479,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "row": row,
                 "problem": spec.key,
                 "params": visible_params(spec, case.params),
-                "instance": instance_payload(spec, instance, 0.0, None),
+                "instance": instance_summary(spec, instance, 0.0, None).to_dict(),
             }
 
         return await run_in_threadpool(work)

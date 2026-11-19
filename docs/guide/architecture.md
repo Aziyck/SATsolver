@@ -352,6 +352,12 @@ server process directly, on a worker thread.
 | `solve` | build, run the solver, judge the answer (`sat_core/answers.py`) | instance and result events, `instance.cnf`, `model.txt` |
 | `benchmark` | expand the plan, run every case with every solver | one row event per run |
 
+The payload of an instance event is an `InstanceSummary` and that of a result
+event a `SolveOutcome` (`sat_core/models.py`): frozen dataclasses, turned into
+the JSON dict by one `to_dict()` each, so the field list is written once in
+Python. A new field goes there and in `frontend/src/api/types.ts`
+(`InstanceInfo`, `SolveResult`) and `docs/guide/api.md`.
+
 Why processes and not threads:
 
 - **The GIL.** CPython has a global interpreter lock: only one thread per

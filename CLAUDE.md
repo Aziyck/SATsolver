@@ -3,8 +3,9 @@
 ## Notes for Claude Code
 
 - Read the relevant guide before larger changes: `docs/guide/architecture.md`
-  for server or job changes, `docs/guide/adding-a-problem.md` for new problems
-  or solvers, `docs/guide/benchmarking.md` for the benchmark engine.
+  and `docs/guide/how-it-works.md` for server or job changes,
+  `docs/guide/adding-a-problem.md` for new problems or solvers,
+  `docs/guide/benchmarking.md` for the benchmark engine.
 - Python API tests start real worker processes; they need
   `pip install -r requirements-dev.txt` and take a few seconds.
 - Cloud sessions get their dependencies from `.claude/hooks/session-start.sh`

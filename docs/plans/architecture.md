@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-4 done)
+- **Status:** in progress (ARCH-1 to ARCH-4 and ARCH-12 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -345,11 +345,22 @@ loads compared runs.
     graph suite; the page contains no `slice(1)` on a label; the end-to-end
     tests pass.
 
-- [ ] **ARCH-12. Default chart axes, sorting and filtering are tested functions**
+- [x] **ARCH-12. Default chart axes, sorting and filtering are tested functions** - Done 2026-11-19.
   - **Difficulty:** medium
   - **Blocked by:** ARCH-3 (the sort keys come from the catalog)
   - **How:** move the default x-axis and facet choice, `sortValue` and the
     row filter to `frontend/src/lib/stats.ts`.
+
+    Built as written, with details the plan left open. The functions are
+    `defaultAxes(varying)`, `sortValue`, `sortRows(rows, key, desc)` and
+    `filterRows(rows, filter)` (a `RowFilter`: statuses, solvers, query,
+    only-suspicious). `CASE_X` moved from `BenchmarkCharts.tsx` to
+    `lib/stats.ts` (a library must not import from a component), and the page
+    and charts import it from there. `isSuspicious` is new and
+    `suspiciousRows` uses it, so the filter and the warning flag cannot
+    disagree. Behaviour is unchanged: the sort keys are the five built-in
+    columns plus the catalog's `chart` statistics (which the table passes
+    in), and a run that lacks the sorted statistic still counts as -1.
   - **Done when:** unit tests cover the default axis for a sweep over one
     parameter, over two, and over none; sorting by a statistic a row lacks;
     and each filter; the page only wires them up.

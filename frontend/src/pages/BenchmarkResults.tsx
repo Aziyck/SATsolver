@@ -48,7 +48,6 @@ import { rowsOptions, useCatalog, useJob, useJobActions, useRows } from "../api/
 import type { BenchmarkRequest, BenchmarkRow, Catalog } from "../api/types";
 import {
   AggregateTable,
-  CASE_X,
   FacetedCharts,
   StatusLegendNote,
   StatusShareChart,
@@ -62,11 +61,9 @@ import { AnswerView } from "../components/views/ProblemViews";
 import { draftFromRequest } from "../lib/benchmark";
 import { duration, formatCount, formatSeconds, formatStat } from "../lib/format";
 import { formatValue } from "../lib/params";
-import { statusCounts, suspiciousRows, TIME_METRIC, varyingParams, type Aggregate } from "../lib/stats";
+import { CASE_X, defaultAxes, filterRows, sortRows, statusCounts, suspiciousRows, TIME_METRIC, varyingParams, type Aggregate, type SortKey } from "../lib/stats";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
 import { DRAFT_KEY } from "./BenchmarkBuilder";
-
-const PREFERRED_X = ["ratio", "probability", "average_degree", "edge_count", "givens", "variables", "nodes", "size", "target", "colors", "sat_percent"];
 
 export default function BenchmarkResults() {
   const { id } = useParams();
@@ -277,18 +274,7 @@ function EmptyRows({ active }: { active: boolean }) {
 
 function ChartsPanel({ rows, comparing }: { rows: BenchmarkRow[]; comparing: boolean }) {
   const varying = useMemo(() => varyingParams(rows), [rows]);
-  const numeric = varying.filter((item) => item.numeric);
-  const defaultX = useMemo(() => {
-    const preferred = PREFERRED_X.find((name) => numeric.some((item) => item.name === name));
-    return preferred ?? numeric[0]?.name ?? varying[0]?.name ?? CASE_X;
-  }, [numeric, varying]);
-  const defaultFacet = useMemo(() => {
-    const facet =
-      varying.find((item) => item.name === "problem")?.name ??
-      varying.find((item) => item.name !== defaultX && item.name !== "seed" && item.values.length <= 6)?.name ??
-      null;
-    return facet === defaultX ? null : facet;
-  }, [varying, defaultX]);
+  const { x: defaultX, facet: defaultFacet } = useMemo(() => defaultAxes(varying), [varying]);
   const [settings, setSettings] = useState<ChartSettings>({ x: defaultX, facet: defaultFacet, metric: TIME_METRIC, aggregate: "median", log: false });
   const [shareSeries, setShareSeries] = useState<string | null>(null);
 
@@ -374,18 +360,6 @@ function ChartsPanel({ rows, comparing }: { rows: BenchmarkRow[]; comparing: boo
   );
 }
 
-type BuiltInSortKey = "index" | "case_label" | "solver_label" | "status" | "elapsed";
-/** A built-in column, or the key of a statistic the catalog marks `chart`. */
-type SortKey = BuiltInSortKey | (string & {});
-
-const BUILT_IN_SORT_KEYS: readonly string[] = ["index", "case_label", "solver_label", "status", "elapsed"];
-
-function sortValue(row: BenchmarkRow, key: SortKey): number | string {
-  if (BUILT_IN_SORT_KEYS.includes(key)) return row[key as BuiltInSortKey];
-  const value = row.stats[key];
-  return typeof value === "number" ? value : -1;
-}
-
 function RunsTable({
   rows,
   catalog,
@@ -408,22 +382,10 @@ function RunsTable({
   const solvers = useMemo(() => [...new Set(rows.map((row) => row.solver_label))], [rows]);
   const statuses = useMemo(() => [...new Set(rows.map((row) => row.status))], [rows]);
 
-  const filtered = useMemo(() => {
-    const text = query.toLowerCase();
-    const list = rows.filter(
-      (row) =>
-        (!statusFilter.length || statusFilter.includes(row.status)) &&
-        (!solverFilter.length || solverFilter.includes(row.solver_label)) &&
-        (!onlySuspicious || suspicious.has(row)) &&
-        (!text || row.case_label.toLowerCase().includes(text)),
-    );
-    return [...list].sort((a, b) => {
-      const x = sortValue(a, sort.key);
-      const y = sortValue(b, sort.key);
-      const order = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
-      return sort.desc ? -order : order;
-    });
-  }, [rows, statusFilter, solverFilter, query, onlySuspicious, suspicious, sort]);
+  const filtered = useMemo(
+    () => sortRows(filterRows(rows, { statuses: statusFilter, solvers: solverFilter, query, onlySuspicious }), sort.key, sort.desc),
+    [rows, statusFilter, solverFilter, query, onlySuspicious, sort],
+  );
 
   const parent = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({ count: filtered.length, getScrollElement: () => parent.current, estimateSize: () => 37, overscan: 12 });

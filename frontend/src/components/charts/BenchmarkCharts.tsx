@@ -5,7 +5,7 @@ import { formatCount, formatSeconds } from "../../lib/format";
 import { formatValue } from "../../lib/params";
 import { CATEGORICAL, RUN_STATUS_ORDER, runStatusColor, type Scheme } from "../../lib/palette";
 import { useStatSpecs } from "../../api/queries";
-import { metricOption, seriesByX, statusShares, TIME_METRIC, type Aggregate, type Metric } from "../../lib/stats";
+import { CASE_X, metricOption, seriesByX, statusShares, TIME_METRIC, type Aggregate, type Metric } from "../../lib/stats";
 import { baseOption, EChart, escapeHtml } from "./EChart";
 
 export interface ChartSettings {
@@ -16,7 +16,6 @@ export interface ChartSettings {
   log: boolean;
 }
 
-const CASE_X = "__case";
 const AGGREGATE_LABELS: Record<Aggregate, string> = { median: "Median", mean: "Mean", min: "Minimum", max: "Maximum" };
 
 function xAccessor(x: string) {
@@ -297,5 +296,3 @@ export function StatusLegendNote() {
     </Group>
   );
 }
-
-export { CASE_X };

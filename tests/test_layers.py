@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ("solvers", "problems", "sat_core", "sat_web")
 
 # The two halves of sat_core, as drawn in the guide.
-BASE = {"models", "params", "seeds", "dimacs", "runtime", "verify"}
+BASE = {"models", "params", "seeds", "dimacs", "runtime", "verify", "environment"}
 ENGINE = {"answers", "jobs", "benchmark", "solver_registry", "parallel", "presets", "export"}
 
 ALLOWED = {

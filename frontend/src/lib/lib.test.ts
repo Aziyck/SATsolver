@@ -6,7 +6,22 @@ import { draftFromRequest, isVisibleSweep, requestFromDraft, sweepValue } from "
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
 import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
-import { aggregate, chartMetrics, metricOption, metricValue, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
+import {
+  aggregate,
+  CASE_X,
+  chartMetrics,
+  defaultAxes,
+  filterRows,
+  metricOption,
+  metricValue,
+  type RowFilter,
+  seriesByX,
+  sortRows,
+  sortValue,
+  statusShares,
+  suspiciousRows,
+  varyingParams,
+} from "./stats";
 import { learnLink } from "./learn";
 import { conflictCells, parsePuzzle, sudokuSize } from "./sudoku";
 
@@ -253,5 +268,110 @@ describe("links in the algorithm notes", () => {
     expect(learnLink("../visualisations/cdcl/index.html", topics).href).toBe("/visualisations/cdcl/");
     expect(learnLink("../guide/performance.md", topics).href).toBe("https://github.com/Aziyck/SATsolver/blob/main/docs/guide/performance.md");
     expect(learnLink("https://example.org/x", topics).href).toBe("https://example.org/x");
+  });
+});
+
+/** Rows whose parameters take the given values, one row per value of the first and second list. */
+function sweep(first: [string, unknown[]], second?: [string, unknown[]]): BenchmarkRow[] {
+  const rows: BenchmarkRow[] = [];
+  for (const a of first[1]) {
+    for (const b of second ? second[1] : [undefined]) {
+      rows.push(row({ params: { [first[0]]: a, ...(second ? { [second[0]]: b } : {}) } }));
+    }
+  }
+  return rows;
+}
+
+describe("default chart axes", () => {
+  it("uses the case as the axis when no parameter varies", () => {
+    expect(defaultAxes(varyingParams(sweep(["ratio", [4]])))).toEqual({ x: CASE_X, facet: null });
+  });
+
+  it("uses the one swept parameter as the axis and splits nothing", () => {
+    expect(defaultAxes(varyingParams(sweep(["ratio", [3, 4, 5]])))).toEqual({ x: "ratio", facet: null });
+  });
+
+  it("prefers the first known axis name and splits by the other parameter", () => {
+    const varying = varyingParams(sweep(["nodes", [10, 20]], ["ratio", [3, 4]]));
+    expect(defaultAxes(varying)).toEqual({ x: "ratio", facet: "nodes" });
+  });
+
+  it("splits by problem when the problem varies", () => {
+    const varying = varyingParams(sweep(["ratio", [3, 4]], ["problem", ["random_3sat", "clique"]]));
+    expect(defaultAxes(varying)).toEqual({ x: "ratio", facet: "problem" });
+  });
+
+  it("has no split when only the problem varies", () => {
+    expect(defaultAxes(varyingParams(sweep(["problem", ["random_3sat", "clique"]])))).toEqual({ x: "problem", facet: null });
+  });
+
+  it("falls back to a text parameter as the axis", () => {
+    expect(defaultAxes(varyingParams(sweep(["mode", ["random", "planted"]])))).toEqual({ x: "mode", facet: null });
+  });
+
+  it("never splits by the seed or by a parameter with more than six values", () => {
+    expect(defaultAxes(varyingParams(sweep(["ratio", [3, 4]], ["seed", [1, 2]])))).toEqual({ x: "ratio", facet: null });
+    expect(defaultAxes(varyingParams(sweep(["ratio", [3, 4]], ["colors", [1, 2, 3, 4, 5, 6, 7]])))).toEqual({ x: "ratio", facet: null });
+  });
+});
+
+describe("sorting runs", () => {
+  const rows = [
+    row({ index: 0, case_label: "n=10", elapsed: 5, stats: { conflicts: 30 } }),
+    row({ index: 1, case_label: "n=2", elapsed: 1, stats: {} }),
+    row({ index: 2, case_label: "n=100", elapsed: 3, stats: { conflicts: 7 } }),
+  ];
+  const order = (key: string, desc: boolean) => sortRows(rows, key, desc).map((item) => item.index);
+
+  it("sorts by a built-in column, in both directions", () => {
+    expect(order("elapsed", false)).toEqual([1, 2, 0]);
+    expect(order("elapsed", true)).toEqual([0, 2, 1]);
+    expect(order("index", true)).toEqual([2, 1, 0]);
+  });
+
+  it("sorts text with the numbers in it as numbers", () => {
+    expect(order("case_label", false)).toEqual([1, 0, 2]);
+  });
+
+  it("sorts by a statistic and puts a run that lacks it first, then last when descending", () => {
+    expect(sortValue(rows[1], "conflicts")).toBe(-1);
+    expect(order("conflicts", false)).toEqual([1, 2, 0]);
+    expect(order("conflicts", true)).toEqual([0, 2, 1]);
+  });
+
+  it("does not change the list it is given", () => {
+    const before = rows.map((item) => item.index);
+    sortRows(rows, "elapsed", true);
+    expect(rows.map((item) => item.index)).toEqual(before);
+  });
+});
+
+describe("filtering runs", () => {
+  const rows = [
+    row({ index: 0, case_label: "n=10 ratio=3", status: "SAT", solver_label: "CDCL" }),
+    row({ index: 1, case_label: "n=10 ratio=5", status: "UNSAT", solver_label: "DPLL" }),
+    row({ index: 2, case_label: "N=20 ratio=3", status: "TIMEOUT", solver_label: "CDCL" }),
+    row({ index: 3, case_label: "n=20 ratio=5", status: "SAT", solver_label: "DPLL", verified: false }),
+  ];
+  const none: RowFilter = { statuses: [], solvers: [], query: "", onlySuspicious: false };
+  const kept = (filter: Partial<RowFilter>) => filterRows(rows, { ...none, ...filter }).map((item) => item.index);
+
+  it("keeps every run when no filter is set", () => {
+    expect(kept({})).toEqual([0, 1, 2, 3]);
+  });
+
+  it("filters by status, by solver and by the text of the case, ignoring case", () => {
+    expect(kept({ statuses: ["SAT", "TIMEOUT"] })).toEqual([0, 2, 3]);
+    expect(kept({ solvers: ["DPLL"] })).toEqual([1, 3]);
+    expect(kept({ query: "n=20" })).toEqual([2, 3]);
+  });
+
+  it("keeps only suspicious runs on request", () => {
+    expect(kept({ onlySuspicious: true })).toEqual([3]);
+  });
+
+  it("combines the filters", () => {
+    expect(kept({ statuses: ["SAT"], solvers: ["DPLL"], query: "ratio=5" })).toEqual([3]);
+    expect(kept({ statuses: ["UNSAT"], onlySuspicious: true })).toEqual([]);
   });
 });

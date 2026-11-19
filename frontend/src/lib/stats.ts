@@ -53,8 +53,14 @@ export function aggregate(values: number[], how: Aggregate): number | null {
   }
 }
 
+export interface VaryingParam {
+  name: string;
+  numeric: boolean;
+  values: unknown[];
+}
+
 /** Parameters whose value differs between rows (candidates for chart axes). */
-export function varyingParams(rows: BenchmarkRow[]): { name: string; numeric: boolean; values: unknown[] }[] {
+export function varyingParams(rows: BenchmarkRow[]): VaryingParam[] {
   const seen = new Map<string, Map<string, unknown>>();
   for (const row of rows) {
     for (const [name, value] of Object.entries(row.params)) {
@@ -64,7 +70,7 @@ export function varyingParams(rows: BenchmarkRow[]): { name: string; numeric: bo
       seen.set(name, values);
     }
   }
-  const result = [];
+  const result: VaryingParam[] = [];
   for (const [name, values] of seen) {
     const list = [...values.values()];
     if (list.length > 1) {
@@ -72,6 +78,23 @@ export function varyingParams(rows: BenchmarkRow[]): { name: string; numeric: bo
     }
   }
   return result;
+}
+
+/** The x axis value that stands for "one group per case" rather than for a parameter. */
+export const CASE_X = "__case";
+
+/** Parameters worth putting on the x axis before any other, in this order. */
+const PREFERRED_X = ["ratio", "probability", "average_degree", "edge_count", "givens", "variables", "nodes", "size", "target", "colors", "sat_percent"];
+
+/** The most useful axes for rows that differ in the given parameters: x is a number if there is one, and the facet splits the charts by another parameter. */
+export function defaultAxes(varying: readonly VaryingParam[]): { x: string; facet: string | null } {
+  const numeric = varying.filter((item) => item.numeric);
+  const x = PREFERRED_X.find((name) => numeric.some((item) => item.name === name)) ?? numeric[0]?.name ?? varying[0]?.name ?? CASE_X;
+  const facet =
+    varying.find((item) => item.name === "problem")?.name ??
+    varying.find((item) => item.name !== x && item.name !== "seed" && item.values.length <= 6)?.name ??
+    null;
+  return { x, facet: facet === x ? null : facet };
 }
 
 export function sortValues(values: unknown[]): unknown[] {
@@ -151,11 +174,57 @@ export function statusCounts(rows: BenchmarkRow[]): Record<string, number> {
   return counts;
 }
 
-/** Runs whose answer contradicts a generator guarantee, or whose model failed verification. */
+/** A run whose answer contradicts a generator guarantee, or whose model failed verification. */
+export function isSuspicious(row: BenchmarkRow): boolean {
+  return row.verified === false || (row.expected !== null && (row.status === "SAT" || row.status === "UNSAT") && row.status !== row.expected);
+}
+
 export function suspiciousRows(rows: BenchmarkRow[]): BenchmarkRow[] {
+  return rows.filter(isSuspicious);
+}
+
+const BUILT_IN_SORT_KEYS = ["index", "case_label", "solver_label", "status", "elapsed"] as const;
+type BuiltInSortKey = (typeof BUILT_IN_SORT_KEYS)[number];
+/** A built-in column, or the key of a statistic the catalog marks `chart`. */
+export type SortKey = BuiltInSortKey | (string & {});
+
+function isBuiltInSortKey(key: string): key is BuiltInSortKey {
+  return (BUILT_IN_SORT_KEYS as readonly string[]).includes(key);
+}
+
+/** What a run is sorted by; a run that lacks the statistic gets -1, so it sorts before every count. */
+export function sortValue(row: BenchmarkRow, key: SortKey): number | string {
+  if (isBuiltInSortKey(key)) return row[key];
+  const value = row.stats[key];
+  return typeof value === "number" ? value : -1;
+}
+
+/** A sorted copy: numbers by value, text with the numbers in it as numbers. */
+export function sortRows(rows: readonly BenchmarkRow[], key: SortKey, desc: boolean): BenchmarkRow[] {
+  return [...rows].sort((a, b) => {
+    const x = sortValue(a, key);
+    const y = sortValue(b, key);
+    const order = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+    return desc ? -order : order;
+  });
+}
+
+/** What the Runs table shows: an empty list means "any". */
+export interface RowFilter {
+  statuses: readonly string[];
+  solvers: readonly string[];
+  /** Text of the case label, in any letter case. */
+  query: string;
+  onlySuspicious: boolean;
+}
+
+export function filterRows(rows: readonly BenchmarkRow[], filter: RowFilter): BenchmarkRow[] {
+  const text = filter.query.toLowerCase();
   return rows.filter(
     (row) =>
-      row.verified === false ||
-      (row.expected !== null && (row.status === "SAT" || row.status === "UNSAT") && row.status !== row.expected),
+      (!filter.statuses.length || filter.statuses.includes(row.status)) &&
+      (!filter.solvers.length || filter.solvers.includes(row.solver_label)) &&
+      (!filter.onlySuspicious || isSuspicious(row)) &&
+      (!text || row.case_label.toLowerCase().includes(text)),
   );
 }

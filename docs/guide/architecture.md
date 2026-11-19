@@ -679,10 +679,12 @@ usually a real error.
   while the user types (numbers as text, empty labels, fields that do not
   apply). `lib/benchmark.ts` converts between the draft and the benchmark
   request the API accepts, in both directions, so an existing benchmark can
-  be opened in the builder. `lib/stats.ts` aggregates rows for the charts
-  (ECharts) and tables, and `suspiciousRows` picks the runs to flag: a model
-  that failed verification, or a SAT or UNSAT answer that contradicts the
-  expected status.
+  be opened in the builder. `lib/stats.ts` holds the logic of the results
+  page, so it can be tested without rendering it: it aggregates rows for the
+  charts (ECharts), `defaultAxes` picks the default x axis and panel split
+  for the parameters that vary, `sortRows` and `filterRows` order and narrow
+  the Runs table, and `isSuspicious` flags a run whose model failed
+  verification or whose SAT or UNSAT answer contradicts the expected status.
 - **Routing**: `/` (redirects to `/solve`), `/solve`, `/solve/:problem`,
   `/benchmarks`, `/benchmarks/new`, `/benchmarks/:id`, `/jobs`, `/jobs/:id`
   (a solve or encode job on its own page; benchmarks redirect to their

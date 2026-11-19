@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 
 # Event types sent from worker processes to the server (and on to the UI).
+EVENT_ENVIRONMENT = "environment"  # the machine and software the job runs on, sent first
 EVENT_LOG = "log"            # a log line
 EVENT_PROGRESS = "progress"  # current/total progress
 EVENT_INSTANCE = "instance"  # an encoded instance is ready (solve/generate jobs)

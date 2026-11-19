@@ -17,7 +17,12 @@ import threading
 from typing import Any
 
 
-JSON_COLUMNS = ("request", "progress", "instance", "result", "errors", "logs")
+JSON_COLUMNS = ("request", "progress", "instance", "result", "errors", "logs", "environment")
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+# existing table as it is, so these are added with ALTER TABLE when missing;
+# the jobs of an older database read NULL there. CREATE TABLE keeps the first
+# schema, so a new database takes the same path and the migration always runs.
+ADDED_COLUMNS = {"environment": "TEXT"}
 COLUMNS = (
     "kind",
     "title",
@@ -33,6 +38,7 @@ COLUMNS = (
     "errors",
     "logs",
     "workdir",
+    "environment",
 )
 
 
@@ -67,6 +73,7 @@ class Store:
                 )
                 """
             )
+            self._add_missing_columns()
             self._db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS rows (
@@ -77,6 +84,20 @@ class Store:
                 )
                 """
             )
+
+    def _job_columns(self) -> set[str]:
+        return {record["name"] for record in self._db.execute("PRAGMA table_info(jobs)")}
+
+    def _add_missing_columns(self) -> None:
+        for name, sql_type in ADDED_COLUMNS.items():
+            if name in self._job_columns():
+                continue
+            try:
+                self._db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
+            except sqlite3.OperationalError:
+                # A second server opening the same file may have added it first.
+                if name not in self._job_columns():
+                    raise
 
     def close(self) -> None:
         with self._lock:

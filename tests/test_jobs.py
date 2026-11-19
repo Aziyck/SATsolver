@@ -5,11 +5,13 @@ import unittest
 from pathlib import Path
 
 from sat_core.dimacs import parse_dimacs
+from sat_core.environment import run_environment
 from sat_core.jobs import execute_job, solve_job
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_DONE,
+    EVENT_ENVIRONMENT,
     EVENT_ERROR,
     EVENT_INSTANCE,
     EVENT_PROGRESS,
@@ -48,6 +50,19 @@ class JobTests(unittest.TestCase):
             self.assertEqual(cnf.app_header, {"problem": "n_queens", "params": {"size": 6}})
             self.assertEqual(len(cnf.clauses), instance["clauses"])
             self.assertTrue((Path(workdir) / result["model_file"]).read_text().startswith("s SATISFIABLE"))
+
+    def test_every_job_first_reports_the_environment_it_runs_in(self):
+        # Sent before the request is checked, so a job that fails still says where it ran (META-2).
+        for kind, request in (
+            ("solve", {"problem": "n_queens", "params": {"size": 4}, "solver": "cdcl"}),
+            ("benchmark", {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"]}),
+            ("solve", {"problem": "chess"}),
+        ):
+            with self.subTest(kind=kind, request=request):
+                events = run(kind, request)
+                self.assertEqual(events[0].type, EVENT_ENVIRONMENT)
+                self.assertEqual(events[0].payload, run_environment())
+                self.assertEqual(len(of_type(events, EVENT_ENVIRONMENT)), 1)
 
     def test_generate_job_only_encodes(self):
         events = run("generate", {"problem": "graph_coloring", "params": {"seed": None}})

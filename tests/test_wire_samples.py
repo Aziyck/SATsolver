@@ -24,6 +24,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from sat_core.environment import run_environment
 from sat_core.jobs import execute_job, parse_solve_request
 from sat_core.runtime import EVENT_INSTANCE, EVENT_RESULT, EVENT_ROW, RunToken
 from sat_web.manager import Job
@@ -36,6 +37,26 @@ HEADER = """\
 // after a deliberate payload change run that test with WIZSAT_RECORD_GOLDEN=1.
 import type { BenchmarkRow, JobDetail, JobSummary, SolveRequest } from "./types";
 """
+
+
+# Fixed values for the environment of the sample job: the real ones differ per machine.
+# The keys come from run_environment(), so a new key raises KeyError here and needs a value.
+SAMPLE_ENVIRONMENT = {
+    "python_implementation": "CPython",
+    "python_version": "3.12.0",
+    "os": "Linux 6.8.0 (x86_64)",
+    "cpu_model": "Example CPU @ 3.00GHz",
+    "cpu_logical_cores": 8,
+    "cpu_physical_cores": 4,
+    "ram_total_gb": 15.5,
+    "wizsat_version": "2.0.0",
+    "git_commit": "0000000",
+    "git_dirty": False,
+}
+
+
+def sample_environment() -> dict[str, Any]:
+    return {key: SAMPLE_ENVIRONMENT[key] for key in run_environment()}
 
 
 def run_events(kind: str, request: dict[str, Any]) -> list:
@@ -79,6 +100,7 @@ def build_samples() -> dict[str, tuple[str, Any]]:
         progress={"current": 2, "total": 2, "message": "Finished: SAT"},
         instance=instance,
         result=result,
+        environment=sample_environment(),
         logs=deque([["10:00:00", "Encoding Sudoku: 9x9 manual, 30 givens"], ["10:00:00", "Finished."]]),
         rev=4,
     )
@@ -89,7 +111,7 @@ def build_samples() -> dict[str, tuple[str, Any]]:
 
     return {
         "jobSummary": ("JobSummary", job.summary()),
-        # The detail holds the instance and the result, so they are checked here too. A solve job's
+        # The detail holds the instance, the result and the environment, so they are checked here too. A solve job's
         # request is a SolveRequest; JobDetail types it as a solve and a benchmark request at once.
         "jobDetail": ('Omit<JobDetail, "request"> & { request: SolveRequest }', job.detail()),
         "benchmarkRow": ("BenchmarkRow", row),

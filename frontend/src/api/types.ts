@@ -196,11 +196,27 @@ export interface SolveRequest {
   log_level?: string;
 }
 
+/** The machine and software a job ran on (sat_core/environment.py). The nullable facts are null when they could not be read. */
+export interface RunEnvironment {
+  python_implementation: string;
+  python_version: string;
+  os: string | null;
+  cpu_model: string | null;
+  cpu_logical_cores: number | null;
+  cpu_physical_cores: number | null;
+  ram_total_gb: number | null;
+  wizsat_version: string;
+  git_commit: string | null;
+  git_dirty: boolean | null;
+}
+
 export interface JobDetail extends JobSummary {
   request: SolveRequest & BenchmarkRequest;
   instance: InstanceInfo | null;
   result: SolveResult | null;
   errors: Record<string, string> | null;
+  /** Null until the worker has started, and for jobs stored before it was recorded. */
+  environment: RunEnvironment | null;
   logs: LogLine[];
   log_count: number;
 }

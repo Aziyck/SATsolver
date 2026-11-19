@@ -46,6 +46,7 @@ function job(partial: Partial<JobDetail>): JobDetail {
     instance: null,
     result: null,
     errors: null,
+    environment: null,
     logs: [],
     log_count: 0,
     ...partial,

@@ -53,7 +53,7 @@ flowchart TB
     worker -- "RunEvents on a queue" --> reader
     worker --> folder
     reader -- "apply under the lock" --> state
-    reader -- "instance, result, rows" --> db
+    reader -- "environment, instance, result, rows" --> db
     reader -- "WebSocket /api/ws" --> live
     live -- "patch" --> cache
 ```
@@ -110,7 +110,7 @@ sequenceDiagram
     API-->>UI: job summary
     M->>W: _schedule / _start when a slot is free: spawn, status "running"
     loop until the job ends
-        W->>R: RunEvent (log, progress, instance, result, row)
+        W->>R: RunEvent (environment first, then log, progress, instance, result, row)
         R->>M: _apply: update the Job under the lock, persist
         M-->>UI: publish over the WebSocket
     end
@@ -352,13 +352,20 @@ server process directly, on a worker thread.
 | `solve` | build, run the solver, judge the answer (`sat_core/answers.py`) | instance and result events, `instance.cnf`, `model.txt` |
 | `benchmark` | expand the plan, run every case with every solver | one row event per run |
 
+Before the body runs, `execute_job` sends one environment event: the machine
+and software the worker runs on (`run_environment()` in
+`sat_core/environment.py`). It is sent first, before the request is checked,
+so a job that fails still records where it ran. It comes from the worker
+process and not from the server, so it names the interpreter that ran the
+job.
+
 The payload of an instance event is an `InstanceSummary` and that of a result
 event a `SolveOutcome` (`sat_core/models.py`): frozen dataclasses, turned into
 the JSON dict by one `to_dict()` each, so the field list is written once in
 Python. A new field goes there and in `frontend/src/api/types.ts`
 (`InstanceInfo`, `SolveResult`) and `docs/guide/api.md`.
 `tests/test_wire_samples.py` keeps the first two together: it records a real
-job summary, job detail (with its instance and result) and benchmark row in
+job summary, job detail (with its instance, result and environment) and benchmark row in
 `frontend/src/api/wireSamples.ts`, each declared `satisfies` its type, so the
 test fails when a Python payload changes and `npm run typecheck` fails when a
 type misses a field or has none that the payload sends. Values typed `any` or
@@ -559,6 +566,7 @@ Stored per job, and why there:
 |---|---|---|
 | SQLite | the normalized request | after validation, with defaults and seeds filled in, so a rerun repeats exactly the same job |
 | SQLite | the instance summary and the result | small, and needed to show the job again |
+| SQLite | the environment the worker reported | so a stored result still says which machine and interpreter produced it |
 | SQLite | the last 1000 log lines | written when the job ends; the live log is kept in memory while it runs |
 | SQLite | every benchmark row | the data behind the charts and the CSV |
 | `output/jobs/<id>/` | `instance.cnf`, `model.txt` | large; as files they can be downloaded or read in pieces |
@@ -580,15 +588,25 @@ database. Inside the server the lock, not WAL, decides who goes next.
 On startup, jobs saved as `queued`, `running` or `cancelling` are marked
 `interrupted` (see [Statuses](#statuses)).
 
+The tables are created with `CREATE TABLE IF NOT EXISTS`, which leaves a
+table from an older version as it is. A column added later is listed only in
+`ADDED_COLUMNS` in `store.py` (and `COLUMNS`, which the store may write),
+not in `CREATE TABLE`. When the store opens the file, it adds each missing
+one with `ALTER TABLE`. A new database takes the same path, so the
+migration runs on every start and cannot drift from the schema of a fresh
+file. The jobs of the older version read `NULL` there. There is no other
+migration: a column is only ever added, never renamed or removed.
+
 ## Live updates
 
 The worker never talks to the browser. Events flow:
 
 1. the worker puts `RunEvent`s on its queue;
 2. the manager's reader thread applies each event to the in-memory `Job`
-   (under `JobManager.lock`). The instance summary, the result and benchmark
-   rows are written to SQLite at once; log lines are saved when the job
-   ends. The message is then handed to the asyncio loop with
+   (under `JobManager.lock`). The environment, the instance summary, the
+   result and benchmark rows are written to SQLite at once; log lines are
+   saved when the job ends. The environment is only part of the job detail
+   and is not published. Every other message is handed to the asyncio loop with
    `call_soon_threadsafe`, because the WebSocket side belongs to the loop's
    own thread and the reader is a different one;
 3. each WebSocket subscriber (one per open tab) has a bounded queue of

@@ -222,6 +222,7 @@ The summary plus:
 | `instance` | the encoded instance (solve and generate jobs): `name`, `problem`, `params`, `variables`, `clauses`, `size_variables`, `facts`, `visual`, `expected`, `encode_seconds`, `cnf_file` |
 | `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats`, `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
 | `errors` | field errors if the job failed validation inside the worker |
+| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary, and not sent as a live event |
 | `logs` | the last 400 log lines as `[time, text]` pairs |
 | `log_count` | total log lines kept |
 

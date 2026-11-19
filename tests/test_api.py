@@ -10,7 +10,10 @@ sessions set WIZSAT_REQUIRE_API_TESTS=1, which turns the skip into a failure.
 
 import csv
 import io
+import json
 import os
+import platform
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -154,6 +157,17 @@ class JobTests(ApiTestCase):
 
         self.assertEqual(self.client.delete(f"/api/jobs/{job['id']}").status_code, 204)
         self.assertEqual(self.client.get(f"/api/jobs/{job['id']}").status_code, 404)
+
+    def test_a_finished_job_reports_the_environment_it_ran_in(self):
+        job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
+        detail = self.wait(job["id"])
+
+        # Reported by the worker process, which is this interpreter (META-2).
+        self.assertEqual(detail["environment"]["python_implementation"], platform.python_implementation())
+        self.assertEqual(detail["environment"]["wizsat_version"], self.client.get("/api/health").json()["version"])
+        # Only the detail carries it, not the job list or the live summaries.
+        listed = next(item for item in self.client.get("/api/jobs").json()["jobs"] if item["id"] == job["id"])
+        self.assertNotIn("environment", listed)
 
     def test_blank_seed_is_resolved_before_queueing(self):
         job = self.submit("generate", {"problem": "random_3sat", "params": {"seed": ""}})
@@ -475,6 +489,46 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(jobs["ghost"]["status"], "interrupted")
                 restored = client.get(f"/api/jobs/{job['id']}/rows").json()["rows"]
                 self.assertEqual(len(restored), 2)
+
+    def test_a_database_from_before_the_environment_column_still_opens(self):
+        # The jobs table as it was created before META-2: no environment column.
+        old_schema = """
+            CREATE TABLE jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, title TEXT NOT NULL,
+                status TEXT NOT NULL, created_at TEXT, started_at TEXT, finished_at TEXT,
+                request TEXT, progress TEXT, instance TEXT, result TEXT, error TEXT,
+                errors TEXT, logs TEXT, workdir TEXT
+            )
+        """
+        request = {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"}
+        with tempfile.TemporaryDirectory() as folder:
+            settings = make_settings(folder)
+            settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+            db = sqlite3.connect(str(settings.db_path))
+            db.execute(old_schema)
+            db.execute(
+                "INSERT INTO jobs (kind, title, status, request) VALUES (?, ?, ?, ?)",
+                ("solve", "from an old version", "done", json.dumps(request)),
+            )
+            db.commit()
+            db.close()
+
+            with local_client(settings) as client:
+                jobs = client.get("/api/jobs").json()["jobs"]
+                self.assertEqual([job["title"] for job in jobs], ["from an old version"])
+                self.assertIsNone(client.get(f"/api/jobs/{jobs[0]['id']}").json()["environment"])
+
+                # The added column holds the environment of a new job across a restart.
+                new_id = client.post("/api/jobs", json={"kind": "solve", "request": request}).json()["id"]
+                deadline = time.monotonic() + 60
+                while client.get(f"/api/jobs/{new_id}").json()["status"] not in ("done", "failed", "cancelled") and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                self.assertEqual(client.get(f"/api/jobs/{new_id}").json()["status"], "done")
+
+            with local_client(make_settings(folder)) as client:
+                self.assertIsNone(client.get(f"/api/jobs/{jobs[0]['id']}").json()["environment"])
+                restored = client.get(f"/api/jobs/{new_id}").json()["environment"]
+                self.assertEqual(restored["python_implementation"], platform.python_implementation())
 
     def test_jobs_saved_with_removed_solver_options_still_open_and_rerun(self):
         # Before the ProbSAT rewrite its options included noise and adaptive_noise

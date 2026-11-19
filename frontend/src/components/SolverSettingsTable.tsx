@@ -1,8 +1,10 @@
 import { Stack, Table, Text, Tooltip } from "@mantine/core";
 import { useStatSpecs } from "../api/queries";
-import type { Field, SolverSpec, Stats } from "../api/types";
+import type { Field, RunEnvironment, SolverSpec, Stats } from "../api/types";
+import { machineFacts } from "../lib/environment";
 import { formatSeconds, formatStat, statHelp, statLabel } from "../lib/format";
 import { defaultValues, displayValue, isDefaultValue, isVisible, type Values } from "../lib/params";
+import { FactsList } from "./Display";
 
 /** A setting that is not a solver option (time limit, log level), shown in the same table. */
 export interface ExtraSetting {
@@ -106,6 +108,28 @@ function SettingRow({ field, value }: { field: Field; value: unknown }) {
         </Text>
       </Table.Td>
     </Table.Tr>
+  );
+}
+
+/**
+ * The machine and software a job ran on, so a result says what produced it. A job
+ * without an environment (stored before it was recorded, or not started yet) says so
+ * instead of showing nothing.
+ */
+export function MachineBlock({ environment }: { environment: RunEnvironment | null }) {
+  return (
+    <div>
+      <Text fw={600} size="sm" mb={4}>
+        Machine
+      </Text>
+      {environment ? (
+        <FactsList facts={machineFacts(environment)} />
+      ) : (
+        <Text size="sm" c="dimmed">
+          The machine this job ran on was not recorded.
+        </Text>
+      )}
+    </div>
   );
 }
 

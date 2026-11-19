@@ -222,7 +222,7 @@ The summary plus:
 | `instance` | the encoded instance (solve and generate jobs): `name`, `problem`, `params`, `variables`, `clauses`, `size_variables`, `facts`, `visual`, `expected`, `encode_seconds`, `cnf_file` |
 | `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats`, `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
 | `errors` | field errors if the job failed validation inside the worker |
-| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary, and not sent as a live event |
+| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it |
 | `logs` | the last 400 log lines as `[time, text]` pairs |
 | `log_count` | total log lines kept |
 
@@ -289,6 +289,7 @@ and then batches of events:
 |---|---|
 | `{"type": "job", "job": JobSummary}` | a job is created, starts, finishes, or its progress changes (throttled to about 5 per second) |
 | `{"type": "log", "job_id", "line": [time, text]}` | a log line; at most 60 per second per job are streamed, the rest are summarised in a synthetic line and kept in the job log |
+| `{"type": "environment", "job_id", "environment": {...}}` | the worker of a job started and reported the machine and software it runs on; sent once per job, as the first event the worker itself emits |
 | `{"type": "instance", "job_id", "instance": {...}}` | a solve or generate job finished encoding |
 | `{"type": "result", "job_id", "result": {...}}` | a solve job has its answer |
 | `{"type": "row", "job_id", "row": BenchmarkRow}` | a benchmark run finished |
@@ -302,7 +303,7 @@ disconnected are not replayed.
 
 An event can arrive while a `GET` for the same job is in flight, and the
 `GET` reply can be older than the event. The web UI handles this with `rev`
-for summaries and by merging instance, result and row events into the reply
+for summaries and by merging environment, instance, result and row events into the reply
 (see `frontend/src/api/live.ts`).
 
 ## Example: solve from Python

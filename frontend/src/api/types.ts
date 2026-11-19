@@ -277,6 +277,7 @@ export interface RowCase {
 export type LiveEvent =
   | { type: "job"; job: JobSummary }
   | { type: "log"; job_id: number; line: LogLine; synthetic?: boolean }
+  | { type: "environment"; job_id: number; environment: RunEnvironment }
   | { type: "instance"; job_id: number; instance: InstanceInfo }
   | { type: "result"; job_id: number; result: SolveResult }
   | { type: "row"; job_id: number; row: BenchmarkRow }

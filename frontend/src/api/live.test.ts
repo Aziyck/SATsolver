@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyEvents, mergeJobSnapshot, mergeRowsSnapshot, trackFetch, useLive } from "./live";
-import type { BenchmarkRow, JobDetail, JobSummary, SolveResult } from "./types";
+import type { BenchmarkRow, JobDetail, JobSummary, RunEnvironment, SolveResult } from "./types";
 
 function summary(partial: Partial<JobSummary>): JobSummary {
   return {
@@ -31,6 +31,19 @@ function detail(partial: Partial<JobDetail>): JobDetail {
 }
 
 const RESULT = { status: "SAT" } as SolveResult;
+
+const ENVIRONMENT: RunEnvironment = {
+  python_implementation: "CPython",
+  python_version: "3.12.0",
+  os: "Linux 6.8.0 (x86_64)",
+  cpu_model: "Test CPU",
+  cpu_logical_cores: 8,
+  cpu_physical_cores: 4,
+  ram_total_gb: 15.5,
+  wizsat_version: "2.0.0",
+  git_commit: "0000000",
+  git_dirty: false,
+};
 
 /** A fetch whose reply was produced before the events below were sent. */
 function deferred<T>() {
@@ -85,6 +98,25 @@ describe("live events", () => {
     reply.resolve({ rows: [row(0), row(1)] });
     const data = mergeRowsSnapshot(7, await pendingFetch);
     expect(data.rows.map((item) => item.index)).toEqual([0, 1, 2]);
+  });
+
+  it("puts the environment of a job that has started into the job opened while it was queued", () => {
+    // The page for a queued job has environment: null; the worker reports it later (A38).
+    const client = new QueryClient();
+    client.setQueryData(["job", 1], detail({ status: "queued" }));
+    applyEvents([{ type: "environment", job_id: 1, environment: ENVIRONMENT }], client);
+    expect(client.getQueryData<JobDetail>(["job", 1])!.environment).toEqual(ENVIRONMENT);
+  });
+
+  it("keeps an environment that arrives while the job is being fetched", async () => {
+    const client = new QueryClient();
+    const reply = deferred<JobDetail>();
+    const pendingFetch = trackFetch(1, () => reply.promise);
+
+    applyEvents([{ type: "environment", job_id: 1, environment: ENVIRONMENT }], client);
+    // The server answered before the worker reported.
+    reply.resolve(detail({ status: "queued", environment: null }));
+    expect(mergeJobSnapshot(await pendingFetch).environment).toEqual(ENVIRONMENT);
   });
 
   it("does not let an old event overwrite a newer cached job", () => {

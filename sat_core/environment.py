@@ -1,9 +1,11 @@
 """
 The machine and software a run happens on, from the standard library only.
 
-Meant to be called inside the process that runs the solver, so it reports PyPy
-when PyPy runs the job. Every lookup is wrapped: a fact that cannot be found is
-None, never an error (docs/plans/run-metadata.md).
+run_environment() is meant to be called inside the process that runs the
+solver, so it reports PyPy when PyPy runs the job. The machine facts (OS, CPU,
+RAM) are the same for every process, so the server reads them once with
+machine_facts() and passes them in (A39). Every lookup is wrapped: a fact that
+cannot be found is None, never an error (docs/plans/run-metadata.md).
 """
 
 import functools
@@ -165,31 +167,66 @@ def _git(*args: str) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
-def _git_dirty() -> bool | None:
-    # Without --no-optional-locks, status may take .git/index.lock to refresh the
+def _git_facts() -> tuple[str | None, bool | None]:
+    """(short commit, dirty) from one git call: every job asks (A39)."""
+
+    # --branch adds "# branch.oid <commit>" ahead of the changed files, which
+    # "--porcelain=v2" lists one per line ("?" for an untracked one). Without
+    # --no-optional-locks, status may take .git/index.lock to refresh the
     # index, and a commit made at the same moment fails.
-    status = _git("--no-optional-locks", "status", "--porcelain")
-    return None if status is None else bool(status.strip())
+    status = _git("--no-optional-locks", "status", "--porcelain=v2", "--branch")
+    if status is None:
+        return None, None
+    lines = status.splitlines()
+    oid = next((line.split()[2] for line in lines if line.startswith("# branch.oid ")), None)
+    if oid is None or oid == "(initial)":
+        return None, None
+    # Seven characters, as `git rev-parse --short` gives in a repository this size.
+    return oid[:7], any(line and not line.startswith("#") for line in lines)
 
 
 @functools.cache
-def _collect() -> dict:
-    commit = _git("rev-parse", "--short", "HEAD")
+def _machine() -> dict:
     return {
-        "python_implementation": platform.python_implementation(),
-        "python_version": platform.python_version(),
         "os": _first(lambda: f"{platform.system()} {platform.release()} ({platform.machine()})"),
         "cpu_model": _cpu_model(),
         "cpu_logical_cores": os.cpu_count(),
         "cpu_physical_cores": _cpu_physical_cores(),
         "ram_total_gb": _ram_total_gb(),
-        "wizsat_version": VERSION,
-        "git_commit": commit.strip() if commit else None,
-        "git_dirty": _git_dirty() if commit else None,
     }
 
 
-def run_environment() -> dict:
-    """The facts above as a JSON-ready dict. Computed once per process; the caller gets a copy."""
+def machine_facts() -> dict:
+    """OS, CPU and RAM: the facts that stay the same for every process on this machine.
 
-    return dict(_collect())
+    Computed once per process; the caller gets a copy. The server reads them
+    once and passes them to each job, so a fresh worker does not read them again.
+    """
+
+    return dict(_machine())
+
+
+def run_environment(machine: dict | None = None) -> dict:
+    """Every fact above as a JSON-ready dict.
+
+    `machine` is what machine_facts() returned, possibly in another process;
+    without it this process reads them. The interpreter facts always come from
+    this process, so they name the interpreter that runs the job. Git is asked
+    on every call: a worker imports the code from disk when it starts, so a
+    solver edited while the server runs has to show up as a dirty tree.
+    """
+
+    machine = machine_facts() if machine is None else machine
+    commit, dirty = _git_facts()
+    return {
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "os": machine.get("os"),
+        "cpu_model": machine.get("cpu_model"),
+        "cpu_logical_cores": machine.get("cpu_logical_cores"),
+        "cpu_physical_cores": machine.get("cpu_physical_cores"),
+        "ram_total_gb": machine.get("ram_total_gb"),
+        "wizsat_version": VERSION,
+        "git_commit": commit,
+        "git_dirty": dirty,
+    }

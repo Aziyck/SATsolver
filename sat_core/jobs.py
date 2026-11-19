@@ -254,16 +254,24 @@ def benchmark_job(request: dict[str, Any], workdir: str | None, emit_event: Emit
 JOB_FUNCTIONS = {"solve": solve_job, "generate": generate_job, "benchmark": benchmark_job}
 
 
-def execute_job(kind: str, request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> None:
+def execute_job(
+    kind: str,
+    request: dict[str, Any],
+    workdir: str | None,
+    emit_event: Emit,
+    token: RunToken,
+    machine: dict[str, Any] | None = None,
+) -> None:
     """Run a job in the current process and always finish with done/cancelled/error.
 
     A job body returns True when it did all its work, and the job then ends
     done even if a Stop arrived after the work was finished (audit item A18).
+    `machine` is the server's machine_facts(); without it this process reads them.
     """
 
     try:
         # First, before the request is checked: a job that fails still records where it ran.
-        emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment()))
+        emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment(machine)))
         if kind not in JOB_FUNCTIONS:
             raise ValueError(f"Unknown job kind: {kind}")
         completed = JOB_FUNCTIONS[kind](request, workdir, emit_event, token)
@@ -279,11 +287,19 @@ def execute_job(kind: str, request: dict[str, Any], workdir: str | None, emit_ev
         emit_event(RunEvent(EVENT_CANCELLED, "Cancelled."))
 
 
-def run_job(kind: str, request: dict[str, Any], workdir: str | None, event_queue, cancel_event, skip_event) -> None:
+def run_job(
+    kind: str,
+    request: dict[str, Any],
+    workdir: str | None,
+    event_queue,
+    cancel_event,
+    skip_event,
+    machine: dict[str, Any] | None = None,
+) -> None:
     """Process target: bridge execute_job to a multiprocessing queue."""
 
     from sat_core.parallel import exit_when_parent_dies
 
     exit_when_parent_dies()
     token = RunToken(cancel_event, skip_event=skip_event)
-    execute_job(kind, request, workdir, event_queue.put, token)
+    execute_job(kind, request, workdir, event_queue.put, token, machine)

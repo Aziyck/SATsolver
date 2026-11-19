@@ -26,8 +26,8 @@ KEYS = {
 
 class RunEnvironmentTests(unittest.TestCase):
     def setUp(self):
-        environment._collect.cache_clear()
-        self.addCleanup(environment._collect.cache_clear)
+        environment._machine.cache_clear()
+        self.addCleanup(environment._machine.cache_clear)
 
     def test_returns_every_key_and_is_json_serialisable(self):
         facts = run_environment()
@@ -67,7 +67,7 @@ class RunEnvironmentTests(unittest.TestCase):
             ("garbage", 64.0),
         ]:
             with self.subTest(text=text):
-                environment._collect.cache_clear()
+                environment._machine.cache_clear()
                 limit_file = mock.Mock(read_text=mock.Mock(return_value=text))
                 with (
                     mock.patch.object(environment, "_host_ram_bytes", return_value=host),
@@ -98,18 +98,44 @@ class RunEnvironmentTests(unittest.TestCase):
         self.assertEqual(facts["cpu_model"], "Test CPU @ 3GHz")
         self.assertEqual(facts["cpu_physical_cores"], 2)
 
-    def test_git_facts_come_from_git_output(self):
+    def git_facts_for(self, status_output):
+        """Commit and dirty flag read from this `git status --porcelain=v2 --branch` output, and the git commands run."""
+
+        commands = []
+
         def fake_run(cmd, **_):
-            out = "abc1234\n" if "rev-parse" in cmd else " M file.py\n"
-            return mock.Mock(returncode=0, stdout=out)
+            commands.append(cmd)
+            return mock.Mock(returncode=0, stdout=status_output)
 
         with (
             mock.patch.object(environment, "_has_git_checkout", return_value=True),
             mock.patch.object(environment.subprocess, "run", side_effect=fake_run),
         ):
-            facts = run_environment()
-        self.assertEqual(facts["git_commit"], "abc1234")
-        self.assertIs(facts["git_dirty"], True)
+            facts = run_environment(machine={})
+        return facts["git_commit"], facts["git_dirty"], commands
+
+    def test_git_facts_come_from_one_git_command(self):
+        # Every job runs this, so one subprocess instead of two (A39).
+        head = "# branch.oid abc1234def5678abc1234def5678abc1234def56\n# branch.head main\n"
+        commit, dirty, commands = self.git_facts_for(head + "1 .M N... 100644 100644 100644 aaa bbb file.py\n")
+        self.assertEqual((commit, dirty), ("abc1234", True))
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(self.git_facts_for(head)[:2], ("abc1234", False))
+        self.assertEqual(self.git_facts_for(head + "? new_file.py\n")[:2], ("abc1234", True))
+        # A repository without a commit yet.
+        self.assertEqual(self.git_facts_for("# branch.oid (initial)\n# branch.head main\n")[:2], (None, None))
+
+    def test_given_machine_facts_are_used_without_reading_the_machine(self):
+        # The server reads them once and hands them to each job (A39).
+        given = {"os": "Given OS", "cpu_model": "Given CPU", "cpu_logical_cores": 3, "cpu_physical_cores": None, "ram_total_gb": 1.5}
+        with (
+            mock.patch.object(environment, "_cpu_model", side_effect=AssertionError("CPU read")),
+            mock.patch.object(environment, "_ram_total_gb", side_effect=AssertionError("RAM read")),
+        ):
+            facts = run_environment(machine=given)
+        self.assertEqual(set(facts), KEYS)
+        self.assertEqual({key: facts[key] for key in given}, given)
+        self.assertEqual(facts["python_implementation"], environment.platform.python_implementation())
 
     def test_git_status_takes_no_lock_on_the_index(self):
         # Every job asks, so a plain "git status" would hold .git/index.lock while

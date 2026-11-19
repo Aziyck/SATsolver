@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from sat_core.environment import machine_facts
 from sat_core.jobs import run_job
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -141,6 +142,10 @@ class JobManager:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.subscribers: set[asyncio.Queue] = set()
         self.context = mp.get_context("spawn")
+        # Read once here, not in every fresh worker: the OS, CPU and RAM do not
+        # change while the server runs (A39). Each worker still adds its own
+        # interpreter and git facts.
+        self.machine = machine_facts()
         self.closing = False
         self._load()
 
@@ -319,7 +324,7 @@ class JobManager:
         job.skip_event = self.context.Event()
         job.process = self.context.Process(
             target=run_job,
-            args=(job.kind, job.request, str(job.workdir), event_queue, job.cancel_event, job.skip_event),
+            args=(job.kind, job.request, str(job.workdir), event_queue, job.cancel_event, job.skip_event, self.machine),
             # Not a daemon: a benchmark job may start its own worker pool,
             # which daemon processes are not allowed to do. Jobs end with the
             # server anyway: shutdown() stops them, and each job watches its

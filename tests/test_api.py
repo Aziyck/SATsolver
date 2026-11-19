@@ -169,6 +169,22 @@ class JobTests(ApiTestCase):
         listed = next(item for item in self.client.get("/api/jobs").json()["jobs"] if item["id"] == job["id"])
         self.assertNotIn("environment", listed)
 
+    def test_the_server_reads_the_machine_once_and_hands_it_to_each_job(self):
+        # A worker is a fresh process: it can only know this CPU name from the server (A39).
+        server_machine = {"os": "Server OS", "cpu_model": "Read by the server", "cpu_logical_cores": 2, "cpu_physical_cores": 1, "ram_total_gb": 4.0}
+        with mock.patch("sat_web.manager.machine_facts", return_value=server_machine) as read:
+            with local_client(make_settings(str(Path(self.folder.name) / "machine"))) as client:
+                ids = [client.post("/api/jobs", json={"kind": "solve", "request": {"problem": "n_queens", "params": {"size": 4}}}).json()["id"] for _ in range(2)]
+                deadline = time.monotonic() + 60
+                while any(client.get(f"/api/jobs/{job_id}").json()["status"] not in ("done", "failed") for job_id in ids) and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                details = [client.get(f"/api/jobs/{job_id}").json() for job_id in ids]
+        self.assertEqual(read.call_count, 1)
+        for detail in details:
+            self.assertEqual(detail["status"], "done", detail["error"])
+            self.assertEqual({key: detail["environment"][key] for key in server_machine}, server_machine)
+            self.assertEqual(detail["environment"]["python_implementation"], platform.python_implementation())
+
     def test_blank_seed_is_resolved_before_queueing(self):
         job = self.submit("generate", {"problem": "random_3sat", "params": {"seed": ""}})
         detail = self.client.get(f"/api/jobs/{job['id']}").json()

@@ -355,9 +355,12 @@ server process directly, on a worker thread.
 Before the body runs, `execute_job` sends one environment event: the machine
 and software the worker runs on (`run_environment()` in
 `sat_core/environment.py`). It is sent first, before the request is checked,
-so a job that fails still records where it ran. It comes from the worker
-process and not from the server, so it names the interpreter that ran the
-job.
+so a job that fails still records where it ran. The interpreter and git
+facts come from the worker, so they name the interpreter that ran the job
+and the code it imported. The OS, CPU and RAM facts do not change while the
+server runs: `JobManager` reads them once with `machine_facts()` and passes
+them to `run_job`, so a fresh worker does not read them again
+([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)).
 
 The payload of an instance event is an `InstanceSummary` and that of a result
 event a `SolveOutcome` (`sat_core/models.py`): frozen dataclasses, turned into

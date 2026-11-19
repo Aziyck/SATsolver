@@ -191,7 +191,7 @@ class PayloadShapeTests(unittest.TestCase):
             container[key] = 0.0
 
         recorded = json.dumps(payloads, indent=1) + "\n"
-        if os.environ.get("WIZSAT_RECORD_GOLDEN"):
+        if os.environ.get("WIZSAT_RECORD_GOLDEN") == "1":
             # A deliberate change of a payload (a new statistic, a new field): record it and review the diff.
             self.golden.write_text(recorded, encoding="utf-8", newline="\n")
         expected = self.golden.read_text(encoding="utf-8").replace("\r\n", "\n")

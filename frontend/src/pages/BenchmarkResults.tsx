@@ -40,7 +40,7 @@ import {
 } from "@tabler/icons-react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, urls } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
@@ -54,6 +54,7 @@ import {
   StatusShareChart,
   type ChartSettings,
 } from "../components/charts/BenchmarkCharts";
+import { MeasureSelect } from "../components/charts/MeasureSelect";
 import { BenchmarkSetup, entryForRow } from "../components/BenchmarkSetup";
 import { FactsList, LogViewer, StatTile } from "../components/Display";
 import { SolverSettingsTable, StatsTable } from "../components/SolverSettingsTable";
@@ -61,7 +62,7 @@ import { AnswerView } from "../components/views/ProblemViews";
 import { draftFromRequest } from "../lib/benchmark";
 import { duration, formatCount, formatSeconds, formatStat } from "../lib/format";
 import { formatValue } from "../lib/params";
-import { METRICS, statusCounts, suspiciousRows, varyingParams, type Aggregate, type Metric } from "../lib/stats";
+import { statusCounts, suspiciousRows, TIME_METRIC, varyingParams, type Aggregate } from "../lib/stats";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
 import { DRAFT_KEY } from "./BenchmarkBuilder";
 
@@ -288,7 +289,7 @@ function ChartsPanel({ rows, comparing }: { rows: BenchmarkRow[]; comparing: boo
       null;
     return facet === defaultX ? null : facet;
   }, [varying, defaultX]);
-  const [settings, setSettings] = useState<ChartSettings>({ x: defaultX, facet: defaultFacet, metric: "elapsed", aggregate: "median", log: false });
+  const [settings, setSettings] = useState<ChartSettings>({ x: defaultX, facet: defaultFacet, metric: TIME_METRIC, aggregate: "median", log: false });
   const [shareSeries, setShareSeries] = useState<string | null>(null);
 
   useEffect(() => {
@@ -323,7 +324,7 @@ function ChartsPanel({ rows, comparing }: { rows: BenchmarkRow[]; comparing: boo
       <Group gap="sm" align="flex-end" wrap="wrap">
         <Select label="X axis" data={xOptions} value={settings.x} onChange={(x) => x && setSettings({ ...settings, x, facet: settings.facet === x ? null : settings.facet })} allowDeselect={false} w={170} />
         <Select label="Split into panels by" placeholder="none" data={facetOptions} value={settings.facet} onChange={(facet) => setSettings({ ...settings, facet })} clearable w={200} />
-        <Select label="Measure" data={METRICS.map((item) => ({ value: item.value, label: item.label }))} value={settings.metric} onChange={(metric) => metric && setSettings({ ...settings, metric: metric as Metric })} allowDeselect={false} w={160} />
+        <MeasureSelect value={settings.metric} onChange={(metric) => setSettings({ ...settings, metric })} />
         <Select
           label="Summary"
           data={[
@@ -373,14 +374,16 @@ function ChartsPanel({ rows, comparing }: { rows: BenchmarkRow[]; comparing: boo
   );
 }
 
-type SortKey = "index" | "case_label" | "solver_label" | "status" | "elapsed" | "decisions" | "conflicts" | "flips";
+type BuiltInSortKey = "index" | "case_label" | "solver_label" | "status" | "elapsed";
+/** A built-in column, or the key of a statistic the catalog marks `chart`. */
+type SortKey = BuiltInSortKey | (string & {});
+
+const BUILT_IN_SORT_KEYS: readonly string[] = ["index", "case_label", "solver_label", "status", "elapsed"];
 
 function sortValue(row: BenchmarkRow, key: SortKey): number | string {
-  if (key === "decisions" || key === "conflicts" || key === "flips") {
-    const value = row.stats[key];
-    return typeof value === "number" ? value : -1;
-  }
-  return row[key] as number | string;
+  if (BUILT_IN_SORT_KEYS.includes(key)) return row[key as BuiltInSortKey];
+  const value = row.stats[key];
+  return typeof value === "number" ? value : -1;
 }
 
 function RunsTable({
@@ -425,6 +428,7 @@ function RunsTable({
   const parent = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({ count: filtered.length, getScrollElement: () => parent.current, estimateSize: () => 37, overscan: 12 });
   const problemTitle = (key: string) => catalog.problems.find((problem) => problem.key === key)?.title ?? key;
+  const statColumns = useMemo(() => catalog.stats.filter((spec) => spec.chart), [catalog.stats]);
 
   const header = (key: SortKey, label: string, align: "left" | "right" = "left") => (
     <div role="columnheader" aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : "none"}>
@@ -444,7 +448,7 @@ function RunsTable({
     </div>
   );
 
-  const columns = `60px ${showRun ? "60px " : ""}${showProblem ? "130px " : ""}minmax(180px, 2fr) minmax(110px, 1fr) 90px 90px 90px 90px 80px`;
+  const columns = `60px ${showRun ? "60px " : ""}${showProblem ? "130px " : ""}minmax(180px, 2fr) minmax(110px, 1fr) 90px 90px${statColumns.map(() => " minmax(72px, 90px)").join("")}`;
 
   return (
     <Stack gap="sm">
@@ -467,9 +471,9 @@ function RunsTable({
           {header("solver_label", "Solver")}
           {header("status", "Answer")}
           {header("elapsed", "Time", "right")}
-          {header("decisions", "Decisions", "right")}
-          {header("conflicts", "Conflicts", "right")}
-          {header("flips", "Flips", "right")}
+          {statColumns.map((spec) => (
+            <Fragment key={spec.key}>{header(spec.key, spec.label, "right")}</Fragment>
+          ))}
         </div>
         <div ref={parent} style={{ height: 520, overflow: "auto" }}>
           <div role="rowgroup" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
@@ -531,9 +535,11 @@ function RunsTable({
                     </Group>
                   </Cell>
                   <Cell right>{formatSeconds(row.elapsed)}</Cell>
-                  <Cell right>{formatStat(row.stats.decisions)}</Cell>
-                  <Cell right>{formatStat(row.stats.conflicts)}</Cell>
-                  <Cell right>{formatStat(row.stats.flips)}</Cell>
+                  {statColumns.map((spec) => (
+                    <Cell key={spec.key} right>
+                      {formatStat(row.stats[spec.key])}
+                    </Cell>
+                  ))}
                 </div>
               );
             })}

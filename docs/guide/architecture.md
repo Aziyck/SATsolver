@@ -650,8 +650,12 @@ usually a real error.
   the reset buttons; `components/SolverSettingsTable.tsx` for the Settings
   tab of a solve job, the Setup tab of a benchmark
   (`components/BenchmarkSetup.tsx`) and the run drawer. Statistics get their
-  labels and explanations from `STATS` in `lib/format.ts`; a key without an
-  entry is shown under its own name.
+  labels and explanations from the catalog's `stats` (`useStatSpecs()`,
+  `statLabel` and `statHelp` in `lib/format.ts`); a key the catalog lacks is
+  shown under its own name. The chart measures (`chartMetrics` in
+  `lib/stats.ts`) and the sortable statistic columns of the Runs table are
+  the catalog entries with `chart: true`; only time (`TIME_METRIC`) is built
+  in.
 - **Answers**: `components/views/ProblemViews.tsx` picks a renderer by the
   problem's `result_view`:
 

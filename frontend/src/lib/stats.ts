@@ -1,23 +1,37 @@
-import type { BenchmarkRow } from "../api/types";
+import type { BenchmarkRow, StatSpec } from "../api/types";
+import { statLabel } from "./format";
 
 export type Aggregate = "median" | "mean" | "min" | "max";
-export type Metric = "elapsed" | "decisions" | "conflicts" | "propagations" | "learned_clauses" | "flips";
+/** `"elapsed"` or the key of a statistic in the catalog. */
+export type Metric = string;
 
-export const METRICS: { value: Metric; label: string; unit?: string }[] = [
-  { value: "elapsed", label: "Time", unit: "s" },
-  { value: "decisions", label: "Decisions" },
-  { value: "conflicts", label: "Conflicts" },
-  { value: "propagations", label: "Propagations" },
-  { value: "learned_clauses", label: "Learned clauses" },
-  { value: "flips", label: "Flips" },
-];
+/** Every row has a time, so it is a measure of its own: it is not a statistic a solver reports. */
+export const TIME_METRIC: Metric = "elapsed";
+
+export interface MetricOption {
+  value: Metric;
+  label: string;
+}
+
+/** The measures the charts offer: time, then each statistic the catalog marks `chart`, in catalog order. */
+export function chartMetrics(stats: readonly StatSpec[]): MetricOption[] {
+  return [
+    { value: TIME_METRIC, label: "Time" },
+    ...stats.filter((spec) => spec.chart).map((spec) => ({ value: spec.key, label: spec.label })),
+  ];
+}
+
+/** The option for one measure, also for a key the catalog no longer charts. */
+export function metricOption(stats: readonly StatSpec[], metric: Metric): MetricOption {
+  return chartMetrics(stats).find((option) => option.value === metric) ?? { value: metric, label: statLabel(metric, stats) };
+}
 
 /** Statuses that produced a measurement (skipped, cancelled and failed runs did not). */
 export const MEASURED = new Set(["SAT", "UNSAT", "UNKNOWN", "TIMEOUT"]);
 
 export function metricValue(row: BenchmarkRow, metric: Metric): number | null {
   if (!MEASURED.has(row.status)) return null;
-  if (metric === "elapsed") return row.elapsed;
+  if (metric === TIME_METRIC) return row.elapsed;
   const value = row.stats[metric];
   return typeof value === "number" ? value : null;
 }

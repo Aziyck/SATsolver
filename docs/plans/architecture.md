@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 and ARCH-2 done)
+- **Status:** in progress (ARCH-1 to ARCH-3 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -157,7 +157,7 @@ way.
     catalog; the CSV of a fixed benchmark is byte-identical before and after
     (record it first, as a test); `/api/catalog` includes `stats`.
 
-- [ ] **ARCH-3. The frontend reads statistics from the catalog**
+- [x] **ARCH-3. The frontend reads statistics from the catalog** - Done 2026-11-19.
   - **Difficulty:** medium
   - **Blocked by:** ARCH-2
   - **How:** `STATS` in `format.ts`, `METRICS` in `stats.ts` and `SortKey`
@@ -166,6 +166,19 @@ way.
     falls back to its own name. Update the rule in `AGENTS.md` ("Every new
     stat key gets a label...") to name the catalog, and the "Where the
     numbers live" part of [memory-measurement.md](memory-measurement.md).
+
+    Built as written, with details the plan left open. `statLabel` and
+    `statHelp` take the catalog's list as a second argument; components get it
+    from `useStatSpecs()` (`api/queries.ts`). The measures are `chartMetrics`
+    and `metricOption` in `lib/stats.ts`, time being the built-in
+    `TIME_METRIC`, and the picker is its own component,
+    `components/charts/MeasureSelect.tsx`, so a test can reach it without the
+    page. The Runs table gets one sortable column per `chart` statistic, so it
+    now has five (decisions, conflicts, propagations, learned clauses, flips)
+    instead of three, each shrinking from 90 px to 72 px on a narrow window.
+    `timeout` is gone from the labels: no solver reports it, and the fallback
+    label "Timeout" is the same text. Test fixtures `statSpec()` and
+    `catalog()` are in `frontend/src/test/catalog.ts`.
   - **Done when:** the frontend has no hard-coded list of statistic keys (a
     repo search for `"conflicts"` in `frontend/src` finds only tests and
     fixtures); a component test with a seeded catalog that adds a made-up

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { BenchmarkRow, Catalog } from "../api/types";
+import { statSpec } from "../test/catalog";
 import { field } from "../test/fields";
 import { draftFromRequest, isVisibleSweep, requestFromDraft, sweepValue } from "./benchmark";
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
 import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
-import { aggregate, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
+import { aggregate, chartMetrics, metricOption, metricValue, seriesByX, statusShares, suspiciousRows, varyingParams } from "./stats";
 import { learnLink } from "./learn";
 import { conflictCells, parsePuzzle, sudokuSize } from "./sudoku";
 
@@ -193,6 +194,19 @@ describe("stats", () => {
     expect(shares[1]).toEqual({ x: 4, total: 3, counts: { UNSAT: 1, SKIPPED: 1, SAT: 1 } });
     const flagged = suspiciousRows([row({ expected: "SAT", status: "UNSAT" }), row({ verified: false }), row({})]);
     expect(flagged).toHaveLength(2);
+  });
+
+  it("offers time, then the catalog's chart statistics, as measures", () => {
+    const stats = [statSpec({ key: "restarts", label: "Restarts" }), statSpec({ key: "stored_literals", label: "Stored literals", chart: true })];
+    expect(chartMetrics(stats)).toEqual([
+      { value: "elapsed", label: "Time" },
+      { value: "stored_literals", label: "Stored literals" },
+    ]);
+    expect(metricValue(row({ stats: { stored_literals: 42 } }), "stored_literals")).toBe(42);
+  });
+
+  it("labels a measure the catalog no longer charts", () => {
+    expect(metricOption([], "peak_memory")).toEqual({ value: "peak_memory", label: "Peak memory" });
   });
 
   it("formats durations", () => {

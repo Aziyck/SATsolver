@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { SolverSpec } from "../api/types";
+import { catalog, statSpec } from "../test/catalog";
 import { field } from "../test/fields";
 import { renderWithApp } from "../test/render";
 import { SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
@@ -91,15 +92,27 @@ describe("SolverSettingsTable", () => {
 });
 
 describe("StatsTable", () => {
-  it("shows a readable label for each statistic", () => {
-    renderWithApp(<StatsTable stats={{ decisions: 12, conflicts: 3 }} />);
-    expect(screen.getByText("Decisions")).toBeTruthy();
-    expect(screen.getByText("Conflicts")).toBeTruthy();
+  const STATS = catalog({
+    stats: [
+      statSpec({ key: "decisions", label: "Decisions", help: "Times the solver guessed a value." }),
+      statSpec({ key: "elapsed", label: "Solver time", unit: "s" }),
+      statSpec({ key: "glue_bonus_count", label: "Glue bonus", help: "Made-up statistic only the catalog knows." }),
+    ],
   });
 
-  it("shows elapsed as a time and gives unknown keys a readable label", () => {
-    renderWithApp(<StatsTable stats={{ elapsed: 0.0123, glue_bonus_count: 1234 }} />);
+  it("takes the label of each statistic from the catalog", () => {
+    renderWithApp(<StatsTable stats={{ decisions: 12, glue_bonus_count: 3 }} />, { queryData: [[["catalog"], STATS]] });
+    expect(screen.getByText("Decisions")).toBeTruthy();
+    expect(screen.getByText("Glue bonus")).toBeTruthy();
+  });
+
+  it("shows elapsed as a time", () => {
+    renderWithApp(<StatsTable stats={{ elapsed: 0.0123 }} />, { queryData: [[["catalog"], STATS]] });
     expect(within(row("Solver time")).getByText("12.3 ms")).toBeTruthy();
+  });
+
+  it("gives a key the catalog lacks a readable label", () => {
+    renderWithApp(<StatsTable stats={{ glue_bonus_count: 1234 }} />, { queryData: [[["catalog"], catalog()]] });
     expect(within(row("Glue bonus count")).getByText("1,234")).toBeTruthy();
   });
 });

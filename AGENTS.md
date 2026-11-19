@@ -136,8 +136,8 @@ or solver; it has the checklists and the tests to write. What it cannot show:
   claim one for an UNSAT formula (give them a small budget there).
 - Every new stat key is declared once as a `StatSpec` in `STAT_SPECS`
   (`sat_core/solver_registry.py`): label, log name, one-line explanation, CSV
-  and chart flags. Until ARCH-3 it also needs an entry in `STATS`
-  (`frontend/src/lib/format.ts`).
+  and chart flags. The frontend reads them from `GET /api/catalog`; it keeps
+  no list of statistic keys, so nothing else needs an entry.
 
 ## Statuses
 

@@ -194,7 +194,8 @@ CDCL against DPLL.
 - **Watch the suspicious filter.** A verified-false or unexpected answer
   means a bug in an encoder or solver, not a slow run.
 
-Measures available in the charts:
+Measures available in the charts: time, and every `StatSpec` with
+`chart=True` (`sat_core/solver_registry.py`). Today:
 
 | Measure | Solvers | Meaning |
 |---|---|---|

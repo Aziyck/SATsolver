@@ -97,17 +97,18 @@ after each run. For the child, run the same code with `subprocess.run([sys.execu
   - Both measures are plain scalar stats, so they flow through `public_stats()`
     in `sat_core/solver_registry.py` into `SolveResult.stats` and
     `BenchmarkRow.stats` without a schema change.
-  - Add `peak_memory_mb`, `baseline_memory_mb` and `peak_stored_literals` to
-    `STAT_COLUMNS` in `sat_core/benchmark.py` (CSV).
-  - Add a label and a one-line explanation for each in `STATS` in
-    `frontend/src/lib/format.ts` (AGENTS.md rule).
-  - Once ARCH-2 and ARCH-3 ([architecture plan](architecture.md)) are done,
-    these lists are one catalog entry per statistic instead.
+  - Declare `peak_memory_mb`, `baseline_memory_mb` and `peak_stored_literals`
+    as `StatSpec` entries in `STAT_SPECS` (`sat_core/solver_registry.py`):
+    label, one-line explanation, `csv=True` for the CSV column, and
+    `chart=True` for the two that are chart measures. ARCH-2 and ARCH-3
+    ([architecture plan](architecture.md)) made that the only list: the CSV,
+    the log line, the labels, the chart measures and the Runs table columns
+    all derive from it.
 - **UI:**
   - "Peak memory" in the run drawer and the solve job's Statistics tab.
   - An optional column in the Runs table.
-  - "Peak memory" and "Stored literals" as measures in the charts (`METRICS`
-    in `frontend/src/lib/stats.ts`).
+  - "Peak memory" and "Stored literals" as measures in the charts
+    (`chart=True` on their `StatSpec`).
   - Charts follow the existing dataviz rules: one y-axis. Memory and time are
     separate measures, never a second axis on the same chart.
 - **Rows without the measurement** (option off, or older benchmarks): show
@@ -158,7 +159,7 @@ With every run in its own child, a per-run limit becomes possible:
     label it "peak memory of the job".
   - **Done when:** an API test finds both stats on a finished solve job with
     peak >= baseline > 0, and the Statistics tab shows them with a label and
-    an explanation (`STATS` in `frontend/src/lib/format.ts`).
+    an explanation (the `StatSpec` entries in `STAT_SPECS`).
 
 - [ ] **MEM-3. The solver runner reports memory per run**
   - **Difficulty:** easy
@@ -195,10 +196,10 @@ With every run in its own child, a per-run limit becomes possible:
   - **Difficulty:** medium
   - **Blocked by:** MEM-4, MEM-5
   - **How:** `peak_memory_mb`, `baseline_memory_mb` and `peak_stored_literals`
-    in `STAT_COLUMNS` (`sat_core/benchmark.py`); labels in `STATS`; "Peak
-    memory" and "Stored literals" in `METRICS` (`frontend/src/lib/stats.ts`);
-    an optional column in the Runs table; the run drawer. One y-axis per chart
-    (memory and time are separate measures).
+    as `StatSpec` entries (`csv=True`; `chart=True` for "Peak memory" and
+    "Stored literals", which makes them chart measures and Runs table
+    columns); the run drawer. One y-axis per chart (memory and time are
+    separate measures).
   - **Done when:** the CSV of a measured benchmark has the three columns
     filled; a chart can use each new measure; rows without the measurement
     show "not measured", never 0.

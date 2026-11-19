@@ -1,4 +1,5 @@
 import { Stack, Table, Text, Tooltip } from "@mantine/core";
+import { useStatSpecs } from "../api/queries";
 import type { Field, SolverSpec, Stats } from "../api/types";
 import { formatSeconds, formatStat, statHelp, statLabel } from "../lib/format";
 import { defaultValues, displayValue, isDefaultValue, isVisible, type Values } from "../lib/params";
@@ -110,16 +111,17 @@ function SettingRow({ field, value }: { field: Field; value: unknown }) {
 
 /** Solver statistics with a readable label; hovering a label explains the number. */
 export function StatsTable({ stats, size = "sm" }: { stats: Stats; size?: "xs" | "sm" }) {
+  const specs = useStatSpecs();
   return (
     <Table striped withTableBorder className="wz-num" fz={size}>
       <Table.Tbody>
         {Object.entries(stats).map(([key, value]) => {
-          const help = statHelp(key);
+          const help = statHelp(key, specs);
           return (
             <Table.Tr key={key}>
               <Table.Td>
                 <Tooltip label={help} disabled={!help} multiline maw={320} position="top-start">
-                  <span className={help ? "wz-explained" : undefined}>{statLabel(key)}</span>
+                  <span className={help ? "wz-explained" : undefined}>{statLabel(key, specs)}</span>
                 </Tooltip>
               </Table.Td>
               <Table.Td ta="right">{key === "elapsed" && typeof value === "number" ? formatSeconds(value) : formatStat(value)}</Table.Td>

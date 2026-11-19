@@ -1,6 +1,6 @@
 # Plan: record where and how every run happened
 
-- **Status:** proposed, not started
+- **Status:** in progress (META-1 done 2026-11-19)
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
 - **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
@@ -34,8 +34,8 @@ PyPy when PyPy is used):
 | `cpu_model` | `AMD Ryzen 7 5800U` | Linux: `model name` in `/proc/cpuinfo`; macOS: `sysctl -n machdep.cpu.brand_string`; Windows: registry `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\ProcessorNameString` (`winreg`); fall back to `platform.processor()` |
 | `cpu_logical_cores` | `16` | `os.cpu_count()` |
 | `cpu_physical_cores` | `8` or `null` | Linux: distinct `(physical id, core id)` pairs in `/proc/cpuinfo`; elsewhere `null` unless cheap |
-| `ram_total_gb` | `15.5` | POSIX: `os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")`; Windows: `ctypes` `GlobalMemoryStatusEx` |
-| `wizsat_version` | `2.0.0` | today `VERSION` in `sat_web/api.py`; move it into `sat_core` so the job process can read it |
+| `ram_total_gb` | `15.5` | POSIX: `os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")`; Windows: `ctypes` `GlobalMemoryStatusEx`; macOS: `sysctl hw.memsize`. The container's cgroup memory limit counts when it is smaller (A37) |
+| `wizsat_version` | `2.0.0` | `VERSION` in `sat_core/environment.py` (`sat_web/api.py` imports it) |
 | `git_commit` | `9e11958` or `null` | `git rev-parse --short HEAD` in the repo root, if git is there |
 | `git_dirty` | `true` / `false` / `null` | `git status --porcelain` is not empty |
 | `workers` | `1` | benchmark request (parallel cases) |
@@ -48,12 +48,15 @@ PyPy when PyPy is used):
 
 ## Tasks
 
-- [ ] **META-1. `run_environment()` returns the facts above**
+- [x] **META-1. `run_environment()` returns the facts above** - Done 2026-11-19.
   - **Difficulty:** medium (three operating systems)
   - **How:** a new module `sat_core/environment.py` with
     `run_environment() -> dict`: standard library only, no `sat_web` import,
     cached per process. Move `VERSION` from `sat_web/api.py` into `sat_core`
     and import it back.
+  - **Built as:** `run_environment()` returns the ten facts it can read
+    itself. `workers` and `started_at` are job facts (the request and the
+    stored job), so META-2 adds them. The hostname opt-in is not built yet.
   - **Done when:** tests show it returns every key of the table with
     JSON-serialisable values on the CI platforms (Ubuntu, Windows), and
     returns `None` values instead of raising when `/proc/cpuinfo` and git are

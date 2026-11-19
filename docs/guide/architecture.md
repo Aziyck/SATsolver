@@ -184,7 +184,7 @@ flowchart TD
     engine["sat_core engine<br/>answers, jobs, benchmark, export, solver_registry, parallel, presets"]
     problems["problems/"]
     solvers["solvers/"]
-    base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify"]
+    base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify, environment"]
 
     frontend -. "JSON API only" .-> web
     web --> engine

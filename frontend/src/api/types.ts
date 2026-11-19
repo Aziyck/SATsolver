@@ -227,7 +227,9 @@ export interface BenchmarkRow {
   rule: string | null;
   error: string | null;
   decoded: any;
+  /** Set on the client when rows of several runs are shown together (lib/benchmark.ts, mergeRuns). */
   run_label?: string;
+  job_id?: number;
 }
 
 export interface PlanSummary {

@@ -1,4 +1,4 @@
-import type { BenchmarkRequest, Catalog, Field, Rule } from "../api/types";
+import type { BenchmarkRequest, BenchmarkRow, Catalog, Field, Rule } from "../api/types";
 import { cloneValue, defaultValues, isNumericKind, type Values } from "./params";
 
 export interface SolverDraft {
@@ -140,4 +140,36 @@ export function requestFromDraft(catalog: Catalog, draft: BenchmarkDraft): Bench
     // Drafts saved before this setting existed have no workers value.
     workers: Number(draft.workers ?? 1) || 1,
   };
+}
+
+/** The rows of one benchmark job, as the results page loads them. */
+export interface RunRows {
+  jobId: number;
+  label: string;
+  rows: readonly BenchmarkRow[];
+}
+
+/** True when the rows come from more than one problem (a graph suite): the problem then becomes a chartable parameter. */
+export function isGraphSuite(rows: readonly BenchmarkRow[]): boolean {
+  return new Set(rows.map((row) => row.problem)).size > 1;
+}
+
+/**
+ * The rows of a benchmark and of the runs compared with it, as one list for the
+ * charts and the Runs table: the own rows first, each row labelled with its
+ * run (`run_label`) and carrying the id of its job (`job_id`). The problem
+ * (for a graph suite) and the run (when comparing) are added to `params`, so
+ * they can be a chart axis like any parameter.
+ */
+export function mergeRuns(own: RunRows, compared: readonly RunRows[]): BenchmarkRow[] {
+  const suite = isGraphSuite(own.rows);
+  const comparing = compared.length > 0;
+  return [own, ...compared].flatMap((run) =>
+    run.rows.map((row) => ({
+      ...row,
+      run_label: run.label,
+      job_id: run.jobId,
+      params: { ...row.params, ...(suite ? { problem: row.problem } : {}), ...(comparing ? { run: run.label } : {}) },
+    })),
+  );
 }

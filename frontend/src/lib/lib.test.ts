@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BenchmarkRow, Catalog } from "../api/types";
 import { statSpec } from "../test/catalog";
 import { field } from "../test/fields";
-import { draftFromRequest, isVisibleSweep, requestFromDraft, sweepValue } from "./benchmark";
+import { draftFromRequest, isGraphSuite, isVisibleSweep, mergeRuns, requestFromDraft, sweepValue } from "./benchmark";
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
 import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
@@ -373,5 +373,46 @@ describe("filtering runs", () => {
   it("combines the filters", () => {
     expect(kept({ statuses: ["SAT"], solvers: ["DPLL"], query: "ratio=5" })).toEqual([3]);
     expect(kept({ statuses: ["UNSAT"], onlySuspicious: true })).toEqual([]);
+  });
+});
+
+describe("merging the rows of compared runs", () => {
+  const own = { jobId: 7, label: "My sweep", rows: [row({ index: 0, params: { ratio: 3 } }), row({ index: 1, params: { ratio: 4 } })] };
+  const other = { jobId: 12, label: "J12", rows: [row({ index: 0, params: { ratio: 3 } })] };
+
+  it("labels the rows of one run with its label and job, and adds no parameter", () => {
+    const merged = mergeRuns(own, []);
+
+    expect(merged.map((item) => [item.run_label, item.job_id])).toEqual([["My sweep", 7], ["My sweep", 7]]);
+    expect(merged.map((item) => item.params)).toEqual([{ ratio: 3 }, { ratio: 4 }]);
+  });
+
+  it("puts the own rows first in a comparison and keeps each row's job apart from its label", () => {
+    const merged = mergeRuns(own, [other]);
+
+    expect(merged.map((item) => [item.run_label, item.job_id])).toEqual([["My sweep", 7], ["My sweep", 7], ["J12", 12]]);
+    // The job id is its own field: nothing needs to be read back out of the label.
+    expect(merged[0].job_id).toBe(own.jobId);
+  });
+
+  it("adds the run as a chartable parameter only when comparing", () => {
+    expect(mergeRuns(own, [other]).map((item) => item.params.run)).toEqual(["My sweep", "My sweep", "J12"]);
+    expect(mergeRuns(own, []).every((item) => !("run" in item.params))).toBe(true);
+  });
+
+  it("adds the problem as a chartable parameter for a graph suite, to every row", () => {
+    const suite = { jobId: 3, label: "J3", rows: [row({ problem: "clique", params: { n: 5 } }), row({ problem: "graph_coloring", params: { n: 5 } })] };
+
+    expect(isGraphSuite(suite.rows)).toBe(true);
+    expect(mergeRuns(suite, [other]).map((item) => item.params.problem)).toEqual(["clique", "graph_coloring", "random_3sat"]);
+    expect(mergeRuns(own, []).every((item) => !("problem" in item.params))).toBe(true);
+    expect(isGraphSuite(own.rows)).toBe(false);
+  });
+
+  it("does not change the rows it is given", () => {
+    mergeRuns(own, [other]);
+
+    expect(own.rows[0].run_label).toBeUndefined();
+    expect(own.rows[0].params).toEqual({ ratio: 3 });
   });
 });

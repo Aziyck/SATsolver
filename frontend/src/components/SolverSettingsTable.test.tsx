@@ -1,10 +1,43 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { SolverSpec } from "../api/types";
+import type { RunEnvironment, SolverSpec } from "../api/types";
 import { catalog, statSpec } from "../test/catalog";
 import { field } from "../test/fields";
 import { renderWithApp } from "../test/render";
-import { SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
+import { MachineBlock, SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
+
+const ENVIRONMENT: RunEnvironment = {
+  python_implementation: "CPython",
+  python_version: "3.12.0",
+  os: "Linux 6.8.0 (x86_64)",
+  cpu_model: "AMD Ryzen 7 4800H",
+  cpu_logical_cores: 16,
+  cpu_physical_cores: 8,
+  ram_total_gb: 15.4,
+  wizsat_version: "2.0.0",
+  git_commit: "75c0c05",
+  git_dirty: false,
+};
+
+describe("MachineBlock", () => {
+  it("shows the interpreter, the CPU, the cores, the memory and the commit of a job that has them", () => {
+    renderWithApp(<MachineBlock environment={ENVIRONMENT} />);
+    expect(screen.getByText("Machine")).toBeTruthy();
+    expect(screen.getByText("CPython 3.12.0")).toBeTruthy();
+    expect(screen.getByText("AMD Ryzen 7 4800H")).toBeTruthy();
+    expect(screen.getByText("8 physical, 16 logical")).toBeTruthy();
+    expect(screen.getByText("15.4 GB")).toBeTruthy();
+    expect(screen.getByText("2.0.0, commit 75c0c05")).toBeTruthy();
+    expect(screen.queryByText("not recorded")).toBeNull();
+  });
+
+  it("says not recorded for a job without an environment", () => {
+    renderWithApp(<MachineBlock environment={null} />);
+    expect(screen.getByText("Machine")).toBeTruthy();
+    expect(screen.getByText(/not recorded/)).toBeTruthy();
+    expect(screen.queryByText("Processor")).toBeNull();
+  });
+});
 
 // Modelled on the CDCL and ProbSAT options in sat_core/solver_registry.py, trimmed to
 // what these tests need (no advanced flags or bounds).

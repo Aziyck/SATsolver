@@ -1,8 +1,8 @@
 import { Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import type { BenchmarkRequest, Catalog, Rule, SolverEntry } from "../api/types";
+import type { BenchmarkRequest, Catalog, Rule, RunEnvironment, SolverEntry } from "../api/types";
 import { formatSeconds } from "../lib/format";
 import { FactsList } from "./Display";
-import { SolverSettingsTable } from "./SolverSettingsTable";
+import { MachineBlock, SolverSettingsTable } from "./SolverSettingsTable";
 
 export function ruleText(rule: Rule, catalog: Catalog): string {
   const solver = catalog.solvers.find((item) => item.key === rule.solver)?.title ?? rule.solver;
@@ -16,8 +16,8 @@ export function entryForRow(request: BenchmarkRequest, rowIndex: number): Solver
   return solvers.length ? solvers[rowIndex % solvers.length] : undefined;
 }
 
-/** Everything a benchmark ran with: run-wide settings, limit rules, and each solver's options. */
-export function BenchmarkSetup({ request, catalog }: { request: BenchmarkRequest; catalog: Catalog }) {
+/** Everything a benchmark ran with: run-wide settings, limit rules, the machine and each solver's options. */
+export function BenchmarkSetup({ request, catalog, environment }: { request: BenchmarkRequest; catalog: Catalog; environment: RunEnvironment | null }) {
   const problems = (request.problems ?? []).map((key) => catalog.problems.find((item) => item.key === key)?.title ?? key);
   const rules = request.rules ?? [];
 
@@ -50,6 +50,7 @@ export function BenchmarkSetup({ request, catalog }: { request: BenchmarkRequest
           </Text>
         )}
       </div>
+      <MachineBlock environment={environment} />
       <div>
         <Title order={4} mb="xs">
           Solvers

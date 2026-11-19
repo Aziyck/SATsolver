@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Catalog, JobDetail, SolveResult } from "../api/types";
 import { field } from "../test/fields";
@@ -125,6 +125,30 @@ describe("SolveResultPanel", () => {
     expect(screen.getByText("The job failed")).toBeTruthy();
     expect(screen.getByText("Invalid parameters.")).toBeTruthy();
     expect(screen.getByText("size: must be 4 or 9")).toBeTruthy();
+  });
+
+  it("shows the machine in the Settings tab, or that it was not recorded", () => {
+    const environment = {
+      python_implementation: "CPython",
+      python_version: "3.12.0",
+      os: "Linux 6.8.0 (x86_64)",
+      cpu_model: "Test CPU",
+      cpu_logical_cores: 8,
+      cpu_physical_cores: 4,
+      ram_total_gb: 15.5,
+      wizsat_version: "2.0.0",
+      git_commit: "0000000",
+      git_dirty: false,
+    };
+    const { unmount } = renderJob(job({ result: result({ status: "SAT" }), environment }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    expect(screen.getByText("CPython 3.12.0")).toBeTruthy();
+    expect(screen.getByText("4 physical, 8 logical")).toBeTruthy();
+    unmount();
+
+    renderJob(job({ result: result({ status: "SAT" }), environment: null }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    expect(screen.getByText(/not recorded/)).toBeTruthy();
   });
 
   it("has a Settings tab only for a job with a solver", () => {

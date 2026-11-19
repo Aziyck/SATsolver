@@ -249,7 +249,7 @@ export default function BenchmarkResults() {
           {rows.length ? <RunsTable rows={rows} catalog={catalog} showRun={comparing} showProblem={suite} onSelect={setSelectedRow} /> : <EmptyRows active={active} />}
         </Tabs.Panel>
         <Tabs.Panel value="setup" pt="md">
-          <BenchmarkSetup request={job.request} catalog={catalog} />
+          <BenchmarkSetup request={job.request} catalog={catalog} environment={job.environment} />
         </Tabs.Panel>
         <Tabs.Panel value="log" pt="md">
           <LogViewer jobId={jobId} initial={job.logs} height={480} />

@@ -146,6 +146,10 @@ The **Result** tab shows:
   - **Settings**: every option the solver ran with, one row each. A row
     shows what the option means, the value used and the default. Changed
     options are marked. The time limit and log detail are listed too.
+    Below the table, **Machine** names the Python, operating system,
+    processor, cores, memory and WizSAT commit the job ran on, or says it
+    was not recorded: a job saved by an older version, or, for now, a job
+    whose page was open before it started (reload the page to see it).
   - **Statistics**: decisions, conflicts, propagations, learned clauses,
     restarts (CDCL/DPLL) or tries, flips, free/random/greedy flips, best
     number of unsatisfied clauses (WalkSAT/ProbSAT). Hover a name for a
@@ -268,8 +272,10 @@ benchmark and keeps the rows so far.
   **Open in Solve** (rebuilds that exact instance on the Solve page) or
   **Download CNF**.
 - **Setup** tab: what the benchmark ran with. It lists the problem, repeats,
-  time limit, parallel workers, seed, the limit rules, and a settings table
-  for each solver (value used, default, changed options marked).
+  time limit, parallel workers, seed, the limit rules, the **Machine** it ran
+  on (Python, operating system, processor, cores, memory, WizSAT commit), and
+  a settings table for each solver (value used, default, changed options
+  marked).
 - **Log** tab: the benchmark log.
 
 Header buttons: **Rerun** (same request again), **Edit as new** (open the

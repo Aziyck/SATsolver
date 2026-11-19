@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { BenchmarkRequest, Catalog, SolverSpec } from "../api/types";
+import type { BenchmarkRequest, Catalog, RunEnvironment, SolverSpec } from "../api/types";
 import { field } from "../test/fields";
 import { renderWithApp } from "../test/render";
 import { BenchmarkSetup, entryForRow } from "./BenchmarkSetup";
@@ -32,14 +32,38 @@ function request(solvers: BenchmarkRequest["solvers"], rules: BenchmarkRequest["
 /** True when `first` comes before `second` in the page. */
 const before = (first: Node, second: Node) => Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+const ENVIRONMENT: RunEnvironment = {
+  python_implementation: "PyPy",
+  python_version: "3.10.14",
+  os: "Linux 6.8.0 (x86_64)",
+  cpu_model: "Test CPU",
+  cpu_logical_cores: 4,
+  cpu_physical_cores: null,
+  ram_total_gb: 8,
+  wizsat_version: "2.0.0",
+  git_commit: "abc1234",
+  git_dirty: true,
+};
+
 describe("BenchmarkSetup", () => {
+  it("shows the machine the benchmark ran on, or that it was not recorded", () => {
+    const { unmount } = renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }])} catalog={CATALOG} environment={ENVIRONMENT} />);
+    expect(screen.getByText("PyPy 3.10.14")).toBeTruthy();
+    expect(screen.getByText("Test CPU")).toBeTruthy();
+    expect(screen.getByText("2.0.0, commit abc1234 with uncommitted changes")).toBeTruthy();
+    unmount();
+
+    renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }])} catalog={CATALOG} environment={null} />);
+    expect(screen.getByText(/not recorded/)).toBeTruthy();
+  });
+
   it("lists every solver entry with its label and its options", () => {
     const solvers = [
       { solver: "cdcl", label: "CDCL fast", options: { restart_interval: 50 } },
       { solver: "cdcl", options: { restart_interval: 400 } },
       { solver: "gone" },
     ];
-    renderWithApp(<BenchmarkSetup request={request(solvers)} catalog={CATALOG} />);
+    renderWithApp(<BenchmarkSetup request={request(solvers)} catalog={CATALOG} environment={null} />);
 
     const fast = screen.getByText("CDCL fast");
     const plain = screen.getByText("CDCL");
@@ -53,13 +77,13 @@ describe("BenchmarkSetup", () => {
   });
 
   it("says None when there are no limit rules", () => {
-    renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }])} catalog={CATALOG} />);
+    renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }])} catalog={CATALOG} environment={null} />);
     expect(screen.getByText(/^None: every solver ran every case/)).toBeTruthy();
   });
 
   it("lists the limit rules when there are some", () => {
     const rules = [{ solver: "cdcl", action: "skip" as const, min_variables: 200, seconds: null }];
-    renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }], rules)} catalog={CATALOG} />);
+    renderWithApp(<BenchmarkSetup request={request([{ solver: "cdcl" }], rules)} catalog={CATALOG} environment={null} />);
     expect(screen.getByText("CDCL: skip from 200 variables")).toBeTruthy();
     expect(screen.queryByText(/^None: every solver/)).toBeNull();
   });

@@ -1,6 +1,6 @@
 # Plan: record where and how every run happened
 
-- **Status:** in progress (META-1 and META-2 done 2026-11-19)
+- **Status:** in progress (META-1, META-2 and META-3 done 2026-11-19)
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
 - **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
@@ -88,9 +88,19 @@ PyPy when PyPy is used):
     without the column and the server starts, lists the old jobs and gives
     them `environment: null`.
 
-- [ ] **META-3. The UI shows the machine**
+- [x] **META-3. The UI shows the machine** - Done 2026-11-19.
   - **Difficulty:** easy
   - **Blocked by:** META-2
+  - **Built as:** `MachineBlock` in `components/SolverSettingsTable.tsx`, with
+    the wording in `lib/environment.ts` (`machineFacts`). `BenchmarkSetup`
+    takes `environment` as a required prop, so a caller cannot forget it. The
+    block sits below the options table in the solve job's Settings tab and
+    between the limit rules and the solvers in the benchmark Setup tab. A
+    fact that could not be read shows "unknown". `docs/guide/user-guide.md`
+    has a line for each tab; META-5 checks the rest. **Known gap:** every
+    job started from the UI opens while it is queued, keeps `environment:
+    null` and shows "not recorded" until the page is reloaded (reproduced in
+    the e2e test); A38 fixes it.
   - **How:** `environment` on `JobDetail` in `frontend/src/api/types.ts`
     (nullable). A "Machine" block in the solve job's Settings tab and in the
     benchmark Setup tab (`components/SolverSettingsTable.tsx`,

@@ -23,7 +23,7 @@ import { duration, formatSeconds } from "../lib/format";
 import { isActive, JobStatusBadge, RUN_STATUS, RunStatusBadge } from "../lib/status";
 import { CnfViewer, FactsList, LogViewer } from "./Display";
 import { AnswerView } from "./views/ProblemViews";
-import { SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
+import { MachineBlock, SolverSettingsTable, StatsTable } from "./SolverSettingsTable";
 
 function useTicker(active: boolean) {
   const [, setTick] = useState(0);
@@ -306,24 +306,27 @@ export function SolveResultPanel({
           </Tabs.Panel>
           {solverSpec ? (
             <Tabs.Panel value="settings" pt="md">
-              <SolverSettingsTable
-                spec={solverSpec}
-                options={result?.options ?? job.request.options}
-                extra={[
-                  {
-                    label: "Time limit",
-                    help: "The run stops with TIMEOUT after this long.",
-                    value: timeLimit === null ? "none" : formatSeconds(timeLimit),
-                    default: catalog ? formatSeconds(catalog.defaults.solve_timeout) : undefined,
-                  },
-                  {
-                    label: "Log level",
-                    help: "How much the solver wrote to the Log tab; more logging is slower.",
-                    value: job.request.log_level ?? "normal",
-                    default: "normal",
-                  },
-                ]}
-              />
+              <Stack gap="lg">
+                <SolverSettingsTable
+                  spec={solverSpec}
+                  options={result?.options ?? job.request.options}
+                  extra={[
+                    {
+                      label: "Time limit",
+                      help: "The run stops with TIMEOUT after this long.",
+                      value: timeLimit === null ? "none" : formatSeconds(timeLimit),
+                      default: catalog ? formatSeconds(catalog.defaults.solve_timeout) : undefined,
+                    },
+                    {
+                      label: "Log level",
+                      help: "How much the solver wrote to the Log tab; more logging is slower.",
+                      value: job.request.log_level ?? "normal",
+                      default: "normal",
+                    },
+                  ]}
+                />
+                <MachineBlock environment={job.environment} />
+              </Stack>
             </Tabs.Panel>
           ) : null}
           <Tabs.Panel value="stats" pt="md">

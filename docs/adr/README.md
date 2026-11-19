@@ -52,3 +52,4 @@ What becomes easier, what becomes harder, what to watch.
 | [0001](0001-agent-workflow.md) | Work is tracked as items in reviews and plans; code changes go through a branch and a pull request |
 | [0002](0002-origin-and-host-checks.md) | The server accepts only local `Host` and `Origin` values, and needs no token |
 | [0003](0003-legacy-is-a-frozen-archive.md) | `legacy/` is a frozen archive; its tests are not kept passing |
+| [0004](0004-where-the-run-environment-is-read.md) | The server reads the machine once; each job reads its interpreter and git |

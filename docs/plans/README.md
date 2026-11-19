@@ -29,7 +29,7 @@ Free to do at any point, when there is time or when the code is being
 touched anyway:
 
 - the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25,
-  A27-A33, A35, A36, A38 (after META-3), A39;
+  A27-A33, A35, A36, A38 (after META-3);
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
   items B6-B9 that touch the same code.

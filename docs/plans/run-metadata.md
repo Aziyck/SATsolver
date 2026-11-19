@@ -24,7 +24,9 @@ never compared by accident.
 ## What to record
 
 Collected once per job, inside the process that runs the solver (so it shows
-PyPy when PyPy is used):
+PyPy when PyPy is used). Since A39 the OS, CPU and RAM facts are read once by
+the server and passed to each job; the interpreter and git facts are read by
+the job ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)):
 
 | Field | Example | How (standard library only) |
 |---|---|---|
@@ -36,15 +38,16 @@ PyPy when PyPy is used):
 | `cpu_physical_cores` | `8` or `null` | Linux: distinct `(physical id, core id)` pairs in `/proc/cpuinfo`; elsewhere `null` unless cheap |
 | `ram_total_gb` | `15.5` | POSIX: `os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")`; Windows: `ctypes` `GlobalMemoryStatusEx`; macOS: `sysctl hw.memsize`. The container's cgroup memory limit counts when it is smaller (A37) |
 | `wizsat_version` | `2.0.0` | `VERSION` in `sat_core/environment.py` (`sat_web/api.py` imports it) |
-| `git_commit` | `9e11958` or `null` | `git rev-parse --short HEAD` in the repo root, if git is there |
-| `git_dirty` | `true` / `false` / `null` | `git status --porcelain` is not empty |
+| `git_commit` | `9e11958` or `null` | `# branch.oid` of `git status --porcelain=v2 --branch` in the repo root (first 7 characters), if git is there |
+| `git_dirty` | `true` / `false` / `null` | that same output lists a changed or untracked file |
 | `workers` | `1` | benchmark request (parallel cases) |
 | `started_at` | ISO time with zone | already stored on the job |
 
 - **Hostname:** not recorded by default (CSV files get shared). Opt-in with a
   setting such as `WIZSAT_RECORD_HOSTNAME=1`.
 - Every lookup is wrapped so a failure gives `null`, never an error.
-- Cache the result per process: CPU model and RAM do not change during a job.
+- Cache the machine facts per process: CPU model and RAM do not change during
+  a job. Git is asked again for every job (ADR 0004).
 
 ## Tasks
 

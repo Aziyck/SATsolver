@@ -123,9 +123,13 @@ sequenceDiagram
 
 1. `SolvePage.tsx` builds the request (problem, parameters, solver, options,
    timeout) and `useCreateJob()` (`api/queries.ts`) sends `POST /api/jobs`.
-2. `create_job()` in `sat_web/api.py` runs `validate_job()`. A bad parameter
-   is refused here with a 422 that names the field, which is where the red
-   messages under the form come from.
+2. `create_job()` in `sat_web/api.py` runs `validate_job()`, which calls
+   `parse_solve_request()` in `sat_core/jobs.py` (the one parser of a solve
+   request: problem, solver, options, timeout, log level). A bad value is
+   refused here with a 422 that names the field, which is where the red
+   messages under the form come from. `solve_job()` calls the same parser
+   when the job runs, so a script that runs a job without the API is refused
+   the same things.
 3. `JobManager.submit()` inserts the job into SQLite with status `queued`,
    creates the in-memory `Job`, publishes it, and calls `_schedule()`.
 4. If fewer than `WIZSAT_MAX_JOBS` jobs are running, `_start()` creates the

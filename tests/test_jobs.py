@@ -87,6 +87,93 @@ class JobTests(unittest.TestCase):
         self.assertEqual(events[-1].type, EVENT_DONE)
 
 
+class SolveRequestTests(unittest.TestCase):
+    """One parser for a solve request: the API and a direct solve_job call refuse the same things (ARCH-4)."""
+
+    def test_parse_solve_request_returns_the_normalized_request(self):
+        from sat_core.jobs import parse_solve_request
+
+        normalized = parse_solve_request(
+            {"problem": "random_3sat", "params": {"variables": 20, "ratio": 4, "mode": "random"}, "solver": "walksat", "options": {"max_flips": 500}, "timeout": "7"}
+        )
+
+        self.assertEqual(
+            set(normalized), {"problem", "params", "solver", "options", "timeout", "log_level"}
+        )
+        self.assertEqual(normalized["problem"], "random_3sat")
+        self.assertEqual(normalized["solver"], "walksat")
+        self.assertEqual(normalized["options"]["max_flips"], 500)
+        self.assertEqual(normalized["timeout"], 7.0)
+        self.assertEqual(normalized["log_level"], "normal")
+        self.assertIsInstance(normalized["params"]["seed"], int)  # a blank seed is made concrete
+        self.assertNotIn("sat_percent", normalized["params"])  # a hidden parameter is not stored
+
+    def test_parse_solve_request_fills_defaults_and_is_idempotent(self):
+        from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, parse_solve_request
+
+        normalized = parse_solve_request({"problem": "n_queens", "params": {"size": 6}})
+
+        self.assertEqual(normalized["solver"], "cdcl")
+        self.assertEqual(normalized["timeout"], DEFAULT_SOLVE_TIMEOUT)
+        self.assertEqual(parse_solve_request(normalized), normalized)
+
+    def test_a_normalized_request_parses_to_itself_for_every_problem_and_solver(self):
+        from problems import all_problems
+        from sat_core.jobs import parse_solve_request
+        from sat_core.solver_registry import all_solvers
+
+        for spec in all_problems():
+            with self.subTest(problem=spec.key):
+                normalized = parse_solve_request({"problem": spec.key})
+                self.assertEqual(parse_solve_request(normalized), normalized)
+        for solver in all_solvers():
+            with self.subTest(solver=solver.key):
+                normalized = parse_solve_request({"problem": "n_queens", "params": {"size": 6}, "solver": solver.key})
+                self.assertEqual(parse_solve_request(normalized), normalized)
+
+    def test_generate_job_called_directly_refuses_an_unknown_problem(self):
+        events = run("generate", {"problem": "chess"})
+
+        self.assertEqual(events[-1].type, EVENT_ERROR)
+        self.assertIn("problem", events[-1].payload["errors"])
+
+    def test_parse_solve_request_names_each_bad_field(self):
+        from sat_core.jobs import parse_solve_request
+
+        base = {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}
+        cases = {
+            "problem": {**base, "problem": "chess"},
+            "solver": {**base, "solver": "minisat"},
+            "options.branching": {**base, "options": {"branching": "?"}},
+            "timeout": {**base, "timeout": -1},
+            "log_level": {**base, "log_level": "loud"},
+            "size": {**base, "params": {"size": 0}},
+        }
+        for field, request in cases.items():
+            with self.subTest(field=field), self.assertRaises(ParamError) as caught:
+                parse_solve_request(request)
+            self.assertIn(field, caught.exception.errors)
+
+    def test_solve_job_called_directly_refuses_what_the_api_refuses(self):
+        base = {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}
+        cases = {
+            "problem": {**base, "problem": "chess"},
+            "solver": {**base, "solver": "minisat"},
+            "options.branching": {**base, "options": {"branching": "?"}},
+            "timeout": {**base, "timeout": -1},
+            "log_level": {**base, "log_level": "loud"},
+        }
+        for field, request in cases.items():
+            with self.subTest(field=field), self.assertRaises(ParamError) as caught:
+                solve_job(request, None, lambda event: None, RunToken())
+            self.assertIn(field, caught.exception.errors)
+
+    def test_solve_job_called_directly_refuses_an_instance_over_the_clause_limit(self):
+        with self.assertRaises(ParamError) as caught:
+            solve_job({"problem": "hamiltonian_path", "params": {"nodes": 400, "probability": 0.1}, "solver": "cdcl"}, None, lambda event: None, RunToken())
+        self.assertIn("_", caught.exception.errors)
+
+
 def stop_on(kind, request, should_stop):
     """Run a job and press Stop as soon as the job emits an event for which should_stop is true."""
 

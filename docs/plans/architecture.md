@@ -1,6 +1,6 @@
 # Plan: deepen the modules the next features will change
 
-- **Status:** in progress (ARCH-1 to ARCH-3 done)
+- **Status:** in progress (ARCH-1 to ARCH-4 done)
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
 - **Related:** [run metadata](run-metadata.md), [PyPy solver runner](pypy-solver-runner.md),
   [memory measurement](memory-measurement.md) (all three add fields and
@@ -194,7 +194,7 @@ problem, solver, options, timeout and log level, and `solve_job` in
 weaker checks. A script that calls `execute_job` directly gets the weaker
 ones. A10 covers the timeout part of this.
 
-- [ ] **ARCH-4. A solve request is parsed in one place**
+- [x] **ARCH-4. A solve request is parsed in one place** - Done 2026-11-19.
   - **Difficulty:** medium
   - **Blocked by:** A10 (it leaves one `parse_timeout`)
   - **How:** `parse_solve_request(raw: dict) -> dict` in `sat_core/jobs.py`
@@ -203,6 +203,16 @@ ones. A10 covers the timeout part of this.
     `ParamError` with the same field names (`options.<name>`, `timeout`,
     `log_level`). `validate_job` and `solve_job` both call it; the encode
     job uses its problem half.
+
+    Built as written, with details the plan left open. The problem half is
+    `parse_problem_request(raw)` in `sat_core/jobs.py`; it returns the spec,
+    the full parameters and the normalized `{"problem", "params"}`, and
+    `generate_job` calls it. `parse_solve_request` is a thin wrapper over an
+    internal `_parse_solve` that `solve_job` calls itself, so a job parses its
+    problem once. `lookup_problem` (the "problem" `ParamError`) and
+    `visible_params` moved from `sat_web/api.py` to `sat_core/jobs.py`, and the
+    API imports them. `validate_job` still looks up the problem and solver once
+    more to build the default title.
   - **Done when:** `validate_job` contains no solver, option, timeout or
     log-level parsing of its own; a test calls `solve_job` directly with a bad
     option, a negative timeout and an unknown log level and gets the same

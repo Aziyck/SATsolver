@@ -36,13 +36,80 @@ from sat_core.runtime import (
     RunEvent,
     RunToken,
 )
-from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
+from sat_core.solver_registry import LOG_LEVELS, SolverSpec, get_solver, options_summary, run_solver
 
 
 JOB_KINDS = ("solve", "generate", "benchmark")
 DEFAULT_SOLVE_TIMEOUT = 60.0
 
 Emit = Callable[[RunEvent], None]
+
+
+def lookup_problem(key: str | None) -> ProblemSpec:
+    """The registered problem for a request, or a ParamError naming the "problem" field."""
+
+    try:
+        return get_problem(key or "")
+    except ValueError as exc:
+        raise ParamError({"problem": str(exc)}) from None
+
+
+def visible_params(spec: ProblemSpec, params: dict[str, Any]) -> dict[str, Any]:
+    """The parameters a problem actually uses; a hidden field is not stored with the job."""
+
+    return {field.name: params[field.name] for field in spec.fields if field.visible(params) and field.name in params}
+
+
+def parse_problem_request(raw: dict[str, Any]) -> tuple[ProblemSpec, dict[str, Any], dict[str, Any]]:
+    """
+    Check the problem half of a job request (encode and solve jobs).
+
+    Returns the problem, its full parameters (a blank seed made concrete, so
+    the instance can be rebuilt) and the normalized request: the problem key
+    and the visible parameters.
+    """
+
+    spec = lookup_problem(raw.get("problem"))
+    params = spec.resolve_seed(spec.parse(raw.get("params")))
+    spec.check_size(params)
+    return spec, params, {"problem": spec.key, "params": visible_params(spec, params)}
+
+
+def _parse_solve(raw: dict[str, Any]) -> tuple[ProblemSpec, dict[str, Any], SolverSpec, dict[str, Any]]:
+    spec, params, normalized = parse_problem_request(raw)
+    try:
+        solver = get_solver(raw.get("solver") or "cdcl")
+    except ValueError as exc:
+        raise ParamError({"solver": str(exc)}) from None
+    try:
+        options = solver.parse_options(raw.get("options"))
+    except ParamError as exc:
+        raise ParamError({f"options.{name}": message for name, message in exc.errors.items()}) from None
+    log_level = raw.get("log_level") or "normal"
+    if log_level not in LOG_LEVELS:
+        raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
+    normalized.update(
+        solver=solver.key,
+        options=options,
+        timeout=parse_timeout(raw.get("timeout", DEFAULT_SOLVE_TIMEOUT)),
+        log_level=log_level,
+    )
+    return spec, params, solver, normalized
+
+
+def parse_solve_request(raw: dict[str, Any]) -> dict[str, Any]:
+    """
+    Check a solve request and return it normalized: problem, visible
+    parameters, solver, parsed options, timeout and log level.
+
+    The API calls this before it stores a job and solve_job parses the stored
+    request again when the job runs, so a script that runs a job directly is
+    refused the same things. A normalized request parses to itself. Raises
+    ParamError with the field names the UI shows: options.<name>, timeout,
+    log_level, solver, problem and the problem's own parameters.
+    """
+
+    return _parse_solve(raw)[3]
 
 
 def instance_payload(spec: ProblemSpec, instance: ProblemInstance, encode_seconds: float, cnf_file: str | None) -> dict[str, Any]:
@@ -87,9 +154,7 @@ def write_model(workdir: str | None, solution: dict[int, bool]) -> str | None:
     return path.name
 
 
-def _build_instance(request: dict[str, Any], workdir: str | None, emit_event: Emit):
-    spec = get_problem(request.get("problem", ""))
-    params = spec.resolve_seed(spec.parse(request.get("params")))
+def _build_instance(spec: ProblemSpec, params: dict[str, Any], workdir: str | None, emit_event: Emit) -> ProblemInstance:
     emit_event(RunEvent(EVENT_LOG, f"Encoding {spec.title}: {spec.case_label(params) or 'default parameters'}"))
     started = time.perf_counter()
     instance = spec.build(params)
@@ -102,29 +167,23 @@ def _build_instance(request: dict[str, Any], workdir: str | None, emit_event: Em
     )
     cnf_file = write_cnf(workdir, spec, instance)
     emit_event(RunEvent(EVENT_INSTANCE, payload=instance_payload(spec, instance, encode_seconds, cnf_file)))
-    return spec, instance
+    return instance
 
 
 def generate_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> bool:
+    spec, params, _ = parse_problem_request(request)
     emit_event(RunEvent(EVENT_PROGRESS, "Encoding", current=0, total=1))
-    _build_instance(request, workdir, emit_event)
+    _build_instance(spec, params, workdir, emit_event)
     emit_event(RunEvent(EVENT_PROGRESS, "Encoded", current=1, total=1))
     return True
 
 
 def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, token: RunToken) -> bool:
-    solver = get_solver(request.get("solver", "cdcl"))
-    try:
-        options = solver.parse_options(request.get("options"))
-    except ParamError as exc:
-        raise ParamError({f"options.{name}": message for name, message in exc.errors.items()}) from None
-    timeout = parse_timeout(request.get("timeout", DEFAULT_SOLVE_TIMEOUT))
-    log_level = request.get("log_level", "normal")
-    if log_level not in LOG_LEVELS:
-        raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
+    spec, params, solver, parsed = _parse_solve(request)
+    options, timeout, log_level = parsed["options"], parsed["timeout"], parsed["log_level"]
 
     emit_event(RunEvent(EVENT_PROGRESS, "Encoding", current=0, total=2))
-    spec, instance = _build_instance(request, workdir, emit_event)
+    instance = _build_instance(spec, params, workdir, emit_event)
     if token.is_cancelled():
         return False
     emit_event(RunEvent(EVENT_PROGRESS, f"Solving with {solver.title}", current=1, total=2))

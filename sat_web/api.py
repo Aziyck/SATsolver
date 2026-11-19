@@ -24,10 +24,10 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from problems import all_problems, get_problem
-from problems.base import MAX_CLAUSES, ProblemSpec
-from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, parse_timeout, rows_to_csv
+from problems.base import MAX_CLAUSES
+from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_request, rows_to_csv
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
-from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload
+from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_payload, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
 from sat_core.presets import all_presets
 from sat_core.solver_registry import LOG_LEVELS, STAT_SPECS, all_solvers, get_solver
@@ -61,17 +61,6 @@ class ClearBody(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _problem(key: str | None) -> ProblemSpec:
-    try:
-        return get_problem(key or "")
-    except ValueError as exc:
-        raise ParamError({"problem": str(exc)}) from None
-
-
-def visible_params(spec: ProblemSpec, params: dict[str, Any]) -> dict[str, Any]:
-    return {field.name: params[field.name] for field in spec.fields if field.visible(params) and field.name in params}
-
 
 def _current_options(solver: Any, options: Any) -> Any:
     try:
@@ -108,32 +97,14 @@ def without_removed_options(kind: str, request: dict[str, Any]) -> dict[str, Any
 def validate_job(kind: str, request: dict[str, Any], title: str | None) -> tuple[dict[str, Any], str]:
     """Check a job request and return (normalized request, title)."""
 
-    if kind in ("solve", "generate"):
-        spec = _problem(request.get("problem"))
-        params = spec.resolve_seed(spec.parse(request.get("params")))
-        spec.check_size(params)
-        label = spec.case_label(params)
-        normalized: dict[str, Any] = {"problem": spec.key, "params": visible_params(spec, params)}
-        if kind == "generate":
-            return normalized, title or f"Encode {spec.title}: {label}".strip()
-        try:
-            solver = get_solver(request.get("solver") or "cdcl")
-        except ValueError as exc:
-            raise ParamError({"solver": str(exc)}) from None
-        try:
-            options = solver.parse_options(request.get("options"))
-        except ParamError as exc:
-            raise ParamError({f"options.{name}": message for name, message in exc.errors.items()}) from None
-        log_level = request.get("log_level") or "normal"
-        if log_level not in LOG_LEVELS:
-            raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
-        normalized.update(
-            solver=solver.key,
-            options=options,
-            timeout=parse_timeout(request.get("timeout", DEFAULT_SOLVE_TIMEOUT)),
-            log_level=log_level,
-        )
-        return normalized, title or f"{spec.title}: {label} ({solver.title})"
+    if kind == "generate":
+        spec, params, normalized = parse_problem_request(request)
+        return normalized, title or f"Encode {spec.title}: {spec.case_label(params)}".strip()
+    if kind == "solve":
+        normalized = parse_solve_request(request)
+        spec = get_problem(normalized["problem"])
+        label = spec.case_label(spec.parse(normalized["params"]))
+        return normalized, title or f"{spec.title}: {label} ({get_solver(normalized['solver']).title})"
 
     plan = parse_request(request)
     titles = " + ".join(get_problem(key).title for key in plan.problems)
@@ -348,7 +319,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/problems/{key}/preview")
     async def preview(key: str, body: ParamsBody) -> dict[str, Any]:
         def work() -> dict[str, Any]:
-            spec = _problem(key)
+            spec = lookup_problem(key)
             params = spec.parse(body.params)
             try:
                 estimate = spec.estimate(params)

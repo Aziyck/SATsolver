@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { startLiveConnection } from "./api/live";
 import App from "./App";
-import { theme } from "./theme";
+import { cssVariablesResolver, theme } from "./theme";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -25,7 +25,7 @@ function LiveEvents() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ColorSchemeScript defaultColorScheme="auto" />
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} defaultColorScheme="auto">
       <Notifications position="bottom-right" />
       <QueryClientProvider client={queryClient}>
         <LiveEvents />

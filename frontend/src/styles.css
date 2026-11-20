@@ -31,6 +31,11 @@ body {
   background: var(--wz-page);
 }
 
+/* A thin edge in the badge's own colour, so a tag reads as a chip on a dark card. */
+[data-mantine-color-scheme="dark"] .mantine-Badge-root[data-variant="light"] {
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+}
+
 .wz-mono {
   font-family: var(--mantine-font-family-monospace);
   font-variant-numeric: tabular-nums;

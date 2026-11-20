@@ -10,9 +10,11 @@ Open work lives in two places:
   plan holds the design, the rejected options and a list of tasks.
 
 Both use the same **item** format, defined below. The skill `/do-item`
-(`/do-item-hard` for a hard item) works on one item at a time. Words such as *item*, *case* or
-*run* are defined in [`GLOSSARY.md`](../../GLOSSARY.md); decisions are recorded
-in [`docs/adr/`](../adr/).
+(`/do-item-hard` for a hard item) works on one item at a time; `/write-plan`
+turns an idea into a new plan, and `/retro` looks back on finished work.
+Words such as *item*, *case* or *run* are defined in
+[`GLOSSARY.md`](../../GLOSSARY.md); decisions are recorded in
+[`docs/adr/`](../adr/).
 
 ## Order of work
 

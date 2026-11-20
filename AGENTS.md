@@ -78,135 +78,43 @@ tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),
                  adr/ (decisions), report/ (thesis material)
-.claude/         skills/ (do-item, do-item-hard, write-pr, writing-for-agents),
-                 agents/ (reviewer), hooks/, archive/
+.claude/         skills/, agents/ (reviewer), hooks/, archive/
 ```
 
-## How a request flows
+## Rules by area
 
-```text
-UI form -> POST /api/jobs {kind, request}
-        -> api.validate_job: ProblemSpec.parse / benchmark.parse_request (422 on errors)
-        -> JobManager.submit -> worker process (spawn) runs sat_core.jobs.run_job
-        -> ProblemSpec.build -> ProblemInstance (clauses + decoder)
-        -> run_solver -> solvers/* -> SolveResult
-        -> ProblemSpec.decode / check, verify.check_assignment
-        -> RunEvents on a multiprocessing queue -> JobManager -> SQLite + WebSocket
-        -> frontend live.ts updates the React Query cache
-```
+The rules for one part of the code live in that folder's `AGENTS.md`. Claude
+Code loads it (through the folder's `CLAUDE.md`) when it reads a file there;
+if it is not in your context, read it before changing code in that folder.
 
-Rules that keep this working:
+| Working in | Read |
+|---|---|
+| `solvers/` | [`solvers/AGENTS.md`](solvers/AGENTS.md): signatures, hot loops, stats |
+| `problems/` | [`problems/AGENTS.md`](problems/AGENTS.md): encoders, variable numbering |
+| `sat_core/` | [`sat_core/AGENTS.md`](sat_core/AGENTS.md): benchmark invariants, workers |
+| `sat_web/` | [`sat_web/AGENTS.md`](sat_web/AGENTS.md): processes, locks, security |
+| `frontend/` | [`frontend/AGENTS.md`](frontend/AGENTS.md): data flow, types, charts |
 
-- Problem modules never import `sat_web`, FastAPI or anything UI-related.
-- Solvers know nothing about problems, files or the web. They take
-  `list[list[int]]` clauses and return `(solution | None, stats)`.
-- Worker processes talk to the server only through `RunEvent`s. They never
-  touch the database or sockets.
-- Every long operation checks `stop_requested(token)` regularly so cancel,
-  skip and timeouts work.
+How a request flows from the form to the solver and back:
+[architecture](docs/guide/architecture.md#the-big-picture) and
+[How it works](docs/guide/how-it-works.md#one-solve-start-to-finish).
 
-## Parameters
+Rules that hold everywhere:
 
-A `ParamField` (`sat_core/params.py`) is the single description of a
-parameter; forms, validation, sweeps, CSV columns, reset buttons and the
-Settings/Setup tables all come from it. The frontend never hard-codes a field:
-change it in Python. Options and rules:
-`docs/guide/adding-a-problem.md#parameter-fields`.
-
-## Problems and solvers
-
-Follow the walkthrough in `docs/guide/adding-a-problem.md` for a new problem
-or solver; it has the checklists and the tests to write. What it cannot show:
-
-- Keep the `dpll()`, `cdcl()` and `walksat()` signatures backward compatible
-  unless the registry, tests and docs change with them.
-- Solver hot loops are performance-sensitive (`docs/guide/performance.md`):
-  check the cancel token every few thousand steps, not on every step; avoid
-  scanning all clauses or variables per conflict or decision; measure with
-  `scripts/solver_timings.py` before and after. Its conflicts column must not
-  move for a change that claims to keep the search.
-- Encoders number variables sparsely on purpose (`sudoku_var(r, c, v) =
-  r*10000 + c*100 + v`; `readable_pair_var(a, b, max_b)`, always with
-  `max_b`, or large instances collide). A solver that keeps per-variable
-  arrays renumbers 1..n internally and maps the model back (see
-  `solvers/walksat.py`). For CDCL and DPLL, `run_solver` renumbers
-  formulas whose largest number is above 1,000,000 and mostly unused; no
-  encoder reaches that at the default clause limit. Numbering per problem: `docs/algorithms/encodings.md`.
-- The order of the clauses an encoder produces is part of its behaviour: it
-  changes the solvers' decisions and every benchmark number.
-- Every solver is in `tests/test_solver_agreement.py`: complete solvers must
-  agree with brute force; incomplete ones must find every model and never
-  claim one for an UNSAT formula (give them a small budget there).
-- Every new stat key is declared once as a `StatSpec` in `STAT_SPECS`
-  (`sat_core/solver_registry.py`): label, log name, one-line explanation, CSV
-  and chart flags. The frontend reads them from `GET /api/catalog`; it keeps
-  no list of statistic keys, so nothing else needs an entry.
-
-## Statuses
-
-`SAT`, `UNSAT`, `UNKNOWN` (incomplete solver gave up), `TIMEOUT`,
-`CANCELLED`, `SKIPPED` (limit rule or user skip), `ERROR` (solver raised; the
-message is in `error`). `run_solver` never raises for solver failures.
-`UNKNOWN` is never `UNSAT`: keep them apart in code, tables and charts.
-
-## Benchmarks
-
-Request format, limit rules, presets and CSV: `docs/guide/benchmarking.md`.
-The invariants code must keep:
-
-- Every solver entry of a case runs on the same CNF.
-- Row index = `case.index * len(solvers) + position`, so parallel
-  (`"workers" > 1`, `sat_core/parallel.py`) and sequential runs give identical
-  rows. The frontend relies on the same formula (`entryForRow` in
-  `components/BenchmarkSetup.tsx`).
-- Code inside `run_case` must work in a worker process (no globals set by the
-  job process).
-- Workers are `spawn` processes, which re-import the main module: a script
-  that runs a parallel benchmark must be a file with an
-  `if __name__ == "__main__":` guard (piping it into `python -` fails).
-- One CSV format for all problems: base columns, one column per parameter,
-  solver statistics.
-
-## Web server rules
-
-- Jobs run in `spawn` worker processes, at most `WIZSAT_MAX_JOBS` at once.
-  They are not daemons (a benchmark may start its own pool); they exit with
-  the server through `shutdown()` and a parent watchdog.
-- The reader thread applies events under `JobManager.lock` and publishes to
-  the event loop with `call_soon_threadsafe`. Take snapshots for HTTP replies
-  under the lock (`manager.summary(job)`, `manager.detail(job)`).
-- Every published job summary carries a `rev` that increases by one each time.
-  The frontend drops copies older than the one it has, and merges events that
-  arrive while a fetch is in flight (`frontend/src/api/live.ts`).
-- Logs are throttled per job; row and summary events are batched.
-- Only `instance.cnf` and `model.txt` can be downloaded from a job folder.
-- The server binds to `127.0.0.1` by default. Keep it that way.
-- The server has no login. The middleware `LocalOnlyGuard`
-  (`sat_web/api.py`) refuses a foreign `Host` (400) and a foreign `Origin`
-  (403) for every route and the WebSocket, and a cross-site `Sec-Fetch-Site`
-  (403) under `/api`; it adds headers that forbid framing by another site
-  to every reply. The allowed names are `Settings.allowed_hosts`. Do not add
-  a route, a mount or CORS headers that bypass it. Tests reach the app as
-  `localhost:8000` (`local_client` in `tests/test_api.py`).
-
-## Frontend rules
-
-- Server data goes through React Query (`api/queries.ts`); live updates patch
-  the cache in `api/live.ts`. Per-browser preferences go through
-  `lib/storage.ts` (localStorage, wrapped in try/catch).
-- Keep `api/types.ts` in sync with the JSON the API returns.
-  `tests/test_wire_samples.py` records real payloads in
-  `api/wireSamples.ts`, where `npm run typecheck` checks each against its
-  type, missing and unknown fields alike (except inside values typed `any` or
-  `Record<string, unknown>`). After a deliberate payload change,
-  run that test with `WIZSAT_RECORD_GOLDEN=1`, then fix `types.ts`.
-- Charts follow the dataviz rules already in `lib/palette.ts` and
-  `components/charts/`: fixed categorical order, one y-axis (use facets
-  instead of a second axis), a table view next to every chart, status colors
-  only for statuses, text never in series colors.
-- Pure logic lives in `lib/` with vitest tests; components stay thin.
-  Component tests render through `renderWithApp()` (`src/test/render.tsx`)
-  and use Testing Library queries.
+- **Layers.** Code imports only what is below it
+  ([architecture](docs/guide/architecture.md#layers));
+  `tests/test_layers.py` checks it.
+- **Parameters.** A `ParamField` (`sat_core/params.py`) is the single
+  description of a parameter; forms, validation, sweeps, CSV columns and
+  reset buttons all come from it. The frontend never hard-codes a field:
+  change it in Python
+  ([options](docs/guide/adding-a-problem.md#parameter-fields)).
+- **Stopping.** Every long operation checks `stop_requested(token)`
+  regularly, so cancel, skip and timeouts work.
+- **Statuses.** A run's status is one of the seven in
+  [`GLOSSARY.md`](GLOSSARY.md). `run_solver` never raises for solver
+  failures (`ERROR` carries the message). `UNKNOWN` is never `UNSAT`: keep
+  them apart in code, tables and charts.
 
 ## Working on items
 
@@ -245,6 +153,7 @@ needs a routine edit.
 | server, jobs, storage, events (`sat_web/`, `sat_core/jobs.py`, `runtime.py`) | `docs/guide/architecture.md` when a part, layer, rule's home, status or database column changes; `docs/guide/how-it-works.md` for how it behaves; `docs/guide/api.md` for endpoints, JSON and events |
 | a page or a component (`frontend/src/`) | `docs/guide/user-guide.md`; "Frontend" in `docs/guide/how-it-works.md` if the structure changed |
 | launcher, settings, dependencies, CI | `README.md`, this file |
+| a rule that holds only in one folder | that folder's `AGENTS.md` |
 | a term's meaning, or a new term | `GLOSSARY.md` |
 | the workflow or the item format | `docs/plans/README.md` |
 | `docs/report/` | thesis material: edit only when the owner asks |
@@ -277,6 +186,10 @@ and on pull requests: lint and Python tests on Ubuntu (3.10, 3.13) and Windows
   clear. Grammar may go for concision (fragments, no articles). Commit
   messages, pull requests and docs are read later without the session's
   context: full sentences there.
+- **Skills.** A new skill must replace an existing one, or do a job already
+  done by hand three times. A skill is refined only after three uses since
+  its last change. Before writing or changing a skill, `AGENTS.md` or
+  `CLAUDE.md`, read the `writing-for-agents` skill.
 - Python 3.10+, standard library `unittest`, no new runtime dependencies
   without a good reason (the solvers are pure Python on purpose).
 - Use ASCII in Python source and docs. The UI may use typographic symbols

@@ -142,7 +142,7 @@ gets a dated file of its own in this folder instead, like
   - **Blocked by:** B2 (it reshapes option parsing in the solvers)
   - **Needs decision:** whether to rename. Option 1: `cdcl()`, `dpll()` and
     `walksat()` accept `options=`, and `logging_options=` stays as an alias,
-    as `AGENTS.md` asks for these signatures. Option 2: leave it and say in
+    as `solvers/AGENTS.md` asks for these signatures. Option 2: leave it and say in
     the solvers' docstrings that the dict carries search options too.
     Recommendation: option 1, inside B2's change.
   - **Problem:** the runners in `sat_core/solver_registry.py` put the search

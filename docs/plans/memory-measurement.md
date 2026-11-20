@@ -128,7 +128,7 @@ With every run in its own child, a per-run limit becomes possible:
   unavailable there.
 - A new status touches several places:
   - the `STATUS_*` constants in `sat_core/models.py`;
-  - the "Statuses" section of `AGENTS.md`;
+  - the "Statuses" rule in `AGENTS.md` ("Rules that hold everywhere");
   - the frontend status colours (`frontend/src/lib/status.tsx`, where status colours are
     reserved for statuses);
   - the charts' status shares, CSV counts and docs.
@@ -222,8 +222,8 @@ With every run in its own child, a per-run limit becomes possible:
   - **How:** see "Optional later" above.
   - **Done when:** a child with a 64 MB limit on a large formula reports
     `MEMOUT` (test skipped on Windows); the status has a colour, a place in
-    the status shares and CSV counts, and an entry in `GLOSSARY.md` and the
-    "Statuses" section of `AGENTS.md`; it is never counted as UNSAT.
+    the status shares and CSV counts, and an entry in `GLOSSARY.md` (and
+    the count in the "Statuses" rule of `AGENTS.md`); it is never counted as UNSAT.
 
 ## Rules for results (thesis)
 

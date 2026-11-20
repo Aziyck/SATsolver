@@ -1,6 +1,6 @@
 # Plan: record where and how every run happened
 
-- **Status:** in progress (META-1, META-2 and META-3 done 2026-11-19)
+- **Status:** in progress (META-1, META-2 and META-3 done 2026-11-19, META-4 done 2026-11-20)
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
 - **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
@@ -111,9 +111,17 @@ the job ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)):
     cores, RAM and commit for a job that has them, and "not recorded" for a
     job without `environment`.
 
-- [ ] **META-4. The CSV carries the machine**
+- [x] **META-4. The CSV carries the machine** - Done 2026-11-20.
   - **Difficulty:** medium (changes a file format people keep)
   - **Blocked by:** META-2
+  - **Built as:** `MACHINE_COLUMNS` and `machine_cells()` in
+    `sat_core/export.py`. `rows_to_csv` takes the job's `environment` as a
+    keyword, and a row dict may carry its own `environment` (the combined
+    export sets it per row, as it does `run_label`). The columns come after
+    `error`, so no existing column moves; `python` is the implementation and
+    version, `cores` the logical core count, and `wizsat_commit` gets `-dirty`
+    when `git_dirty` is true. The CSV table in `benchmarking.md` lists them;
+    META-5 adds the rest.
   - **How:** `rows_to_csv` in `sat_core/export.py` adds a few columns per
     row: `python`, `cpu`, `cores`, `ram_gb`, `os`, `wizsat_commit`. Per-row
     columns (not header comments) keep the file a valid CSV and keep the

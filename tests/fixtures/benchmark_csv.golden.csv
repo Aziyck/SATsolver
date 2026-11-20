@@ -1,9 +1,9 @@
-run,case,problem,case_label,variables,ratio,mode,seed,repeat,solver,solver_label,status,expected,verified,elapsed,cnf_variables,cnf_clauses,size_variables,timeout,rule,decisions,conflicts,propagations,learned_clauses,restarts,tries,flips,best_unsatisfied,error
-J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,cdcl,CDCL,SAT,SAT,True,,20,60,20,30.0,,10,0,10,0,0,,,,
-J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,dpll,DPLL,SAT,SAT,True,,20,60,20,30.0,,7,0,9,,,,,,
-J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,walksat,WalkSAT,SAT,SAT,True,,20,60,20,30.0,,,,,,,x,x,x,
-J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,probsat,ProbSAT,SAT,SAT,True,,20,60,20,30.0,,,,,,,x,x,x,
-J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,cdcl,CDCL,SAT,SAT,True,,20,100,20,30.0,,7,3,50,3,0,,,,
-J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,dpll,DPLL,SAT,SAT,True,,20,100,20,30.0,,9,1,24,,,,,,
-J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,walksat,WalkSAT,SAT,SAT,True,,20,100,20,30.0,,,,,,,x,x,x,
-J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,probsat,ProbSAT,SAT,SAT,True,,20,100,20,30.0,,,,,,,x,x,x,
+run,case,problem,case_label,variables,ratio,mode,seed,repeat,solver,solver_label,status,expected,verified,elapsed,cnf_variables,cnf_clauses,size_variables,timeout,rule,decisions,conflicts,propagations,learned_clauses,restarts,tries,flips,best_unsatisfied,error,python,cpu,cores,ram_gb,os,wizsat_commit
+J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,cdcl,CDCL,SAT,SAT,True,,20,60,20,30.0,,10,0,10,0,0,,,,,,,,,,
+J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,dpll,DPLL,SAT,SAT,True,,20,60,20,30.0,,7,0,9,,,,,,,,,,,,
+J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,walksat,WalkSAT,SAT,SAT,True,,20,60,20,30.0,,,,,,,x,x,x,,,,,,,
+J1,1,random_3sat,n=20 r=3 Planted SAT seed=1,20,3.0,planted,1,1,probsat,ProbSAT,SAT,SAT,True,,20,60,20,30.0,,,,,,,x,x,x,,,,,,,
+J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,cdcl,CDCL,SAT,SAT,True,,20,100,20,30.0,,7,3,50,3,0,,,,,,,,,,
+J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,dpll,DPLL,SAT,SAT,True,,20,100,20,30.0,,9,1,24,,,,,,,,,,,,
+J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,walksat,WalkSAT,SAT,SAT,True,,20,100,20,30.0,,,,,,,x,x,x,,,,,,,
+J1,2,random_3sat,n=20 r=5 Planted SAT seed=1,20,5.0,planted,1,1,probsat,ProbSAT,SAT,SAT,True,,20,100,20,30.0,,,,,,,x,x,x,,,,,,,

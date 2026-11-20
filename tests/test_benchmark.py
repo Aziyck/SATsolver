@@ -367,7 +367,8 @@ class CsvTests(unittest.TestCase):
         self.assertEqual(table[0]["verified"], "True")
 
     def test_csv_of_a_fixed_benchmark_is_unchanged(self):
-        # Recorded before the statistics became a catalog (ARCH-2); the columns and values must not move.
+        # Recorded before the statistics became a catalog (ARCH-2); the columns and values must not move. META-4
+        # added the machine columns after the last one; this run has no environment, so their cells are empty.
         # The elapsed column varies between runs, so it is blanked. The counts of the seeded local searches
         # depend on the Python version's random module, so only whether they are filled is kept ("x").
         raw = request(

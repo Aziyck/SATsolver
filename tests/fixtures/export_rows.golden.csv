@@ -1,5 +1,5 @@
-run,case,problem,case_label,size,param_status,edges,note,nodes,param_error,layout,repeat,solver,solver_label,status,expected,verified,elapsed,cnf_variables,cnf_clauses,size_variables,timeout,rule,decisions,conflicts,propagations,learned_clauses,restarts,tries,flips,best_unsatisfied,error
-J1,1,n_queens,size=4,4,x,"[[1,2],[2,3]]",,,,,1,cdcl,CDCL,SAT,SAT,True,0.012346,16,80,16,30.0,cap CDCL at 10 s,5,2,40,,,,,,
+run,case,problem,case_label,size,param_status,edges,note,nodes,param_error,layout,repeat,solver,solver_label,status,expected,verified,elapsed,cnf_variables,cnf_clauses,size_variables,timeout,rule,decisions,conflicts,propagations,learned_clauses,restarts,tries,flips,best_unsatisfied,error,python,cpu,cores,ram_gb,os,wizsat_commit
+J1,1,n_queens,size=4,4,x,"[[1,2],[2,3]]",,,,,1,cdcl,CDCL,SAT,SAT,True,0.012346,16,80,16,30.0,cap CDCL at 10 s,5,2,40,,,,,,,CPython 3.11.15,AMD Ryzen 7 5800U,16,15.5,Linux 6.8 (x86_64),9e11958
 J1,1,n_queens,size=4,4,x,"[[1,2],[2,3]]",,,,,1,walksat,WalkSAT,UNKNOWN,,,1.500000,16,80,0,,,,,,,,3,900,1,"gave up, ""no luck""
-second line"
-J7,3,clique,nodes=3,,,,,3,e,"{""a"":1}",2,dpll,DPLL,TIMEOUT,,False,30.000000,6,20,,,,,,,,,,,,
+second line",CPython 3.11.15,AMD Ryzen 7 5800U,16,15.5,Linux 6.8 (x86_64),9e11958
+J7,3,clique,nodes=3,,,,,3,e,"{""a"":1}",2,dpll,DPLL,TIMEOUT,,False,30.000000,6,20,,,,,,,,,,,,,PyPy 3.10.14,Apple M2,16,15.5,Linux 6.8 (x86_64),9e11958-dirty

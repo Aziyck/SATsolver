@@ -1,8 +1,9 @@
 """
 CSV export of benchmark rows.
 
-One format for every problem: base columns, one column per parameter, then
-the statistics the catalog marks for the CSV (sat_core.solver_registry).
+One format for every problem: base columns, one column per parameter, the
+statistics the catalog marks for the CSV (sat_core.solver_registry), the error
+message and last the machine the run happened on.
 """
 
 from __future__ import annotations
@@ -35,6 +36,10 @@ BASE_COLUMNS = (
     "timeout",
     "rule",
 )
+# After "error", so no column that was there before moves. One set of cells per
+# row, not header comments: the file stays a valid CSV, and benchmarks from
+# different machines can share it (docs/plans/run-metadata.md).
+MACHINE_COLUMNS = ("python", "cpu", "cores", "ram_gb", "os", "wizsat_commit")
 
 
 def csv_columns(rows: Iterable[BenchmarkRow | dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -46,14 +51,21 @@ def csv_columns(rows: Iterable[BenchmarkRow | dict[str, Any]]) -> tuple[list[str
         for name in params:
             if name not in param_names:
                 param_names.append(name)
-    reserved = set(BASE_COLUMNS) | set(STAT_COLUMNS) | {"error"}
+    reserved = set(BASE_COLUMNS) | set(STAT_COLUMNS) | set(MACHINE_COLUMNS) | {"error"}
     headers = [f"param_{name}" if name in reserved else name for name in param_names]
-    columns = list(BASE_COLUMNS[:4]) + headers + list(BASE_COLUMNS[4:]) + list(STAT_COLUMNS) + ["error"]
+    columns = list(BASE_COLUMNS[:4]) + headers + list(BASE_COLUMNS[4:]) + list(STAT_COLUMNS) + ["error"] + list(MACHINE_COLUMNS)
     return param_names, columns
 
 
-def rows_to_csv(rows: list[BenchmarkRow | dict[str, Any]], run_label: str = "") -> str:
-    """One CSV format for every problem: base columns, one column per parameter, stats."""
+def rows_to_csv(
+    rows: list[BenchmarkRow | dict[str, Any]], run_label: str = "", environment: dict[str, Any] | None = None
+) -> str:
+    """One CSV format for every problem: base columns, one column per parameter, stats, machine.
+
+    `run_label` and `environment` (a job's run_environment()) apply to every row
+    that does not carry its own "run_label" or "environment" key; a combined
+    export of several jobs sets them per row.
+    """
 
     param_names, columns = csv_columns(rows)
     buffer = io.StringIO()
@@ -82,8 +94,33 @@ def rows_to_csv(rows: list[BenchmarkRow | dict[str, Any]], run_label: str = "") 
         ]
         values += [stats.get(name, "") for name in STAT_COLUMNS]
         values.append(data.get("error") or "")
+        values += machine_cells(data.get("environment", environment))
         writer.writerow(values)
     return buffer.getvalue()
+
+
+def machine_cells(environment: dict[str, Any] | None) -> list[Any]:
+    """The MACHINE_COLUMNS cells of a job's environment; a fact that is not there is an empty cell.
+
+    `environment` is None for a benchmark stored before the environment was
+    recorded, and a fact inside it is None when it could not be read.
+    """
+
+    env = environment or {}
+    interpreter = " ".join(str(env[key]) for key in ("python_implementation", "python_version") if env.get(key))
+    commit = env.get("git_commit")
+    if commit and env.get("git_dirty"):
+        # A timing from changed code is not the timing of that commit.
+        commit += "-dirty"
+    cells = [
+        interpreter,
+        env.get("cpu_model"),
+        env.get("cpu_logical_cores"),
+        env.get("ram_total_gb"),
+        env.get("os"),
+        commit,
+    ]
+    return ["" if cell is None else cell for cell in cells]
 
 
 def _csv_value(value: Any) -> Any:

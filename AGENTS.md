@@ -78,8 +78,8 @@ tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),
                  adr/ (decisions), report/ (thesis material)
-.claude/         skills/ (fix-item, do-plan-step, write-pr, writing-for-agents),
-                 agents/ (hard-reviewer), hooks/, archive/
+.claude/         skills/ (do-item, do-item-hard, write-pr, writing-for-agents),
+                 agents/ (reviewer), hooks/, archive/
 ```
 
 ## How a request flows
@@ -213,8 +213,8 @@ The invariants code must keep:
 Open work is a queue of **items**: findings in `docs/reviews/`, feature tasks
 in `docs/plans/`. Read [`docs/plans/README.md`](docs/plans/README.md) before
 taking one: it gives the order of work, the item format, the difficulty
-levels and how to close an item. The skills `/fix-item` and `/do-plan-step`
-walk through one item each.
+levels and how to close an item. The skill `/do-item` walks through one
+item (`/do-item-hard` for a hard one).
 
 - **Test first.** Turn the item's "done when" into a failing test before
   changing code.

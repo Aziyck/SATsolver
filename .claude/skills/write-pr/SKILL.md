@@ -1,6 +1,6 @@
 ---
 name: write-pr
-description: "Commit message, pull request and owner report for a finished item: the close step of /fix-item and /do-plan-step, or a request to write a PR."
+description: "Commit message, pull request and owner report for a finished item: the close step of /do-item and /do-item-hard, or a request to write a PR."
 argument-hint: "[item ID]"
 ---
 
@@ -14,8 +14,10 @@ without this session, deciding from the body alone whether to merge.
 
 - The item, and for a plan task its plan's Goal:
   `grep -rn "\*\*<ID>\. " docs/reviews docs/plans`.
-- The change: `git add -A`, then `git diff --cached main --stat` and
-  `git diff --cached main`.
+- The change: `git add -N .` (new files show in the diff, nothing is
+  staged), then `git diff main --stat` and `git diff main`. Check the
+  stat lists only files this item changed; a stray file (scratch output,
+  a log) is deleted or left out of the commit, never committed.
 - From this session: each check run after the last edit with its result
   line; the failure each new test showed before the change; rulings;
   review findings fixed and left; new findings filed; measurements.
@@ -32,8 +34,10 @@ ruling; measurements; one line of checks.
 
 ## 3. Pull request
 
-Title: the commit subject. Body in this order; omit a section that would be
-empty:
+Title: the commit subject. The body's depth follows the item's difficulty:
+an **easy** item gets the opening paragraph, `## Verified` and any
+`## Rulings`, a few lines each; a **medium** or **hard** item gets every
+section below. Body in this order; omit a section that would be empty:
 
 1. **Opening paragraph**, no heading: `Closes **<ID>** in [<file>](<file>)`
    and any item filed. Then the plan's goal or the problem in the reader's
@@ -52,7 +56,8 @@ empty:
 5. `## Behaviour changes`: what users, API callers or file readers now see.
 6. `## Known gaps`: what stays wrong or untested, with the item tracking it.
 
-PRs #37 and #39 (`gh pr view 37`) show the depth expected.
+PRs #37 and #39 (`gh pr view 37`) show the depth expected for a medium or
+hard item.
 
 ## 4. Review it as the owner
 

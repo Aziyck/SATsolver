@@ -7,23 +7,19 @@ argument-hint: "[item ID]"
 Write the text that closes one item: $ARGUMENTS
 
 You write it in the session that did the work, so the facts are in your
-context. The reader is the owner opening the pull request days later,
-without this session, deciding from the body alone whether to merge.
+context. The reader is the owner, days later, with the diff open and without
+this session. Do not retell the diff; show its shape, prove it works, and
+say what it risks.
 
 ## 1. Gather
 
 - The item, and for a plan task its plan's Goal:
   `grep -rn "\*\*<ID>\. " docs/reviews docs/plans`.
-- The change: `git add -N .` (new files show in the diff, nothing is
-  staged), then `git diff main --stat` and `git diff main`. Check the
-  stat lists only files this item changed; a stray file (scratch output,
-  a log) is deleted or left out of the commit, never committed.
+- `git add -N .`, then `git diff main --stat`. Every file in it belongs to
+  this item; delete or leave out a stray file (scratch output, a log).
 - From this session: each check run after the last edit with its result
-  line; the failure each new test showed before the change; rulings;
-  review findings fixed and left; new findings filed; measurements.
-
-**Done when** you can say in one sentence why the change exists and what it
-unblocks or fixes, and you hold every check's result from output you saw.
+  line; the failure each new test showed before the change; rulings; review
+  findings fixed and left; new findings filed; measurements.
 
 ## 2. Commit message
 
@@ -34,50 +30,36 @@ ruling; measurements; one line of checks.
 
 ## 3. Pull request
 
-Title: the commit subject. The body's depth follows the item's difficulty:
-an **easy** item gets the opening paragraph, `## Verified` and any
-`## Rulings`, a few lines each; a **medium** or **hard** item gets every
-section below. Body in this order; omit a section that would be empty:
+Title: the commit subject. Full sentences, terms as in `GLOSSARY.md`. Omit a
+section that would be empty.
 
-1. **Opening paragraph**, no heading: `Closes **<ID>** in [<file>](<file>)`
-   and any item filed. Then the plan's goal or the problem in the reader's
-   words, what was missing before, what is true after, and what it unblocks.
-   A merge-order warning or anything to know before merging follows in bold.
-2. `## What`: by file, in the order a reviewer reads (core module, its
-   callers, tests, docs). Name each new or changed function, constant,
-   column, event or setting in backticks with its concrete values or shape,
-   and what an edge case gives (null, old data, an error). Tests: one bullet
-   per behaviour asserted.
-3. `## Verified`: each check as its command and the result line you saw
-   (`262 tests OK, none skipped`); for each new test, the failure it showed
-   before the change; each check not run, with the reason; the review's
-   level, finding count and what was fixed.
+An **easy** item gets the opening line and `## Evidence`, nothing else.
+
+1. **Opening line**, no heading: `Closes **<ID>** in [<file>](<file>)`, then
+   one or two sentences: what was wrong or missing, what is true now.
+2. `## Shape` (medium and hard): the smallest view of the change. A
+   `diff` block of a call tree, file tree or control flow, or pseudocode.
+   Five to fifteen lines. Not a list of files.
+3. `## Evidence`: before and after, from output you saw. For each new test,
+   the failure it showed before the change and that it passes now. Each
+   check as its command and result line (`262 tests OK, none skipped`), and
+   each check not run with the reason. For a medium or hard item, the
+   review's level and what it found.
 4. `## Rulings`: one bullet each: the choice, why, what it costs if wrong.
-5. `## Behaviour changes`: what users, API callers or file readers now see.
+5. `## Merge danger` (medium and hard):
+   - **Door:** `two-way` (a revert restores everything) or `one-way` (a
+     revert leaves something changed). One-way when the change writes the
+     database schema or migrates rows (`sat_web/store.py`), changes a
+     format others keep (CSV columns, the JSON API, files in a job folder),
+     or changes a solver's search or an encoder's clause order (every
+     benchmark number and thesis table moves). Say what a revert cannot undo.
+   - **Blast radius:** who sees it if it is wrong (solve page, benchmarks,
+     API callers, stored jobs, thesis numbers), in one line.
 6. `## Known gaps`: what stays wrong or untested, with the item tracking it.
 
-PRs #37 and #39 (`gh pr view 37`) show the depth expected for a medium or
-hard item.
-
-## 4. Review it as the owner
-
-Reread the body as someone who never saw this session, and revise until
-each holds:
-
-- Every file in `--stat` is named in What (a named group counts).
-- Every check, number and error message comes from output seen in this
-  session.
-- Every line is a full sentence; session shorthand (the loop, the baseline,
-  "as discussed") is replaced by what it names.
-- The body alone answers: why now, what changed, how it is proven, what to
-  watch.
-
-**Done when** all four hold.
-
-## 5. Hand over
+## 4. Hand over
 
 Write the commit message to `commit.txt` and the body to `pr.md` in the
 scratchpad, for `git commit -F` and `gh pr create --body-file` unchanged.
-The owner report is short: the pull request link, review findings left and
-why, new findings filed, and which item can start next. The pull request
-carries the rest.
+The owner report is short: the pull request link, the door, review findings
+left and why, new findings filed, and which item can start next.

@@ -37,19 +37,27 @@ honest per-run memory number possible (see the memory plan).
 - **Protocol:** JSON over pipes.
   - In, one object on stdin:
     `{"clauses", "solver", "options", "log_level", "progress_interval", "timeout"}`.
+    The child reads stdin to its end, so the parent closes stdin after
+    writing the request.
   - Out, one JSON object per line on stdout: `{"type": "log", "message"}` for
     each log line, then one
-    `{"type": "result", "status", "solution", "stats", "error"}`.
+    `{"type": "result", "status", "solution", "stats", "error", "elapsed"}`
+    (`elapsed` is the child's run time, without its start-up).
   - The model's keys become strings in JSON; convert them back to ints.
 - **Cancel, skip, timeout:** the parent reads the child's output on a thread.
   While waiting, it checks `stop_requested(cancel_token)` every ~50 ms; on
   cancel or skip it kills the child and returns `CANCELLED` / `SKIPPED`. The
   child enforces the timeout itself (a `RunToken` with `timeout_seconds`); the
-  parent also kills it a little after the timeout, in case it hangs.
+  parent also kills it a little after the timeout, in case it hangs. The
+  child's clock starts after interpreter start-up and parsing the request
+  (seconds near the clause limit), so the parent's margin covers those.
 - **Errors:** a child that exits without a result gives status `ERROR` with its
   stderr tail, like any solver failure today (`run_solver` never raises).
   The parent reads stderr on its own thread too: the child sends stray prints
-  there, and a full pipe would block it.
+  there, and a full pipe would block it. Request mistakes (unknown solver,
+  invalid options, unknown log level) are not run failures: the parent checks
+  them before starting the child (`get_solver`, `parse_options`,
+  `log_options_for`) and raises `ValueError`, as `run_solver` does in-process.
 - **Data size:** at the 2,000,000-clause limit the JSON input is a few tens of
   MB. Acceptable, but measured in RUNNER-7.
 

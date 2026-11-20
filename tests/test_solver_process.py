@@ -10,8 +10,10 @@ import contextlib
 import dataclasses
 import io
 import json
+import re
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -121,7 +123,8 @@ class ChildMatchesInProcessTests(unittest.TestCase):
         result = child_result(lines)
         self.assertEqual(result["status"], "TIMEOUT")
         self.assertIsNone(result["solution"])
-        self.assertGreaterEqual(result["elapsed"], 0.3)
+        # elapsed is the solver's own clock, which starts a moment after the timeout's clock.
+        self.assertGreater(result["elapsed"], 0.2)
         self.assertLess(result["elapsed"], 5)
 
 
@@ -137,6 +140,34 @@ class ChildProtocolTests(unittest.TestCase):
         self.assertTrue(all(line["type"] == "log" for line in lines[:-1]))
         self.assertTrue(all(isinstance(line["message"], str) for line in logs))
         self.assertTrue(any("debug" in line["message"] for line in logs))
+
+    def test_log_lines_reach_the_parent_while_the_solver_runs(self):
+        # Only a flushed line can be read before the run ends: the run lasts 5 s, the read must not.
+        huge = {"random_seed": 1, "max_tries": 1_000_000, "max_flips": 1_000_000_000}
+        request = request_for("walksat", UNSAT_CLAUSES, options=huge, timeout=5)
+        child = subprocess.Popen(
+            [sys.executable, "-m", "sat_core.solver_process"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            cwd=ROOT,
+        )
+        try:
+            child.stdin.write(json.dumps(request))
+            child.stdin.close()
+            started = time.perf_counter()
+            first = json.loads(child.stdout.readline())
+            waited = time.perf_counter() - started
+            still_running = child.poll() is None
+        finally:
+            child.kill()
+            child.wait()
+            child.stdout.close()
+
+        self.assertEqual(first["type"], "log")
+        self.assertLess(waited, 4)
+        self.assertTrue(still_running)
 
     def test_stdout_holds_only_log_and_result_lines(self):
         _, lines, _ = start_child(request_for("walksat", UNSAT_CLAUSES, log_level="periodic", progress_interval=100))
@@ -166,13 +197,28 @@ class ChildProtocolTests(unittest.TestCase):
             self.assertIn(json.loads(line)["type"], ("log", "result"))
 
     def test_log_events_carry_the_same_messages_run_solver_emits(self):
-        events = []
-        run_solver(SAT_CLAUSES, "cdcl", options_for("cdcl"), event_callback=events.append)
-        expected_first = [event.message for event in events if event.type == EVENT_LOG][0]
+        def without_times(messages):
+            return [re.sub(r"\d+\.\d+(e-?\d+)?s", "<time>", message) for message in messages]
 
-        _, lines, _ = start_child(request_for("cdcl", SAT_CLAUSES))
+        for solver in ("cdcl", "walksat"):
+            with self.subTest(solver=solver):
+                request = request_for(solver, UNSAT_CLAUSES, log_level="debug")
+                events = []
+                run_solver(
+                    UNSAT_CLAUSES,
+                    solver,
+                    request["options"],
+                    log_level="debug",
+                    progress_interval=request["progress_interval"],
+                    event_callback=events.append,
+                )
+                expected = [event.message for event in events if event.type == EVENT_LOG]
 
-        self.assertEqual([line["message"] for line in lines if line["type"] == "log"][0], expected_first)
+                _, lines, _ = start_child(request)
+
+                received = [line["message"] for line in lines if line["type"] == "log"]
+                self.assertGreater(len(expected), 3)
+                self.assertEqual(without_times(received), without_times(expected))
 
 
 if __name__ == "__main__":

@@ -10,7 +10,12 @@ with run_solver, and writes one JSON object per line to stdout:
      "error", "elapsed"}                                    last, once
 
 The request is {"clauses", "solver", "options", "log_level",
-"progress_interval", "timeout"}; "timeout" is enforced here, by run_solver.
+"progress_interval", "timeout"}. The child reads stdin to its end before it
+starts, so the parent closes stdin after writing the request. "timeout" is
+enforced here, by run_solver; its clock starts after the interpreter has
+started and the request has been parsed, which can take seconds for a
+formula near the clause limit. A parent that kills a hung child counts that
+in its margin.
 
 Nothing else may reach stdout, so the parent can read it line by line: while a
 run is going, sys.stdout points at stderr, so a stray print() lands there. That
@@ -24,8 +29,10 @@ plain ASCII (json escapes the rest).
 The module imports only sat_core and solvers (no web framework), so the
 interpreter that runs it needs nothing installed beyond itself. A request that
 cannot run (broken JSON, an unknown solver, invalid options) ends the process
-with a traceback on stderr and no result line; the parent reports that as an
-ERROR run.
+with a traceback on stderr and no result line. The parent validates the
+request before starting the child, so run_solver's ValueError for those
+mistakes still reaches the caller; a child that ends without a result anyway
+is reported as an ERROR run.
 """
 
 from __future__ import annotations

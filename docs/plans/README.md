@@ -7,8 +7,8 @@ Open work lives in two places:
 - `docs/plans/` (this folder): features that are designed but not built. Each
   plan holds the design, the rejected options and a list of tasks.
 
-Both use the same **item** format, defined below. The skills `/fix-item` and
-`/do-plan-step` work on one item at a time. Words such as *item*, *case* or
+Both use the same **item** format, defined below. The skill `/do-item`
+(`/do-item-hard` for a hard item) works on one item at a time. Words such as *item*, *case* or
 *run* are defined in [`GLOSSARY.md`](../../GLOSSARY.md); decisions are recorded
 in [`docs/adr/`](../adr/).
 
@@ -47,6 +47,8 @@ To list every open item: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.
 ```markdown
   - [ ] **ID. Short title that names the symptom or the task**
     - **Difficulty:** easy | medium | hard
+    - **Not hard:** why a matching hard trigger does not apply
+                                                     (only to rate below one)
     - **Blocked by:** A2, META-1                    (only if it must wait)
     - **Needs decision:** the question. The options. The recommendation.
                                                      (only while it is open)
@@ -80,16 +82,38 @@ Rules for writing one:
 
 ## Difficulty
 
-Difficulty says how much can go wrong, not how long it takes. `CLAUDE.md` maps
-it to a model and a review level.
+Difficulty says how much can go wrong, not how long it takes or how big the
+change is. `CLAUDE.md` maps it to a model and a review.
 
 | Level | Means |
 |---|---|
-| easy | A local change, covered by existing tests, with a clear "done when". Nothing subtle. |
-| medium | Several files or new tests, or a behaviour users see, but no subtle interaction. |
-| hard | Any of: security; processes, threads, cancellation or timeouts; a solver's hot loop or anything that can change a solver's search or results; data migration; an open design question. |
+| easy | A local change, covered by existing tests, with a clear "done when". Nothing subtle, and no hard trigger. |
+| medium | Several files or new tests, or a behaviour users see, but no subtle interaction and no hard trigger. |
+| hard | The change matches a hard trigger below, or has an open design question. |
 
-When unsure between two levels, take the higher one.
+**Hard triggers.** An item is hard when its fix touches any of these, however
+small the change. A one-line change in a hard area is hard.
+
+- **Concurrency:** `sat_web/manager.py`, `sat_core/parallel.py`,
+  `sat_core/runtime.py`, `frontend/src/api/live.ts`; any lock, thread,
+  process or queue; a race between two channels (a REST reply and a
+  WebSocket event).
+- **Stopping:** how Stop, Skip or a timeout is handled, or which event ends a
+  job.
+- **Security:** `LocalOnlyGuard`, what the server serves, file downloads.
+- **Stored data:** the database schema or a migration (`sat_web/store.py`).
+- **Solvers:** a solver's hot loop (propagation, the main search loop,
+  flips), or a change meant to alter a solver's search or results. A
+  solver change outside the loops that keeps the search, proven by unchanged
+  conflict counts, is not hard by this trigger.
+
+An item that matches a trigger is rated lower only with a `Not hard:` line
+that says why the trigger does not apply. When unsure between two levels,
+take the higher one.
+
+The rating is checked twice: `/do-item` compares the files the fix will
+touch with the triggers before starting, and the files in the diff before
+the review, and re-rates the item when a trigger matches.
 
 ## Statuses and closing an item
 

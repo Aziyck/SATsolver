@@ -109,7 +109,7 @@ installed.
     line.
 
 - [ ] **RUNNER-5. Jobs and benchmarks work through the child**
-  - **Difficulty:** medium
+  - **Difficulty:** hard (re-rated 2026-11-20 from medium: jobs and benchmarks start the solver child process)
   - **Blocked by:** RUNNER-3, RUNNER-4
   - **Done when:** with the setting on, API tests run a solve job and a small
     benchmark sequentially and with `workers: 2`, get the same rows as without

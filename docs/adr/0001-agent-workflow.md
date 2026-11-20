@@ -1,6 +1,7 @@
 # 0001. Work is tracked as items; code changes go through a branch and a pull request
 
-- **Status:** Accepted (2026-11-13)
+- **Status:** Accepted (2026-11-13); point 6 superseded by
+  [0005](0005-one-item-skill-model-by-difficulty.md)
 - **Decided by:** the repository owner, after the research recorded in
   `docs/plans/done/agent-workflow.md`
 

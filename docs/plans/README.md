@@ -2,7 +2,9 @@
 
 Open work lives in two places:
 
-- [`docs/reviews/`](../reviews/): dated findings about the code as it is
+- [`docs/reviews/`](../reviews/): findings about the code as it is. A dated
+  file per deliberate review, and [`findings.md`](../reviews/findings.md) for
+  findings made while working
   (bugs, risks, clean-ups). Items there are fixes.
 - `docs/plans/` (this folder): features that are designed but not built. Each
   plan holds the design, the rejected options and a list of tasks.
@@ -27,7 +29,8 @@ plans move to [`done/`](done/).
 Free to do at any point, when there is time or when the code is being
 touched anyway:
 
-- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17, A23-A25,
+- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17;
+- the open findings in [`findings.md`](../reviews/findings.md): A23-A25,
   A27-A33, A35, A36, A40;
 - the solver clean-up B1-B17 in the same audit;
 - [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
@@ -35,7 +38,8 @@ touched anyway:
 
 | File | What | Waits on |
 |---|---|---|
-| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | whole-repo findings (A), solver simplification (B1-B17) | nothing |
+| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings (A1-A17), solver simplification (B1-B17) | nothing |
+| [../reviews/findings.md](../reviews/findings.md) | findings made while working (A18-A41, then F1 onwards) | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | nothing |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | audit B6-B9 |
@@ -140,8 +144,8 @@ as the work.
   `done (date)`, move decisions worth keeping into an ADR, and move the file
   to `docs/plans/done/` (fix its relative links and the links to it).
 - A **new finding** met along the way (a bug, a weak spot, a review finding
-  left unfixed) is filed the moment it is found: a new item at the end of the
-  newest file in `docs/reviews/`, next free ID, marked
+  left unfixed) is filed the moment it is found: a new item at the end of
+  [`docs/reviews/findings.md`](../reviews/findings.md), next F number, marked
   `(added <date>, found while <ID>)`. It goes into the current change as a
   documentation edit and into the report to the owner; the fix waits for its
   own session.

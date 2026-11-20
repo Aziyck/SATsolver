@@ -26,8 +26,8 @@ runs the same steps on Opus.
 - **A bug report without an ID** (a console error, a traceback, a wrong
   result): the report is the item, and its "done when" is "the reported
   symptom no longer happens". Once step 2 has a reproduction, file it as a new
-  item at the end of the newest file in `docs/reviews/` (next free ID), so it
-  is closed like any other.
+  item at the end of `docs/reviews/findings.md` (next F number), so it is
+  closed like any other.
 
 For a plan task, read the whole plan: Goal, Non-goals, Design and
 "Considered and rejected". The plan already did the thinking; the task is

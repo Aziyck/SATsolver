@@ -433,7 +433,7 @@ Several threads in the server touch the same `Job` objects:
 - one reader thread per running job, which applies its events;
 - a timer thread per Stop, which ends the process if it is still alive
   after `CANCEL_GRACE_SECONDS`. Its log line is written without the lock
-  (audit A40).
+  (finding A40).
 
 `JobManager.lock` makes them take turns: a thread takes the lock, reads or
 changes the jobs, and releases it. "Under the lock" on this page means
@@ -788,7 +788,7 @@ when its port is busy instead of moving to the next one.
     sites, so a server reached under `--host` by a plain-http LAN name does
     not get this check: another site can still load its GET routes as
     images (it cannot read the answer, and framing stays forbidden). This
-    is accepted, like the rest of `--host` use (audit item A26).
+    is accepted, like the rest of `--host` use (finding A26).
   - Every reply (except the bare 500 of an unhandled error, which is sent
     outside the middleware) carries `Content-Security-Policy: frame-ancestors 'self'`
     and `X-Frame-Options: SAMEORIGIN`, so only the app itself may show its

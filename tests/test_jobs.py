@@ -272,7 +272,7 @@ def stop_on(kind, request, should_stop):
 
 
 class StopTimingTests(unittest.TestCase):
-    """A Stop ends a job as cancelled only when it cut the work short (audit item A18)."""
+    """A Stop ends a job as cancelled only when it cut the work short (finding A18)."""
 
     request = {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}
 

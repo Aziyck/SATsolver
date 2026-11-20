@@ -15,18 +15,38 @@ reference: each section explains one part and can be read on its own.
 
 ## What the big picture hides
 
-Two details the [big picture](architecture.md#the-big-picture) diagram does
-not show:
+Two things the [big picture](architecture.md#the-big-picture) diagram shows
+but does not explain.
 
-- The **reader thread is part of the `JobManager`**, not a separate
-  component. It is the method `JobManager._reader()` running on its own
-  thread, one thread per running job. The diagrams draw threads and processes,
-  not classes, so the manager appears twice wherever its code runs on two
-  threads.
-- **Both halves of the manager write to SQLite.** The request side inserts
-  the job (that is how it gets its number) and saves status changes; the
-  reader side saves the instance summary, the result and benchmark rows as
-  they arrive. At startup the manager loads the saved jobs back.
+**Why there is a reader thread.** A job runs in its own process, and a
+process cannot see another process's memory. The job cannot reach the
+server's list of jobs, its database connection or the open WebSockets; all it
+can do is put messages on its event queue, a pipe to the server. Something in
+the server has to take them out. That is the reader thread, one per running
+job, started by `JobManager._start`:
+
+- it waits on the queue (`get` with a 0.25 s timeout). It does not poll the
+  job: the job pushes an event whenever it has one, and the `get` returns at
+  once. The timeout only lets the reader notice a worker that died without a
+  last message;
+- it passes each event to `JobManager._apply`, which updates the job while
+  holding the lock, saves what must survive a restart, and publishes the
+  change. The rules live there, in manager code that happens to run on the
+  reader thread: the next status (`next_status`), what is saved, and the
+  limit of 60 log lines per second;
+- when the process has exited and the queue is empty, it calls
+  `JobManager._finalize` and ends.
+
+Why not let the job write to the database and the WebSocket itself? Every
+job would need its own connections, the server would no longer be the only
+one changing the jobs it tracks, and a crashing solver could leave a record
+half written. With the reader in between, a job process owns nothing but its
+work: killing it loses the work in progress and nothing else.
+
+**Both halves of the manager write to SQLite.** The request side inserts the
+job (that is how it gets its number) and saves status changes; the reader
+side saves the environment, the instance summary, the result and benchmark
+rows as they arrive. At startup the manager loads the saved jobs back.
 
 ## One solve, start to finish
 
@@ -305,6 +325,79 @@ created once, that are handed one case after another. They are processes and not
 threads for the same GIL reason, and a pool is used because starting a
 process is expensive, so N processes are reused for all the cases.
 
+### Talking to a running job
+
+The browser never talks to a job directly; it talks to the server, and the
+server has three ways to reach a job process. All of them are set up when
+the process starts:
+
+| Direction | How | What it carries |
+|---|---|---|
+| server to job | the process's start arguments | the validated request, including its timeout |
+| server to job | the cancel flag (`multiprocessing.Event`) | Stop |
+| server to job | the skip flag (`multiprocessing.Event`) | Skip case, for benchmarks |
+| job to server | the event queue, read by the reader thread | everything else: logs, progress, instance, result, rows, the end |
+
+There is nothing else. A running job cannot be given new parameters, and the
+server never asks a job anything; it only raises a flag and waits for events.
+A Stop from the browser travels `POST /api/jobs/{id}/cancel`, a request
+thread, `JobManager.cancel` (which marks a running job `cancelling` under
+the lock), and then the cancel flag. It does not pass through the reader thread.
+
+Flags and the lock solve different problems. A flag is one bit that one side
+sets and the other reads; a bit cannot be half written, so it needs no lock,
+and it can only say "stop". The lock protects changes made of several steps
+(status, result and revision together) to objects that several threads of
+the server share ([Locks and threads](#locks-and-threads)).
+
+### Stop, Skip and timeouts
+
+Inside the job process, the two flags and the run's deadline are read
+through one object, the **run token** (`RunToken` in `sat_core/runtime.py`).
+`execute_job` makes it from the flags; `run_solver` gives each run a child
+token with that run's deadline, whose parent is the job's token. Code never
+reads a flag on its own. It calls `stop_requested(token)`, which checks
+everything at once: the cancel flag, the deadline (the time since the run
+started against its timeout), the skip flag, and the same for the parent
+token. When the answer is yes, `cancellation_status(token)` names the reason,
+in this order: `TIMEOUT`, `CANCELLED`, `SKIPPED`.
+
+When the token is asked:
+
+| Where | When |
+|---|---|
+| every solver | once before it starts |
+| CDCL (`solvers/cdcl.py`) | every 2,048 clauses while loading the formula, and every 2,048 steps of propagation and of the main search loop |
+| DPLL (`solvers/dpll.py`) | every 2,048 steps of propagation |
+| WalkSAT, ProbSAT (`solvers/walksat.py`) | at the start of every try, and every 2,048 steps while flipping |
+| solve job (`sat_core/jobs.py`) | once between encoding and solving (Stop only; the deadline belongs to the run) |
+| benchmark (`sat_core/benchmark.py`) | before each case (Stop), and before each solver entry (Stop and Skip) |
+
+Why every 2,048 steps and not every step: asking reads a shared flag and the
+clock. Asking on every step of CDCL's propagation cost about a third of the
+run time (the comment at `CHECK_EVERY` in `solvers/cdcl.py`); every 2,048
+steps is still well under a millisecond between checks.
+
+Encoders (`problems/`) never ask. A Stop that arrives while a large instance
+is being encoded is noticed when the encoding ends, or, if the process is
+still alive three seconds after the Stop (`CANCEL_GRACE_SECONDS` in
+`sat_web/manager.py`), the manager terminates the process. The same
+fallback covers any code that never reaches a check.
+
+What each one does:
+
+- **Stop** sets the cancel flag. The solver returns `CANCELLED` at its next
+  check, the job body returns, and the job ends `cancelled`, or `done` if
+  its work was already finished ([Statuses](#statuses)).
+- **Skip case** (benchmarks) sets the skip flag. The run in progress ends
+  `SKIPPED`, the case's remaining solver entries are recorded as `SKIPPED`
+  without running, and the flag is cleared (`clear_skip`) before the next
+  case. In a parallel benchmark the pool sees Skip through a counter instead
+  of a flag ([Parallel benchmark runs](#parallel-benchmark-runs)).
+- **A timeout** is not a flag. It is a deadline the token computes from the
+  moment the run started; nobody has to set anything. A benchmark gives each
+  run its own deadline, which a limit rule can lower.
+
 ### Daemons and the watchdog
 
 In Python's `multiprocessing`, a process marked `daemon=True` is killed
@@ -375,15 +468,8 @@ together, and the tests tell you when one of them is behind.
   `queued`, `running` or `cancelling` and marks them. A job that was still
   waiting in the queue is not started again; it has to be rerun.
 
-**Cancellation** is cooperative first: the manager sets a
-`multiprocessing.Event`, a flag shared with the job process. The worker's
-`RunToken` reads it, and the solver returns `CANCELLED` at its next
-checkpoint. If the process has not ended three seconds later
-(`CANCEL_GRACE_SECONDS`) it is terminated, which covers code that never
-reaches a checkpoint. **Skip** (benchmarks) sets a second event that ends
-only the current run with `SKIPPED`. **Timeouts** are the same token with a
-deadline. Solvers ask the token every 2,048 steps, which keeps the check
-cheap and the reaction time well under a second.
+How Stop, Skip and timeouts reach a running solver is under
+[Stop, Skip and timeouts](#stop-skip-and-timeouts).
 
 ### Parallel benchmark runs
 

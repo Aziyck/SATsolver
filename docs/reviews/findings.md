@@ -386,7 +386,7 @@ gets a dated file of its own in this folder instead, like
     on its environment, after the imports it needs anyway, is at most half
     the 193-232 ms measured before the fix on the same machine.
 
-- [ ] **A40. The Stop timer writes to a job's log without the lock**
+- [x] **A40. The Stop timer writes to a job's log without the lock** - Done 2026-11-20.
   (added 2026-11-20, found while checking `docs/guide/how-it-works.md`; read
   off the code, not reproduced)
   - **Difficulty:** hard (re-rated 2026-11-20 from easy: a thread and the manager's lock)
@@ -417,3 +417,28 @@ gets a dated file of its own in this folder instead, like
     light theme) moved into the row.
   - **Done when:** every relative link in the Markdown files under `docs/`
     resolves to a file that exists.
+
+- [ ] **F1. The Stop timer can act on a worker that has already ended**
+  (added 2026-11-20, found while A40; review finding, read off the code, not
+  reproduced)
+  - **Difficulty:** hard (concurrency and stopping: `sat_web/manager.py`, a
+    timer thread)
+  - **Problem:** `force_stop` in `JobManager.cancel` decides only from
+    `process.is_alive()` on the process it captured. Two ways that is wrong:
+    1. The reader thread's `process.join(timeout=2)` can time out on a worker
+       that closed its queue but hangs on exit. `_finalize` then logs
+       "Job cancelled.", saves the logs and sets `job.process = None`. When
+       the timer fires later, it appends "terminating it" after the final
+       line; that line is published but never saved, so the live log and the
+       reloaded log differ. The job may even have been deleted by then.
+    2. On POSIX, `is_alive()` calls `waitpid(WNOHANG)`. If the reader thread
+       (`join`) or `shutdown()` reaps the child at the same moment, the
+       timer's call gets `ECHILD`, `poll` returns `None`, and `is_alive()`
+       says True: a bogus log line, and `terminate()` sends SIGTERM to a PID
+       the OS may have reused. Windows is not affected.
+  - **Fix:** under the lock (A40 already takes it there), also return early
+    when `job.process is not process` or the job is no longer
+    `cancelling`. Check whether that closes case 2 too, or whether only one
+    thread may wait on the child.
+  - **Done when:** a test shows that a timer firing after `_finalize` adds
+    no log line and does not call `terminate()`, and the API tests pass.

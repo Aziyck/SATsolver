@@ -432,8 +432,8 @@ Several threads in the server touch the same `Job` objects:
   delete, clear) through `run_in_threadpool`, up to 40 at once by default;
 - one reader thread per running job, which applies its events;
 - a timer thread per Stop, which ends the process if it is still alive
-  after `CANCEL_GRACE_SECONDS`. Its log line is written without the lock
-  (finding A40).
+  after `CANCEL_GRACE_SECONDS`. It checks the process and writes its log
+  line under the lock, and terminates the process after releasing it.
 
 `JobManager.lock` makes them take turns: a thread takes the lock, reads or
 changes the jobs, and releases it. "Under the lock" on this page means

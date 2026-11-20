@@ -104,7 +104,9 @@ Three things the diagram leaves out:
   `instance.cnf` and `model.txt`.
 
 Pages read only the cache, whether a value came as a reply (path 1) or as an
-event (path 2). The reader thread is code of the `JobManager` running on its
+event (path 2). Why the reader thread is needed, every way the server can
+reach a running job, and when the flags are read are in
+[How it works](how-it-works.md#what-the-big-picture-hides). The reader thread is code of the `JobManager` running on its
 own thread; the lock is what lets it, the request threads and the event loop
 touch the same jobs safely
 ([How it works](how-it-works.md#locks-and-threads)). The walk through one

@@ -351,7 +351,7 @@ cannot deadlock.
 The status a job can have, and what moves it on, is drawn under
 [Statuses](architecture.md#statuses) in Architecture. The rule is the pure
 function `next_status` in `sat_web/lifecycle.py`, and
-`tests/test_lifecycle.py` fails when its table and the arrows of that diagram differ.
+`tests/test_lifecycle.py` checks it against a table of every arrow.
 The manager (`sat_web/manager.py`) assigns `job.status` in one place,
 `JobManager._transition`, which asks `next_status`; every other part of the
 manager reports what happened (a slot is free, a Stop, an event, the process

@@ -18,53 +18,98 @@ Three separate programs run while the app is in use:
   its own Python process, so a slow solver cannot freeze the server and a job
   can be stopped.
 
+How to read the diagram: a yellow band is a **process**, a separate running
+program. A rounded box is a **thread**, one line of work inside the server
+process. The other shapes are things that hold data. An arrow means "this
+travels this way", and the numbers mark the three paths.
+
 ```mermaid
-flowchart TB
-    subgraph browser["Browser (frontend/)"]
-        pages["pages and forms"]
-        cache["React Query cache"]
-        live["live.ts"]
-    end
-
-    subgraph server["Server process (sat_web/)"]
-        api["api.py<br/>REST, validate_job"]
-        subgraph manager["JobManager (manager.py)"]
-            state["jobs and the lock"]
-            reader["reader thread,<br/>one per running job"]
-        end
-        db[("SQLite<br/>store.py")]
-    end
-
-    subgraph job["Job process, one per job"]
-        worker["sat_core.jobs.run_job<br/>problems/ + solvers/"]
-        folder[/"job folder<br/>instance.cnf, model.txt"/]
-    end
-
-    pages -- "REST /api/..." --> api
-    api -- "JSON" --> cache
-    api <-- "submit / snapshot under the lock" --> state
-    state -- "spawn, at most WIZSAT_MAX_JOBS" --> worker
-    state -- "insert, status changes; load at startup" --> db
-    worker -- "RunEvents on a queue" --> reader
-    worker --> folder
-    reader -- "apply under the lock" --> state
-    reader -- "environment, instance, result, rows" --> db
-    reader -- "WebSocket /api/ws" --> live
+flowchart LR
+    pages["pages and forms"] -- "1. ask: solve, stop, fetch" --> req("request threads<br/>api.py")
+    req -- "JSON reply" --> cache[("React Query cache")]
+    req -- "holding the lock" --> jobs[["JobManager<br/>all jobs + ONE lock"]]
+    jobs -- "start" --> worker["run_job<br/>problems + solvers"]
+    worker -- "2. events" --> q[/"event queue"/]
+    q -- "next event" --> reader("reader thread<br/>one per running job")
+    reader -- "apply, holding the lock" --> jobs
+    jobs -- "save" --> db[("SQLite")]
+    jobs -- "publish" --> loop("event loop<br/>WebSocket")
+    loop -- "push" --> live["live.ts"]
     live -- "patch" --> cache
+    jobs -. "3. Stop" .-> flag{{"cancel flag"}}
+    flag -. "checked at checkpoints" .-> worker
+    subgraph browser["BROWSER PROCESS"]
+        pages
+        live
+        cache
+    end
+    subgraph server["SERVER PROCESS"]
+        req
+        jobs
+        reader
+        loop
+        db
+    end
+    subgraph jobp["JOB PROCESS, one per running job"]
+        flag
+        worker
+        q
+    end
 ```
 
-An arrow here means "data travels this way". Start at "pages and forms" and
-follow the arrows; they form two loops that end in the same cache.
+The boxes:
 
-- **Asking (REST):** a page sends a request to `api.py`, and the JSON reply
-  goes into the React Query cache.
-- **Being told (WebSocket):** the job process reports progress as events.
-  The reader thread applies them, saves what must survive a restart, and
-  pushes them to the browser, where `live.ts` patches the cache.
+| Box | Shape | What it is |
+|---|---|---|
+| BROWSER, SERVER, JOB PROCESS | yellow band | a separate running program; the job band exists once per running job |
+| pages and forms | rectangle | the React pages the user clicks |
+| React Query cache | cylinder | the browser's copy of server data; pages read only this |
+| live.ts | rectangle | the browser end of the WebSocket |
+| request threads (`api.py`) | rounded | threads that answer HTTP requests, several at once |
+| JobManager (`manager.py`) | double box | the server's list of all jobs, and the one lock that guards it |
+| event loop | rounded | the thread that writes messages to open browser tabs |
+| reader thread | rounded | one per running job; takes that job's events and applies them |
+| SQLite (`store.py`) | cylinder | the database file, `output/wizsat.db` |
+| run_job (`sat_core/jobs.py`) | rectangle | the code that encodes and solves, inside the job process |
+| event queue | parallelogram | the pipe from a job process to its reader thread |
+| cancel flag | hexagon | a yes/no flag shared by the server and one job process |
 
-Pages read only the cache. The reader thread is part of the `JobManager`,
-drawn apart because it runs on its own thread. The walk through one solve is
-in [How it works](how-it-works.md#one-solve-start-to-finish).
+The arrows:
+
+| Path | Arrow | What travels |
+|---|---|---|
+| 1 | pages -> request threads | an HTTP request: create a job, Stop, fetch a job or its rows |
+| 1 | request threads -> JobManager | the request is carried out while holding the lock |
+| 1 | request threads -> cache | the JSON reply |
+| | JobManager -> run_job | "start": a new job process, when fewer than `WIZSAT_MAX_JOBS` run |
+| 2 | run_job -> event queue | an event: log line, progress, instance, result, row, done |
+| 2 | event queue -> reader | the reader takes the next event; it waits while the queue is empty |
+| 2 | reader -> JobManager | `_apply`: the job is updated while holding the lock |
+| 2 | JobManager -> SQLite | what must survive a restart is saved |
+| 2 | JobManager -> event loop | the change is published |
+| 2 | event loop -> live.ts | it is pushed over the WebSocket |
+| 2 | live.ts -> cache | the cached job is patched, and the page re-renders |
+| 3 | JobManager -> cancel flag | a Stop sets the flag (dotted: a signal, not data) |
+| 3 | cancel flag -> run_job | the solver checks it at its checkpoints and stops |
+
+Three things the diagram leaves out:
+
+- **Several jobs at once** are several copies of the job band, each with its
+  own queue and reader thread. All of them share the one `JobManager` and its
+  lock.
+- **A benchmark with `workers` above 1** starts a pool of worker processes
+  inside its job process
+  ([How it works](how-it-works.md#parallel-benchmark-runs)).
+- **The job folder**, `output/jobs/<id>/`, where the job process writes
+  `instance.cnf` and `model.txt`.
+
+Pages read only the cache, whether a value came as a reply (path 1) or as an
+event (path 2). The reader thread is code of the `JobManager` running on its
+own thread; the lock is what lets it, the request threads and the event loop
+touch the same jobs safely
+([How it works](how-it-works.md#locks-and-threads)). The walk through one
+solve is in
+[How it works](how-it-works.md#one-solve-start-to-finish).
 
 ## Layers
 
@@ -189,7 +234,7 @@ flowchart LR
     classDef deep fill:#d8f0e0,stroke:#1b6e3c,stroke-width:2px,color:#10331f
 ```
 
-The manager assigns a job's status in one place, which asks this pure function. The diagram under [Statuses](#statuses) and `tests/test_lifecycle.py` are kept equal by that test.
+The manager assigns a job's status in one place, `JobManager._transition`, which asks this pure function. `tests/test_lifecycle.py` checks it arrow by arrow.
 
 ## Statuses
 
@@ -215,8 +260,9 @@ stateDiagram-v2
 
 The rule behind every arrow is `next_status` in `sat_web/lifecycle.py`. A
 happening on a finished job changes nothing. To add a status or an arrow,
-change the table in `tests/test_lifecycle.py`, this diagram and
-`next_status` together; the test fails while one of them is behind. What
+change `next_status`, the table in `tests/test_lifecycle.py` and this
+diagram together. The test checks the code against its table; nothing checks
+the diagram, so keep it in step by hand. What
 each arrow means, and how Stop, Skip and timeouts work, is in
 [How it works](how-it-works.md#statuses).
 

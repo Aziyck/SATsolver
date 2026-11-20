@@ -491,9 +491,13 @@ class JobManager:
             process = job.process
 
         def force_stop() -> None:
-            if process is not None and process.is_alive():
+            # Runs on the timer's thread: _log changes the log counters the
+            # reader thread changes under the same lock (A40).
+            with self.lock:
+                if process is None or not process.is_alive():
+                    return
                 self._log(job, "The worker did not stop in time; terminating it.")
-                process.terminate()
+            process.terminate()
 
         timer = threading.Timer(CANCEL_GRACE_SECONDS, force_stop)
         timer.daemon = True

@@ -9,6 +9,7 @@ status they need and call the same methods the reader thread calls.
 import multiprocessing as mp
 import re
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -159,6 +160,54 @@ class ActionTests(ManagerCase):
 
         self.assertEqual(job.status, "cancelling")
         job.cancel_event.set.assert_called_once_with()
+
+    def test_the_stop_timer_logs_under_the_manager_lock(self):
+        # A40: the timer thread changes the log counters the reader thread
+        # changes under the lock. Another thread tries the lock while the
+        # line is written; it must find the lock taken.
+        process = mock.Mock()
+        process.is_alive.return_value = True
+        job = self.job_in("running", cancel_event=mock.Mock(), process=process)
+        with mock.patch("threading.Timer") as timer:
+            self.manager.cancel(job.id)
+        force_stop = timer.call_args.args[1]
+        lock_free_while_logging = []
+        real_log = self.manager._log
+
+        def log(job, message):
+            def try_lock():
+                if self.manager.lock.acquire(blocking=False):
+                    self.manager.lock.release()
+                    lock_free_while_logging.append(True)
+                else:
+                    lock_free_while_logging.append(False)
+
+            other = threading.Thread(target=try_lock)
+            other.start()
+            other.join()
+            real_log(job, message)
+
+        with mock.patch.object(self.manager, "_log", side_effect=log):
+            force_stop()
+
+        self.assertEqual(lock_free_while_logging, [False])
+        self.assertEqual(job.logs[-1][1], "The worker did not stop in time; terminating it.")
+        process.terminate.assert_called_once_with()
+
+    def test_the_stop_timer_leaves_a_worker_that_has_stopped_alone(self):
+        process = mock.Mock()
+        process.is_alive.return_value = False
+        for worker in (process, None):
+            with self.subTest(worker=worker):
+                job = self.job_in("running", cancel_event=mock.Mock(), process=worker)
+                with mock.patch("threading.Timer") as timer:
+                    self.manager.cancel(job.id)
+                lines = len(job.logs)
+
+                timer.call_args.args[1]()
+
+                self.assertEqual(len(job.logs), lines)
+        process.terminate.assert_not_called()
 
     def test_stop_on_a_job_that_is_not_active_changes_nothing(self):
         for status in ("cancelling", "done", "failed", "cancelled", "interrupted"):

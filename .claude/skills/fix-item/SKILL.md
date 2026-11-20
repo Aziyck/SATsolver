@@ -92,10 +92,8 @@ If the loop will not go green after three different attempts, stop: write the
 
 1. Close the item in its file and update the docs for the area, as
    `docs/plans/README.md` and the docs table in `AGENTS.md` describe.
-2. Hand the writing to the `pr-writer` agent (`.claude/agents/pr-writer.md`).
-   Its brief: the item ID, the branch, the cause in one sentence, each check
-   with its result, rulings, review findings left and why, and new items
-   filed.
-3. Commit and open the pull request with its `COMMIT` and `PR BODY` text
-   unchanged, as "Working on items" in `AGENTS.md` says.
-4. Report to the owner: its `REPORT` text, with the pull request link.
+2. Write the commit message, pull request and report with the `write-pr`
+   skill.
+3. Commit and open the pull request with its files unchanged, as "Working
+   on items" in `AGENTS.md` says.
+4. Report to the owner: the short report from `write-pr`.

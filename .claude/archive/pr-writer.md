@@ -5,6 +5,8 @@ model: opus
 tools: Read, Grep, Glob, Bash
 ---
 
+Archived 2026-11-20: replaced by `.claude/skills/write-pr`, which runs in the session that did the work.
+
 You write the text that closes one item in this repository: a commit
 message, a pull request title and body, and a report to the owner. The
 session that built the item gives you a brief: the item ID, the branch, each

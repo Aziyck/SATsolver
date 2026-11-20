@@ -11,6 +11,7 @@ of crashing the whole job, and strips bulky internals from the stats.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import time
 from typing import Any, Callable
 
@@ -32,6 +33,10 @@ from solvers.walksat import walksat
 
 
 LOG_LEVELS = ("normal", "periodic", "debug")
+
+# The interpreter that runs every solver, in a child process
+# (sat_core/solver_process.py). Unset or empty: solvers run in this process.
+SOLVER_PYTHON_ENV = "WIZSAT_SOLVER_PYTHON"
 
 Runner = Callable[[list[list[int]], dict[str, Any], dict[str, Any], Any, Any], tuple[Any, dict[str, Any]]]
 
@@ -720,8 +725,37 @@ def run_solver(
         emit(event_callback, EVENT_LOG, f"{name} {_status_phrase(status)} before starting.")
         return result(status)
 
-    emit(event_callback, EVENT_LOG, f"Solving with {name}...")
+    # An unknown log level raises here, before a child process starts.
     log_options = log_options_for(log_level, progress_interval or spec.progress_interval)
+    python = os.environ.get(SOLVER_PYTHON_ENV, "").strip()
+    if python:
+        # Imported here: solver_process imports this module, and without the
+        # setting nothing of it is needed.
+        from sat_core.solver_process import run_in_child
+
+        request = {
+            "clauses": clauses,
+            "solver": spec.key,
+            "options": options,
+            "log_level": log_level,
+            "progress_interval": progress_interval,
+            "timeout": timeout,
+            "label": label,
+        }
+        line, stderr_tail = run_in_child(python, request, event_callback)
+        if line is None:
+            message = f"The solver process ({python}) ended without a result."
+            if stderr_tail:
+                message += f" Its last output: {stderr_tail}"
+            emit(event_callback, EVENT_LOG, f"{name} error: {message}")
+            return result(STATUS_ERROR, error=message)
+        solution = line["solution"]
+        if solution is not None:
+            # JSON object keys are strings; variables are ints.
+            solution = {int(var): value for var, value in solution.items()}
+        return result(line["status"], line["elapsed"], solution, line["stats"], line["error"])
+
+    emit(event_callback, EVENT_LOG, f"Solving with {name}...")
     solver_clauses, original = clauses, None
     largest = max(numbers, default=0)
     started = time.perf_counter()

@@ -1,5 +1,8 @@
 import contextlib
 import dataclasses
+import os
+import subprocess
+import sys
 import time
 import unittest
 from unittest import mock
@@ -25,6 +28,29 @@ def failing_solver(key):
 
 def log_messages(events):
     return [event.message for event in events if event.type == EVENT_LOG]
+
+
+# The solver runner (docs/plans/pypy-solver-runner.md): with this setting every
+# run happens in a child process of that interpreter. The tests use their own
+# interpreter, so no PyPy is needed.
+IN_CHILD = {"WIZSAT_SOLVER_PYTHON": sys.executable}
+
+
+@contextlib.contextmanager
+def setting_unset():
+    with mock.patch.dict(os.environ):
+        os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
+        yield
+
+
+class InChildProcess:
+    """Runs a test class again with the setting on (RUNNER-2)."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, IN_CHILD)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class RunTokenTests(unittest.TestCase):
@@ -152,6 +178,9 @@ class RunSolverTests(unittest.TestCase):
 class SparseNumberingTests(unittest.TestCase):
     """The cost of a run follows the number of variables, not the largest variable number (audit A2)."""
 
+    # Wall-clock time a run may spend before the solver starts.
+    START_UP_SECONDS = 0.0
+
     def test_one_huge_variable_number_is_solved_at_once(self):
         formula = [[10_000_000], [-5]]
         for spec in all_solvers():
@@ -163,7 +192,7 @@ class SparseNumberingTests(unittest.TestCase):
                 self.assertEqual(result.status, "SAT")
                 self.assertEqual(result.solution, {5: False, 10_000_000: True})
                 self.assertEqual(result.variables, 2)
-                self.assertLess(elapsed, 1.0)
+                self.assertLess(elapsed, 1.0 + self.START_UP_SECONDS)
                 # CDCL and DPLL debug lines then show new numbers, so the log says that they changed.
                 # The local-search solvers renumber by themselves and log the original numbers.
                 self.assertEqual(any("renumbered" in message for message in log_messages(events)), spec.complete)
@@ -210,6 +239,72 @@ class SparseNumberingTests(unittest.TestCase):
         result = run_solver([[90_909], [-5]], "cdcl", event_callback=events.append)
         self.assertEqual(result.solution, {5: False, 90_909: True})
         self.assertFalse(any("renumbered" in message for message in log_messages(events)))
+
+
+class RunSolverInChildTests(InChildProcess, RunSolverTests):
+    def test_solver_exceptions_become_error_status(self):
+        self.skipTest("the broken solver is patched into this process, not into the child (child failures: RUNNER-4)")
+
+
+class SparseNumberingInChildTests(InChildProcess, SparseNumberingTests):
+    # A fresh interpreter and its imports: about 0.25 s, more on a busy CI machine.
+    START_UP_SECONDS = 2.0
+
+
+class SolverPythonSettingTests(unittest.TestCase):
+    """What WIZSAT_SOLVER_PYTHON switches, and what it leaves alone (RUNNER-2)."""
+
+    def test_without_the_setting_no_process_is_started(self):
+        with setting_unset(), mock.patch("subprocess.Popen") as popen:
+            result = run_solver([[1, 2], [-1, 2]], "cdcl")
+
+        popen.assert_not_called()
+        self.assertEqual(result.status, "SAT")
+
+    def test_with_the_setting_the_run_happens_in_a_child_of_that_interpreter(self):
+        events = []
+        with mock.patch.dict(os.environ, IN_CHILD), mock.patch("subprocess.Popen", wraps=subprocess.Popen) as popen:
+            result = run_solver([[1, 2], [-1, 2], [-2, 3]], "cdcl", event_callback=events.append)
+
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0], [sys.executable, "-m", "sat_core.solver_process"])
+        # The child runs the solver itself and does not start a child of its own.
+        self.assertNotIn("WIZSAT_SOLVER_PYTHON", popen.call_args.kwargs["env"])
+        self.assertEqual((result.solver, result.status), ("cdcl", "SAT"))
+        self.assertEqual(result.solution, {1: True, 2: True, 3: True})
+        self.assertEqual((result.clauses, result.variables), (3, 3))
+        self.assertIn("conflicts", result.stats)
+        messages = log_messages(events)
+        self.assertEqual(messages[0], "Solving with CDCL...")
+        self.assertTrue(any("CDCL finished: SAT" in message for message in messages))
+
+    def test_a_benchmark_label_reaches_the_child_logs(self):
+        events = []
+        with mock.patch.dict(os.environ, IN_CHILD):
+            run_solver([[1]], "cdcl", event_callback=events.append, label="CDCL (MOMS)")
+
+        self.assertEqual(log_messages(events)[0], "Solving with CDCL (MOMS)...")
+
+    def test_mistakes_in_the_request_raise_before_a_child_starts(self):
+        mistakes = {
+            "unknown solver": dict(solver="minisat"),
+            "invalid option": dict(solver="cdcl", options={"branching": "nope"}),
+            "unknown log level": dict(solver="cdcl", log_level="chatty"),
+        }
+        for name, request in mistakes.items():
+            with self.subTest(name), mock.patch.dict(os.environ, IN_CHILD), mock.patch("subprocess.Popen") as popen:
+                with self.assertRaises(ValueError):
+                    run_solver([[1]], **request)
+                popen.assert_not_called()
+
+    def test_a_run_stopped_before_it_starts_starts_no_child(self):
+        token = RunToken()
+        token.cancel()
+        with mock.patch.dict(os.environ, IN_CHILD), mock.patch("subprocess.Popen") as popen:
+            self.assertEqual(run_solver([[1]], "cdcl", cancel_token=token).status, "CANCELLED")
+            self.assertEqual(run_solver([[1]], "cdcl", timeout=0).status, "TIMEOUT")
+
+        popen.assert_not_called()
 
 
 if __name__ == "__main__":

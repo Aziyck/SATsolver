@@ -6,7 +6,7 @@
 - **Written:** 2026-10-23, against commit `189c2bf`
 - **Related:** [2026-10-16 audit](../../reviews/2026-10-16-audit.md),
   [solver optimisations](../solver-optimisations.md),
-  [PyPy solver runner](../pypy-solver-runner.md), [run metadata](../run-metadata.md),
+  [PyPy solver runner](../pypy-solver-runner.md), [run metadata](run-metadata.md),
   [memory measurement](../memory-measurement.md)
 
 This file is kept as the record of the research and of what was decided. The

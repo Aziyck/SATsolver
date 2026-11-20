@@ -6,7 +6,7 @@
 ## Context
 
 Every job records the machine and software it ran on
-([run-metadata plan](../plans/run-metadata.md)). META-2 read all of it in the
+([run-metadata plan](../plans/done/run-metadata.md)). META-2 read all of it in the
 job's worker, a fresh `spawn` process, so nothing was cached between jobs. On
 the owner's Windows machine that took 193-232 ms per job before any work
 started (audit item A39). The CPU lookup and two git calls were the largest

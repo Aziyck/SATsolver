@@ -3,7 +3,7 @@
 - **Status:** proposed, not started
 - **Written:** 2026-10-19; tasks rewritten 2026-11-13
 - **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
-  RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](run-metadata.md)).
+  RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](done/run-metadata.md)).
   MEM-1, MEM-2 and MEM-5 can start before the runner exists.
 - **Related:** [Benchmarking](../guide/benchmarking.md),
   [audit A2](../reviews/2026-10-16-audit.md) (one huge variable number can

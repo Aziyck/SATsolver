@@ -243,7 +243,8 @@ The six machine columns come last, after `error`, so no older column moves.
 They repeat the job's recorded environment on every row, so a file that
 joins benchmarks from different machines still says which row ran where. A
 cell is empty when the fact could not be read, and all six are empty for a
-benchmark stored before the environment was recorded.
+benchmark stored before the environment was recorded. The computer's name is
+not recorded, so a shared file does not say whose machine it came from.
 
 Download a single benchmark with **CSV** on its results page, or several at
 once by comparing them first; the API also offers
@@ -311,3 +312,9 @@ gets a fresh seed on every call.
    view shows `n=`).
 7. Export the CSV right after the run and keep it with the request (use
    **Edit as new** to see it).
+8. Say what the timings ran on. The CSV already carries it in its machine
+   columns (interpreter, processor, cores, RAM, operating system, WizSAT
+   commit), and the results page's **Setup** tab shows the same as **Machine**.
+   Compare times only between rows with the same machine columns. A
+   `wizsat_commit` ending in `-dirty` means the code had uncommitted changes,
+   so the commit alone does not reproduce the run; commit first, then run.

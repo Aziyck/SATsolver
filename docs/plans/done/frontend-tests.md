@@ -2,7 +2,7 @@
 
 - **Status:** done (2026-11-15)
 - **Written:** 2026-11-13
-- **Related:** [run metadata](../run-metadata.md),
+- **Related:** [run metadata](run-metadata.md),
   [memory measurement](../memory-measurement.md) (both change these screens)
 - Item format, difficulty and closing rule: [README.md](../README.md)
 

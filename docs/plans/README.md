@@ -20,7 +20,6 @@ Finished work is not listed: closed items stay in their files, and finished
 plans move to [`done/`](done/).
 
 1. **Features, in this order:**
-   [run-metadata.md](run-metadata.md), then
    [pypy-solver-runner.md](pypy-solver-runner.md), then
    [memory-measurement.md](memory-measurement.md) (its memory limit, MEM-8,
    last).
@@ -37,8 +36,7 @@ touched anyway:
 | File | What | Waits on |
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | whole-repo findings (A), solver simplification (B1-B17) | nothing |
-| [run-metadata.md](run-metadata.md) | machine and interpreter recorded with every run | nothing |
-| [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | run-metadata for one task |
+| [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | nothing |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | audit B6-B9 |
 

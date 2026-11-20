@@ -27,8 +27,9 @@ job, started by `JobManager._start`:
 
 - it waits on the queue (`get` with a 0.25 s timeout). It does not poll the
   job: the job pushes an event whenever it has one, and the `get` returns at
-  once. The timeout only lets the reader notice a worker that died without a
-  last message;
+  once. The timeout is how the reader notices that the process has exited:
+  after a normal end as well as after a crash, the `get` times out, the
+  process is no longer alive, and the reader drains what is left;
 - it passes each event to `JobManager._apply`, which updates the job while
   holding the lock, saves what must survive a restart, and publishes the
   change. The rules live there, in manager code that happens to run on the
@@ -43,10 +44,10 @@ one changing the jobs it tracks, and a crashing solver could leave a record
 half written. With the reader in between, a job process owns nothing but its
 work: killing it loses the work in progress and nothing else.
 
-**Both halves of the manager write to SQLite.** The request side inserts the
-job (that is how it gets its number) and saves status changes; the reader
-side saves the environment, the instance summary, the result and benchmark
-rows as they arrive. At startup the manager loads the saved jobs back.
+**Who writes to SQLite.** The HTTP handlers insert the job (that is how it
+gets its number) and save the status changes they make; the reader thread
+saves the environment, the instance summary, the result and benchmark rows
+as they arrive. At startup the manager loads the saved jobs back.
 
 ## One solve, start to finish
 
@@ -105,11 +106,12 @@ After this the page never asks again while the job runs.
 
 **Phase 2: the solver works (WebSocket).**
 
-6. In the job process, `run_job()` calls `solve_job()`
-   (`sat_core/jobs.py`). It encodes the Sudoku, writes `instance.cnf`, runs
-   the solver, writes `model.txt`, and puts events on the queue as it goes:
-   log lines, progress, the instance summary, the result, and finally
-   `done`.
+6. In the job process, `run_job()` (`sat_core/jobs.py`) starts the
+   watchdog, builds the run token and calls `execute_job()`. That sends the
+   environment event and runs `solve_job()`, which encodes the Sudoku,
+   writes `instance.cnf`, runs the solver, writes `model.txt`, and puts
+   events on the queue as it goes: log lines, progress, the instance
+   summary, the result. When it returns, `execute_job()` sends `done`.
 7. The reader thread passes each event to `_apply()`, which updates the
    `Job` under the lock. The instance summary and the result are saved to
    SQLite and published at once; progress is throttled (see
@@ -328,7 +330,7 @@ process is expensive, so N processes are reused for all the cases.
 ### Talking to a running job
 
 The browser never talks to a job directly; it talks to the server, and the
-server has three ways to reach a job process. All of them are set up when
+server has three ways to reach a job process, and the job one way back. All of them are set up when
 the process starts:
 
 | Direction | How | What it carries |
@@ -340,8 +342,8 @@ the process starts:
 
 There is nothing else. A running job cannot be given new parameters, and the
 server never asks a job anything; it only raises a flag and waits for events.
-A Stop from the browser travels `POST /api/jobs/{id}/cancel`, a request
-thread, `JobManager.cancel` (which marks a running job `cancelling` under
+A Stop from the browser travels `POST /api/jobs/{id}/cancel`, its handler on
+the event-loop thread, `JobManager.cancel` (which marks a running job `cancelling` under
 the lock), and then the cancel flag. It does not pass through the reader thread.
 
 Flags and the lock solve different problems. A flag is one bit that one side
@@ -369,12 +371,12 @@ When the token is asked:
 | every solver | once before it starts |
 | CDCL (`solvers/cdcl.py`) | every 2,048 clauses while loading the formula, and every 2,048 steps of propagation and of the main search loop |
 | DPLL (`solvers/dpll.py`) | every 2,048 steps of propagation |
-| WalkSAT, ProbSAT (`solvers/walksat.py`) | at the start of every try, and every 2,048 steps while flipping |
+| WalkSAT, ProbSAT (`solvers/walksat.py`) | at the start of every try, and every 1,024 steps while flipping |
 | solve job (`sat_core/jobs.py`) | once between encoding and solving (Stop only; the deadline belongs to the run) |
 | benchmark (`sat_core/benchmark.py`) | before each case (Stop), and before each solver entry (Stop and Skip) |
 
-Why every 2,048 steps and not every step: asking reads a shared flag and the
-clock. Asking on every step of CDCL's propagation cost about a third of the
+Why every few thousand steps and not every step (`CHECK_EVERY` in each
+solver): asking reads a shared flag and the clock. Asking on every step of CDCL's propagation cost about a third of the
 run time (the comment at `CHECK_EVERY` in `solvers/cdcl.py`); every 2,048
 steps is still well under a millisecond between checks.
 
@@ -423,9 +425,15 @@ that does not keep its process alive.
 
 Several threads in the server touch the same `Job` objects:
 
-- request threads (`GET /api/jobs/7`, cancel, delete);
+- the event loop, the server's main thread. It runs the job endpoints
+  (create, `GET /api/jobs/7`, cancel, skip) and publishes throttled
+  summaries;
+- pool threads, which run the slow endpoints (validation, reading rows,
+  delete, clear) through `run_in_threadpool`, up to 40 at once by default;
 - one reader thread per running job, which applies its events;
-- the asyncio event loop, which publishes throttled summaries.
+- a timer thread per Stop, which ends the process if it is still alive
+  after `CANCEL_GRACE_SECONDS`. Its log line is written without the lock
+  (audit A40).
 
 `JobManager.lock` makes them take turns: a thread takes the lock, reads or
 changes the jobs, and releases it. "Under the lock" on this page means
@@ -451,7 +459,8 @@ manager reports what happened (a slot is free, a Stop, an event, the process
 ended) and never picks a status itself. A happening on a finished job changes
 nothing, so a late `error` event cannot turn a `done` job into `failed`.
 To add a status or an arrow: change the table, the diagram and `next_status`
-together, and the tests tell you when one of them is behind.
+together. The tests catch a table that differs from `next_status`; nothing
+checks the diagram, so keep it in step by hand.
 
 - `running -> failed` has three causes: the job sent an error event, the
   process ended without sending any final event, or the process could not
@@ -465,7 +474,8 @@ together, and the tests tell you when one of them is behind.
   `cancelled`.
 - `interrupted` is reached by two routes. On a normal shutdown the manager
   marks the jobs it stops. After a crash, the next start finds jobs saved as
-  `queued`, `running` or `cancelling` and marks them. A job that was still
+  `queued` or `running` (a Stop is not saved, so a `cancelling` job is
+  found as `running`) and marks them. A job that was still
   waiting in the queue is not started again; it has to be rerun.
 
 How Stop, Skip and timeouts reach a running solver is under
@@ -541,8 +551,8 @@ threads. The store opens one connection with that check turned off and
 takes its own lock around every statement, so one thread at a time uses the
 database. Inside the server the lock, not WAL, decides who goes next.
 
-On startup, jobs saved as `queued`, `running` or `cancelling` are marked
-`interrupted` (see [Statuses](#statuses)).
+On startup, jobs saved as `queued` or `running` are marked `interrupted`
+(a `cancelling` job is saved as `running`) (see [Statuses](#statuses)).
 
 The tables are created with `CREATE TABLE IF NOT EXISTS`, which leaves a
 table from an older version as it is. A column added later is listed only in

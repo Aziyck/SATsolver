@@ -8,7 +8,7 @@
 | [visualisations/](visualisations/) | standalone interactive DPLL, CDCL and WalkSAT pages | open `index.html` in any subfolder |
 | [images/](images/) | screenshots for the README (PNG, about 1440 x 900, light theme) | [where they are used](../README.md) |
 | [plans/](plans/) | features to build, and the order of all open work | [the work queue](plans/README.md) |
-| [reviews/](reviews/) | dated code review findings still to fix | [2026-10-16 audit](reviews/2026-10-16-audit.md) |
+| [reviews/](reviews/) | code review findings still to fix: one dated file per review, and findings made while working | [2026-10-16 audit](reviews/2026-10-16-audit.md), [findings](reviews/findings.md) |
 | [adr/](adr/) | architecture decision records: one short note per decision | [what an ADR is](adr/README.md) |
 
 The words the project uses are defined in [`GLOSSARY.md`](../GLOSSARY.md).

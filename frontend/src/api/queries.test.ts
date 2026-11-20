@@ -12,7 +12,7 @@ const row = (index: number) => ({ index }) as BenchmarkRow;
 describe("rowsOptions", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // A run compared on the results page is fetched through rowsOptions (audit item A22).
+  // A run compared on the results page is fetched through rowsOptions (finding A22).
   it("keeps a row streamed while the row list is being fetched", async () => {
     let reply!: (value: RowsReply) => void;
     vi.spyOn(api, "rows").mockReturnValue(new Promise<RowsReply>((done) => (reply = done)));

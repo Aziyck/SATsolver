@@ -265,7 +265,7 @@ def execute_job(
     """Run a job in the current process and always finish with done/cancelled/error.
 
     A job body returns True when it did all its work, and the job then ends
-    done even if a Stop arrived after the work was finished (audit item A18).
+    done even if a Stop arrived after the work was finished (finding A18 in docs/reviews/findings.md).
     `machine` is the server's machine_facts(); without it this process reads them.
     """
 

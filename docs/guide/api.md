@@ -222,9 +222,47 @@ The summary plus:
 | `instance` | the encoded instance (solve and generate jobs): `name`, `problem`, `params`, `variables`, `clauses`, `size_variables`, `facts`, `visual`, `expected`, `encode_seconds`, `cnf_file` |
 | `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats`, `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
 | `errors` | field errors if the job failed validation inside the worker |
-| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it |
+| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it. See [The `environment` value](#the-environment-value) |
 | `logs` | the last 400 log lines as `[time, text]` pairs |
 | `log_count` | total log lines kept |
+
+### The `environment` value
+
+Read inside the process that runs the job, so it names the interpreter that
+ran the solver. The server reads the operating system, processor and RAM once
+and hands them to each job; git is asked again for every job, so code edited
+while the server runs shows up as `git_dirty`.
+
+```json
+{
+  "python_implementation": "CPython",
+  "python_version": "3.12.0",
+  "os": "Linux 6.8.0 (x86_64)",
+  "cpu_model": "Example CPU @ 3.00GHz",
+  "cpu_logical_cores": 8,
+  "cpu_physical_cores": 4,
+  "ram_total_gb": 15.5,
+  "wizsat_version": "2.0.0",
+  "git_commit": "0000000",
+  "git_dirty": false
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `python_implementation`, `python_version` | `platform.python_implementation()` and `platform.python_version()` of the worker |
+| `os` | system, release and machine, as `Windows 11 (AMD64)` |
+| `cpu_model` | the processor's name |
+| `cpu_logical_cores` | `os.cpu_count()` |
+| `cpu_physical_cores` | physical cores; read on Linux only, `null` elsewhere |
+| `ram_total_gb` | RAM in GB, one decimal; the container's memory limit when that is smaller than the host's |
+| `wizsat_version` | `VERSION` in `sat_core/environment.py` |
+| `git_commit` | the first seven characters of the commit of the project folder; `null` when it is not a git checkout, git is missing or the repository has no commit |
+| `git_dirty` | `true` when a file is changed or untracked; `null` together with `git_commit` |
+
+The number of parallel workers is not part of `environment`: it is `workers`
+in a benchmark's `request`. The start time is `started_at` on the job. The
+computer's name is not recorded.
 
 `decoded` is the answer in the problem's own terms, for example
 `{"coloring": [...], "colors_used": 3}`, `{"path": [...]}`,
@@ -269,7 +307,9 @@ Cancel, skip and rerun return a job summary.
 | `GET /api/jobs/{id}/rows/{index}/cnf` | the DIMACS file of one benchmark case |
 
 Only `instance.cnf` and `model.txt` can be downloaded from a job folder. The
-CSV format is described in [Benchmarking](benchmarking.md#csv-columns).
+CSV format is described in [Benchmarking](benchmarking.md#csv-columns). Both
+CSV endpoints end every row with the machine columns of the job that row
+belongs to, so a combined export keeps each row's own machine.
 
 ## Live events: `WS /api/ws`
 

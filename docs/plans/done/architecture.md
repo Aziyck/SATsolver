@@ -5,7 +5,7 @@
   manager not split) are under "Considered and rejected" below and in the
   task notes.
 - **Written:** 2026-11-16, from the architecture review of commit `8b567ef`
-- **Related:** [run metadata](../run-metadata.md), [PyPy solver runner](../pypy-solver-runner.md),
+- **Related:** [run metadata](run-metadata.md), [PyPy solver runner](../pypy-solver-runner.md),
   [memory measurement](../memory-measurement.md) (all three add fields and
   statistics to the code below), [architecture guide](../../guide/architecture.md),
   [audit](../../reviews/2026-10-16-audit.md) A7, A10, A15, A16, A22

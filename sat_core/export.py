@@ -38,7 +38,7 @@ BASE_COLUMNS = (
 )
 # After "error", so no column that was there before moves. One set of cells per
 # row, not header comments: the file stays a valid CSV, and benchmarks from
-# different machines can share it (docs/plans/run-metadata.md).
+# different machines can share it (docs/plans/done/run-metadata.md).
 MACHINE_COLUMNS = ("python", "cpu", "cores", "ram_gb", "os", "wizsat_commit")
 
 

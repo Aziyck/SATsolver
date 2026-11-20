@@ -147,9 +147,13 @@ The **Result** tab shows:
     shows what the option means, the value used and the default. Changed
     options are marked. The time limit and log detail are listed too.
     Below the table, **Machine** names the Python, operating system,
-    processor, cores, memory and WizSAT commit the job ran on, or says it
-    was not recorded (a job saved by an older version). A job shows it as
-    soon as its worker starts, also on a page that was open before.
+    processor, cores, memory and WizSAT version the job ran on, or says it
+    was not recorded (a job saved by an older version). The version line
+    adds the git commit when the project is a git checkout, and "with
+    uncommitted changes" when the code differed from that commit. A fact the
+    computer would not give reads "unknown". The computer's name is not
+    recorded. A job shows the block as soon as its worker starts, also on a
+    page that was open before.
   - **Statistics**: decisions, conflicts, propagations, learned clauses,
     restarts (CDCL/DPLL) or tries, flips, free/random/greedy flips, best
     number of unsatisfied clauses (WalkSAT/ProbSAT). Hover a name for a
@@ -273,9 +277,9 @@ benchmark and keeps the rows so far.
   **Download CNF**.
 - **Setup** tab: what the benchmark ran with. It lists the problem, repeats,
   time limit, parallel workers, seed, the limit rules, the **Machine** it ran
-  on (Python, operating system, processor, cores, memory, WizSAT commit), and
-  a settings table for each solver (value used, default, changed options
-  marked).
+  on (Python, operating system, processor, cores, memory, WizSAT version and
+  commit; the same facts fill the machine columns of the CSV), and a settings
+  table for each solver (value used, default, changed options marked).
 - **Log** tab: the benchmark log.
 
 Header buttons: **Rerun** (same request again), **Edit as new** (open the
@@ -315,7 +319,7 @@ jobs that were running when the server stopped are marked *interrupted*.
 |---|---|
 | `.cnf` (DIMACS) | open on DIMACS / CNF; download from any job's CNF tab or a benchmark row |
 | model (`v` lines) | download from a SAT result |
-| CSV | benchmark results, one row per solver run ([columns](benchmarking.md#csv-columns)) |
+| CSV | benchmark results, one row per solver run, each with the machine it ran on ([columns](benchmarking.md#csv-columns)) |
 | PNG | download button on each chart |
 
 DIMACS files exported by WizSAT start with a `c wizsat {...}` comment that

@@ -1,12 +1,14 @@
 # Plan: record where and how every run happened
 
-- **Status:** in progress (META-1, META-2 and META-3 done 2026-11-19, META-4 done 2026-11-20)
+- **Status:** done (2026-11-20). META-1 to META-3 were built on 2026-11-19, META-4 and
+  META-5 on 2026-11-20. The decision that mattered, where each fact is read, is
+  [ADR 0004](../../adr/0004-where-the-run-environment-is-read.md).
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
-- **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
-  interpreter through this metadata), [memory measurement](memory-measurement.md),
-  [Benchmarking](../guide/benchmarking.md)
-- Item format, difficulty and closing rule: [README.md](README.md)
+- **Related:** [PyPy solver runner](../pypy-solver-runner.md) (shows the
+  interpreter through this metadata), [memory measurement](../memory-measurement.md),
+  [Benchmarking](../../guide/benchmarking.md)
+- Item format, difficulty and closing rule: [README.md](../README.md)
 
 ## Goal
 
@@ -26,7 +28,7 @@ never compared by accident.
 Collected once per job, inside the process that runs the solver (so it shows
 PyPy when PyPy is used). Since A39 the OS, CPU and RAM facts are read once by
 the server and passed to each job; the interpreter and git facts are read by
-the job ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)):
+the job ([ADR 0004](../../adr/0004-where-the-run-environment-is-read.md)):
 
 | Field | Example | How (standard library only) |
 |---|---|---|
@@ -131,9 +133,18 @@ the job ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)):
     on every row; exporting a benchmark stored before this change gives empty
     cells in those columns, not an error.
 
-- [ ] **META-5. Docs say what is recorded**
+- [x] **META-5. Docs say what is recorded** - Done 2026-11-20.
   - **Difficulty:** easy
   - **Blocked by:** META-3, META-4
+  - **Built as:** META-2 to META-4 had already put the field list, the Machine
+    block and the six CSV columns into the guides. META-5 added what was still
+    missing: a description of every `environment` key in `api.md` (with the
+    `-dirty` and `null` rules and where `workers` and `started_at` live), the
+    machine columns on both CSV endpoints, a "say what the timings ran on" step
+    in the `benchmarking.md` checklist, and in `user-guide.md` the git commit
+    and "unknown" wording of the Machine block. The hostname opt-in
+    (`WIZSAT_RECORD_HOSTNAME`) was never built; the guides say the computer's
+    name is not recorded.
   - **How:** `docs/guide/benchmarking.md` (CSV columns, "what to report"),
     `docs/guide/api.md` (job detail), `docs/guide/user-guide.md` (the Machine
     block).

@@ -3,7 +3,7 @@
 - **Status:** proposed, not started
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
-- **Related:** [run metadata](run-metadata.md) (how a result says which
+- **Related:** [run metadata](done/run-metadata.md) (how a result says which
   interpreter ran it), [memory measurement](memory-measurement.md) (reuses the
   child process), [solver optimisations](solver-optimisations.md),
   [Solver performance](../guide/performance.md),

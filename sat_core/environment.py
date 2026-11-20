@@ -5,7 +5,7 @@ run_environment() is meant to be called inside the process that runs the
 solver, so it reports PyPy when PyPy runs the job. The machine facts (OS, CPU,
 RAM) are the same for every process, so the server reads them once with
 machine_facts() and passes them in (A39). Every lookup is wrapped: a fact that
-cannot be found is None, never an error (docs/plans/run-metadata.md).
+cannot be found is None, never an error (docs/plans/done/run-metadata.md).
 """
 
 import functools

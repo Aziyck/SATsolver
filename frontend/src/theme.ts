@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import { createTheme, rgba, type CSSVariablesResolver, type MantineColorsTuple } from "@mantine/core";
 
 // Colours taken from the WizSAT logo: the hat's violet and the star's gold.
 const wizard: MantineColorsTuple = [
@@ -43,3 +43,29 @@ export const theme = createTheme({
     Badge: { defaultProps: { radius: "sm" } },
   },
 });
+
+/**
+ * The "light" variant (status badges, tags, light buttons) in the dark scheme.
+ * With primaryShade.dark = 4, Mantine 8 paints it as pastel shade 2 at 15%
+ * opacity with near-white shade 0 text, which reads as grey on a dark card.
+ * Here: shade 5 at 24%, text shade 2. Shade 2 keeps every colour's text at
+ * 6.7:1 or more on that background; shade 3 drops violet below 4.5:1.
+ * The light scheme keeps Mantine's values. Only components given a plain
+ * colour name (color="green") use these variables; "green.6" or a hex colour
+ * gets Mantine's fixed rgba background instead.
+ */
+export const DARK_LIGHT_VARIANT = { shade: 5, alpha: 0.24, hoverAlpha: 0.32, textShade: 2 } as const;
+
+export const cssVariablesResolver: CSSVariablesResolver = (current) => {
+  const dark: Record<string, string> = {};
+  for (const [name, shades] of Object.entries(current.colors)) {
+    // "dark" is the surface greys, not a hue; a virtualColor() is an object
+    // whose variables Mantine builds itself.
+    if (name === "dark" || !Array.isArray(shades)) continue;
+    const base = shades[DARK_LIGHT_VARIANT.shade];
+    dark[`--mantine-color-${name}-light`] = rgba(base, DARK_LIGHT_VARIANT.alpha);
+    dark[`--mantine-color-${name}-light-hover`] = rgba(base, DARK_LIGHT_VARIANT.hoverAlpha);
+    dark[`--mantine-color-${name}-light-color`] = shades[DARK_LIGHT_VARIANT.textShade];
+  }
+  return { variables: {}, light: {}, dark };
+};

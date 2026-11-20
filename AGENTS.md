@@ -186,6 +186,10 @@ and on pull requests: lint and Python tests on Ubuntu (3.10, 3.13) and Windows
   clear. Grammar may go for concision (fragments, no articles). Commit
   messages, pull requests and docs are read later without the session's
   context: full sentences there.
+- **Skills.** A new skill must replace an existing one, or do a job already
+  done by hand three times. A skill is refined only after three uses since
+  its last change. Before writing or changing a skill, `AGENTS.md` or
+  `CLAUDE.md`, read the `writing-for-agents` skill.
 - Python 3.10+, standard library `unittest`, no new runtime dependencies
   without a good reason (the solvers are pure Python on purpose).
 - Use ASCII in Python source and docs. The UI may use typographic symbols

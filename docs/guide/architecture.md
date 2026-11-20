@@ -19,19 +19,19 @@ Three separate programs run while the app is in use:
   can be stopped.
 
 How to read the diagram: a yellow band is a **process**, a separate running
-program. A rounded box is a **thread**, one line of work inside the server
-process. The other shapes are things that hold data. An arrow means "this
-travels this way", and the numbers mark the three paths.
+program. A rounded box is work done on one of the server's **threads**. The
+other shapes are things that hold data or carry a signal. An arrow means
+"this travels this way", and the numbers mark the three paths.
 
 ```mermaid
 flowchart LR
-    pages["pages and forms"] -- "1. ask: solve, stop, fetch" --> req("request threads<br/>api.py")
+    pages["pages and forms"] -- "1. ask: solve, stop, fetch" --> req("HTTP handlers<br/>api.py")
     req -- "JSON reply" --> cache[("React Query cache")]
-    req -- "holding the lock" --> jobs[["JobManager<br/>all jobs + ONE lock"]]
+    req -- "read or change jobs,<br/>holding the lock" --> jobs[["JobManager<br/>all jobs + ONE lock"]]
     jobs -- "start" --> worker["run_job<br/>problems + solvers"]
     worker -- "2. events" --> q[/"event queue"/]
     q -- "next event" --> reader("reader thread<br/>one per running job")
-    reader -- "apply, holding the lock" --> jobs
+    reader -- "apply an event to its job,<br/>holding the lock" --> jobs
     jobs -- "save" --> db[("SQLite")]
     jobs -- "publish" --> loop("event loop<br/>WebSocket")
     loop -- "push" --> live["live.ts"]
@@ -65,9 +65,9 @@ The boxes:
 | pages and forms | rectangle | the React pages the user clicks |
 | React Query cache | cylinder | the browser's copy of server data; pages read only this |
 | live.ts | rectangle | the browser end of the WebSocket |
-| request threads (`api.py`) | rounded | threads that answer HTTP requests, several at once |
+| HTTP handlers (`api.py`) | rounded | the code that answers each request. The job endpoints run on the event-loop thread; slow work (validation, reading rows, delete) is handed to a pool of worker threads |
 | JobManager (`manager.py`) | double box | the server's list of all jobs, and the one lock that guards it |
-| event loop | rounded | the thread that writes messages to open browser tabs |
+| event loop | rounded | the server's main thread. It also runs the job endpoints; it is drawn here for the part it plays in path 2, writing messages to open browser tabs |
 | reader thread | rounded | one per running job; takes that job's events and applies them |
 | SQLite (`store.py`) | cylinder | the database file, `output/wizsat.db` |
 | run_job (`sat_core/jobs.py`) | rectangle | the code that encodes and solves, inside the job process |
@@ -78,13 +78,13 @@ The arrows:
 
 | Path | Arrow | What travels |
 |---|---|---|
-| 1 | pages -> request threads | an HTTP request: create a job, Stop, fetch a job or its rows |
-| 1 | request threads -> JobManager | the request is carried out while holding the lock |
-| 1 | request threads -> cache | the JSON reply |
+| 1 | pages -> HTTP handlers | an HTTP request: create a job, Stop, fetch a job or its rows |
+| 1 | HTTP handlers -> JobManager | the request reads or changes the jobs in the server's memory while holding the lock: a snapshot for a reply, a new job, a Stop, a delete. Starting a process or setting the cancel flag is a result of that change; the lock never reaches a process |
+| 1 | HTTP handlers -> cache | the JSON reply |
 | | JobManager -> run_job | "start": a new job process, when fewer than `WIZSAT_MAX_JOBS` run |
-| 2 | run_job -> event queue | an event: log line, progress, instance, result, row, done |
+| 2 | run_job -> event queue | an event: environment (always first), log line, progress, plan, instance, result, row, then done, error or cancelled |
 | 2 | event queue -> reader | the reader takes the next event; it waits while the queue is empty |
-| 2 | reader -> JobManager | `_apply`: the job is updated while holding the lock |
+| 2 | reader -> JobManager | `_apply`: the reader updates its job while holding the same lock, so a request never sees the job half updated |
 | 2 | JobManager -> SQLite | what must survive a restart is saved |
 | 2 | JobManager -> event loop | the change is published |
 | 2 | event loop -> live.ts | it is pushed over the WebSocket |
@@ -100,16 +100,23 @@ Three things the diagram leaves out:
 - **A benchmark with `workers` above 1** starts a pool of worker processes
   inside its job process
   ([How it works](how-it-works.md#parallel-benchmark-runs)).
+- **The skip flag**, a second flag next to the cancel flag, used by
+  benchmarks for Skip case.
 - **The job folder**, `output/jobs/<id>/`, where the job process writes
   `instance.cnf` and `model.txt`.
 
 Pages read only the cache, whether a value came as a reply (path 1) or as an
-event (path 2). Why the reader thread is needed, every way the server can
-reach a running job, and when the flags are read are in
-[How it works](how-it-works.md#what-the-big-picture-hides). The reader thread is code of the `JobManager` running on its
-own thread; the lock is what lets it, the request threads and the event loop
-touch the same jobs safely
-([How it works](how-it-works.md#locks-and-threads)). The walk through one
+event (path 2). The reader thread is code of the `JobManager` running on
+its own thread. The lock is what lets the event loop, the pool threads and
+the reader threads touch the same jobs safely. More in
+[How it works](how-it-works.md): why the reader thread is needed
+([What the big picture hides](how-it-works.md#what-the-big-picture-hides)),
+every way the server can reach a running job
+([Talking to a running job](how-it-works.md#talking-to-a-running-job)), when
+the flags are read
+([Stop, Skip and timeouts](how-it-works.md#stop-skip-and-timeouts)), and
+which threads share the lock
+([Locks and threads](how-it-works.md#locks-and-threads)). The walk through one
 solve is in
 [How it works](how-it-works.md#one-solve-start-to-finish).
 
@@ -264,9 +271,10 @@ The rule behind every arrow is `next_status` in `sat_web/lifecycle.py`. A
 happening on a finished job changes nothing. To add a status or an arrow,
 change `next_status`, the table in `tests/test_lifecycle.py` and this
 diagram together. The test checks the code against its table; nothing checks
-the diagram, so keep it in step by hand. What
-each arrow means, and how Stop, Skip and timeouts work, is in
-[How it works](how-it-works.md#statuses).
+the diagram, so keep it in step by hand. What each arrow means is in
+[How it works](how-it-works.md#statuses), and how Stop, Skip and timeouts
+reach a solver in
+[Stop, Skip and timeouts](how-it-works.md#stop-skip-and-timeouts).
 
 ## The database
 
@@ -337,6 +345,10 @@ store handles threads, the WAL files and startup is in
 | What happens, step by step, when I click Solve? | [One solve, start to finish](how-it-works.md#one-solve-start-to-finish) |
 | Why processes and not threads? What is the GIL? | [Jobs](how-it-works.md#jobs) |
 | What does the lock protect? | [Locks and threads](how-it-works.md#locks-and-threads) |
+| Why is there a reader thread? | [What the big picture hides](how-it-works.md#what-the-big-picture-hides) |
+| How can the server reach a running job? | [Talking to a running job](how-it-works.md#talking-to-a-running-job) |
+| When does a solver notice Stop, Skip or a timeout? | [Stop, Skip and timeouts](how-it-works.md#stop-skip-and-timeouts) |
+| How do jobs end when the server crashes? | [Daemons and the watchdog](how-it-works.md#daemons-and-the-watchdog) |
 | How do parallel benchmarks keep the same rows? | [Parallel benchmark runs](how-it-works.md#parallel-benchmark-runs) |
 | How do REST and WebSocket agree? | [Consistency between REST and WebSocket](how-it-works.md#consistency-between-rest-and-websocket) |
 | How is the frontend put together? | [Frontend](how-it-works.md#frontend) |

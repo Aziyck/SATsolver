@@ -230,9 +230,20 @@ Every benchmark exports the same format, whatever the problem:
 | `decisions`, `conflicts`, `propagations`, `learned_clauses`, `restarts` | CDCL/DPLL statistics (`learned_clauses` and `restarts` are CDCL only) |
 | `tries`, `flips`, `best_unsatisfied` | WalkSAT/ProbSAT statistics |
 | `error` | the error message for ERROR rows |
+| `python` | the interpreter that ran the job, such as `CPython 3.11.15` |
+| `cpu`, `cores` | the processor model and its logical core count |
+| `ram_gb` | RAM the run could use (the container's limit when that is smaller) |
+| `os` | operating system, release and architecture |
+| `wizsat_commit` | the git commit of WizSAT, with `-dirty` added when the working tree had uncommitted changes |
 
 The statistic columns are the entries of `STAT_SPECS`
 (`sat_core/solver_registry.py`) marked `csv`, in the order of that list.
+
+The six machine columns come last, after `error`, so no older column moves.
+They repeat the job's recorded environment on every row, so a file that
+joins benchmarks from different machines still says which row ran where. A
+cell is empty when the fact could not be read, and all six are empty for a
+benchmark stored before the environment was recorded.
 
 Download a single benchmark with **CSV** on its results page, or several at
 once by comparing them first; the API also offers

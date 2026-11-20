@@ -34,6 +34,9 @@ from sat_web.api import create_app
 from sat_web.config import Settings
 
 
+MACHINE_COLUMNS = ["python", "cpu", "cores", "ram_gb", "os", "wizsat_commit"]
+
+
 def make_settings(folder: str, dist: Path | None = None) -> Settings:
     return Settings(data_dir=Path(folder), max_parallel_jobs=2, frontend_dist=dist or Path(folder) / "no-dist")
 
@@ -218,6 +221,14 @@ class JobTests(ApiTestCase):
         table = list(csv.DictReader(io.StringIO(self.client.get(f"/api/jobs/{job['id']}/export.csv").text)))
         self.assertEqual(len(table), 4)
         self.assertEqual(table[0]["run"], job["label"])
+        # Every row names the machine and software of the job (META-4).
+        environment = detail["environment"]
+        self.assertIsNotNone(environment)
+        for row in table:
+            self.assertEqual(row["python"], f"{environment['python_implementation']} {environment['python_version']}")
+            self.assertEqual(row["os"], environment["os"])
+            self.assertEqual(row["cores"], str(environment["cpu_logical_cores"]))
+            self.assertTrue(row["wizsat_commit"].startswith(environment["git_commit"] or ""))
 
         case = self.client.get(f"/api/jobs/{job['id']}/rows/2/case").json()
         self.assertEqual(case["params"]["ratio"], 5.0)
@@ -229,6 +240,9 @@ class JobTests(ApiTestCase):
         self.assertEqual(self.wait(rerun["id"])["row_count"], 4)
         combined = self.client.get("/api/export.csv", params={"jobs": f"{job['id']},{rerun['id']}"}).text
         self.assertEqual(len(combined.strip().splitlines()), 9)
+        combined_table = list(csv.DictReader(io.StringIO(combined)))
+        self.assertEqual({row["python"] for row in combined_table}, {table[0]["python"]})
+        self.assertNotIn("", {row["python"] for row in combined_table})
         self.assertEqual(self.client.get("/api/export.csv", params={"jobs": "1,x"}).status_code, 400)
 
     def test_cancel_a_running_job(self):
@@ -511,6 +525,33 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(jobs["ghost"]["status"], "interrupted")
                 restored = client.get(f"/api/jobs/{job['id']}/rows").json()["rows"]
                 self.assertEqual(len(restored), 2)
+
+    def test_the_csv_of_a_benchmark_stored_without_an_environment_has_empty_machine_cells(self):
+        # A benchmark finished before META-2 has rows but no environment (META-4).
+        request = {"problems": ["n_queens"], "segments": [{"size": "4,5"}], "solvers": ["cdcl"]}
+        with tempfile.TemporaryDirectory() as folder:
+            settings = make_settings(folder)
+            with local_client(settings) as client:
+                job = client.post("/api/jobs", json={"kind": "benchmark", "request": request}).json()
+                deadline = time.monotonic() + 60
+                while client.get(f"/api/jobs/{job['id']}").json()["status"] != "done" and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                self.assertIsNotNone(client.get(f"/api/jobs/{job['id']}").json()["environment"])
+
+            db = sqlite3.connect(str(settings.db_path))
+            db.execute("UPDATE jobs SET environment = NULL")
+            db.commit()
+            db.close()
+
+            with local_client(make_settings(folder)) as client:
+                for url, params in ((f"/api/jobs/{job['id']}/export.csv", {}), ("/api/export.csv", {"jobs": str(job["id"])})):
+                    response = client.get(url, params=params)
+                    self.assertEqual(response.status_code, 200)
+                    table = list(csv.DictReader(io.StringIO(response.text)))
+                    self.assertEqual(len(table), 2)
+                    for row in table:
+                        self.assertEqual([row[name] for name in MACHINE_COLUMNS], [""] * len(MACHINE_COLUMNS))
+                        self.assertEqual(row["status"], "SAT")
 
     def test_a_database_from_before_the_environment_column_still_opens(self):
         # The jobs table as it was created before META-2: no environment column.

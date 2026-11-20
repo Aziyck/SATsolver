@@ -436,7 +436,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def export_job(request: Request, job_id: int) -> PlainTextResponse:
         job = job_or_404(request, job_id)
         rows = await run_in_threadpool(manager_of(request).rows, job)
-        return _csv_response(rows_to_csv(rows, run_label=job.label), f"{job.label}_benchmark.csv")
+        return _csv_response(
+            rows_to_csv(rows, run_label=job.label, environment=job.environment), f"{job.label}_benchmark.csv"
+        )
 
     @app.get("/api/export.csv")
     async def export_jobs(request: Request, jobs: str = Query(..., description="Comma-separated job ids")) -> PlainTextResponse:
@@ -452,7 +454,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             job = job_or_404(request, job_id)
             labels.append(job.label)
             for row in await run_in_threadpool(manager_of(request).rows, job):
-                combined.append({**row, "run_label": job.label})
+                combined.append({**row, "run_label": job.label, "environment": job.environment})
         return _csv_response(rows_to_csv(combined), f"benchmark_{'_'.join(labels) or 'empty'}.csv")
 
     def _rebuild_case(job: Job, index: int, rows: list[dict[str, Any]]):

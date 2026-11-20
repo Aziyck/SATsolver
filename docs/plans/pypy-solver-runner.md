@@ -1,6 +1,6 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
-- **Status:** in progress (RUNNER-1 done 2026-11-20)
+- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -36,7 +36,9 @@ honest per-run memory number possible (see the memory plan).
   so PyPy needs nothing installed beyond itself.
 - **Protocol:** JSON over pipes.
   - In, one object on stdin:
-    `{"clauses", "solver", "options", "log_level", "progress_interval", "timeout"}`.
+    `{"clauses", "solver", "options", "log_level", "progress_interval", "timeout"}`,
+    and optionally `"label"` (the solver name in log lines, as `run_solver`'s
+    `label`; a benchmark passes its solver label).
     The child reads stdin to its end, so the parent closes stdin after
     writing the request.
   - Out, one JSON object per line on stdout: `{"type": "log", "message"}` for
@@ -78,7 +80,7 @@ installed.
     the local-search solvers); at log level `debug` the log lines arrive
     before the result.
 
-- [ ] **RUNNER-2. `run_solver` uses the child when the setting is on**
+- [x] **RUNNER-2. `run_solver` uses the child when the setting is on** - Done 2026-11-20.
   - **Difficulty:** hard
   - **Blocked by:** RUNNER-1
   - **How:** behind `WIZSAT_SOLVER_PYTHON`, `run_solver` starts the child,

@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ from unittest import mock
 from problems import build_problem
 from sat_core import solver_registry
 from sat_core.runtime import EVENT_LOG
+from sat_core.solver_process import run_in_child
 from sat_core.solver_registry import all_solvers, get_solver, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -219,6 +221,32 @@ class ChildProtocolTests(unittest.TestCase):
                 received = [line["message"] for line in lines if line["type"] == "log"]
                 self.assertGreater(len(expected), 3)
                 self.assertEqual(without_times(received), without_times(expected))
+
+
+class ParentSideTests(unittest.TestCase):
+    def test_stderr_that_is_not_utf8_neither_stops_nor_hangs_the_parent(self):
+        # On Windows a child's stderr is in the locale code page. One such byte,
+        # then more than a pipe buffer: a reader thread that died on the byte
+        # would leave the child blocked and the parent waiting for ever.
+        script = "import sys; sys.stderr.buffer.write(b'caf\\xe9 ' + b'x' * 300000 + b' end'); sys.exit(3)"
+        real_popen = subprocess.Popen
+
+        def popen(args, **kwargs):
+            return real_popen([sys.executable, "-c", script], **kwargs)
+
+        outcome = []
+        with mock.patch("subprocess.Popen", side_effect=popen):
+            worker = threading.Thread(
+                target=lambda: outcome.append(run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES))),
+                daemon=True,  # a hang fails the test instead of stopping the test run
+            )
+            worker.start()
+            worker.join(timeout=30)
+
+        self.assertFalse(worker.is_alive(), "run_in_child did not return")
+        result, stderr_tail = outcome[0]
+        self.assertIsNone(result)
+        self.assertTrue(stderr_tail.endswith("end"))
 
 
 if __name__ == "__main__":

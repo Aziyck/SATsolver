@@ -60,9 +60,8 @@ one-line edit:
   no context and re-reads the codebase, so parallel implementers multiply the
   token cost without making a one-item change faster.
 - Use a subagent for read-only research, for the long wait described below,
-  for the closing text (`pr-writer`, on Opus: the commit message, pull
-  request and owner report), or when the owner asks for one. One at a time unless the owner asks for
-  more.
+  or when the owner asks for one. One at a time unless the owner asks for
+  more. The closing text is written in the session, with the `write-pr` skill.
 
 ## Long-running work
 

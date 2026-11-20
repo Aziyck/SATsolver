@@ -43,19 +43,20 @@ one-line edit:
 | Difficulty | Model | Review before the item is closed |
 |---|---|---|
 | easy | Sonnet, high effort | the checks in "Before you finish" |
-| medium | Sonnet, high effort | plus `/code-review` on the diff; fix what it confirms |
-| hard | Sonnet inside `/fix-item` and `/do-plan-step`; otherwise the strongest model available (Opus) | plus `/code-review high` on Opus (inside the skills, the owner runs it); for solver items, unchanged conflict counts and timings |
+| medium | Sonnet, high effort | plus `/code-review medium` on the diff; fix what it confirms |
+| hard | Sonnet inside `/fix-item` and `/do-plan-step`; otherwise the strongest model available (Opus) | plus `/code-review high` on Opus, through the `hard-reviewer` agent (its `model:` matches this row); for solver items, unchanged conflict counts and timings |
 
 - `/fix-item` and `/do-plan-step` run on Sonnet at high effort for every
   item (`model:` and `effort:` in their frontmatter): a skill's model and
   effort are set when it starts, before it has read the item's difficulty.
   The pin holds for every turn of the skill, whatever `/model` says, so a
   `/code-review` the skill runs is a Sonnet review. For a hard item the
-  skill hands the review to the owner (its step 5), who runs `/model opus`
-  and then `/code-review high` outside the skill.
+  skill dispatches `.claude/agents/hard-reviewer.md` (its step 5): a
+  subagent pinned to the hard row's model that runs `/code-review high` and
+  returns the findings.
 - Outside those skills, if the session's model is below the item's level,
   say so before starting and let the owner choose: switch model, or proceed
-  with the Opus review.
+  and dispatch `hard-reviewer` for the review.
 - After three failed attempts at an item's "done when", stop and write the
   `Escalate:` line (`docs/plans/README.md`). Do not keep trying variations.
 
@@ -65,8 +66,9 @@ one-line edit:
   no context and re-reads the codebase, so parallel implementers multiply the
   token cost without making a one-item change faster.
 - Use a subagent for read-only research, for the long wait described below,
-  or when the owner asks for one. One at a time unless the owner asks for
-  more. The closing text is written in the session, with the `write-pr` skill.
+  for the review of a hard item (`hard-reviewer`), or when the owner
+  asks for one. One at a time unless the owner asks for more. The closing
+  text is written in the session, with the `write-pr` skill.
 
 ## Long-running work
 

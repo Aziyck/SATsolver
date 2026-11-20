@@ -79,15 +79,20 @@ column matches the baseline).
 
 ## 5. Verify
 
-For a medium or hard item, first review the diff and fix what the review
-confirms; a confirmed finding outside this item is filed as a new finding
-instead.
+For a medium or hard item, first review the diff. Check each finding
+against the code: fix the ones that hold, and list the others with the reason
+for `write-pr`. A finding that holds but lies outside this item is filed as
+a new finding instead.
 
 - **Medium:** run `/code-review medium` yourself.
-- **Hard:** the review runs on Opus, and this skill is pinned to Sonnet
-  (`CLAUDE.md`, "Difficulty and models"). Hand off: tell the owner the diff
-  is ready and ask them to run `/model opus`, then `/code-review high`.
-  Wait for their findings before going on.
+- **Hard:** the review runs on the stronger model of the hard row in
+  `CLAUDE.md`, and this skill is pinned to Sonnet. Run `git add -N .` so the
+  new files show in the diff, then dispatch the `hard-reviewer` agent with no
+  `model` argument, and leave the working tree alone until it replies. Its
+  reply starts with the model it ran on; check that it is the hard row's.
+  If the agent is unavailable, its reply says `REVIEW FAILED`, or it ran on
+  another model, ask the owner to run `/code-review high` on the hard row's
+  model, outside this skill, and wait for their findings before going on.
 
 Then run every check of "Before you finish" in `AGENTS.md` that applies,
 once, after the last edit.

@@ -1,6 +1,6 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
-- **Status:** proposed, not started
+- **Status:** in progress (RUNNER-1 done 2026-11-20)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -48,6 +48,8 @@ honest per-run memory number possible (see the memory plan).
   parent also kills it a little after the timeout, in case it hangs.
 - **Errors:** a child that exits without a result gives status `ERROR` with its
   stderr tail, like any solver failure today (`run_solver` never raises).
+  The parent reads stderr on its own thread too: the child sends stray prints
+  there, and a full pipe would block it.
 - **Data size:** at the 2,000,000-clause limit the JSON input is a few tens of
   MB. Acceptable, but measured in RUNNER-7.
 
@@ -57,7 +59,7 @@ Tests use `sys.executable` (CPython) as `WIZSAT_SOLVER_PYTHON`, so the
 protocol, logs, cancel, skip, timeout and error paths are checked without PyPy
 installed.
 
-- [ ] **RUNNER-1. The child: one solver run from JSON to JSON**
+- [x] **RUNNER-1. The child: one solver run from JSON to JSON** - Done 2026-11-20.
   - **Difficulty:** hard (process protocol)
   - **How:** `sat_core/solver_process.py` reads the request from stdin, calls
     the in-process solver path, writes log lines as they happen and the result

@@ -136,7 +136,7 @@ Who imports whom:
 flowchart TD
     frontend["frontend/"]
     web["sat_web/<br/>api, manager, store, config"]
-    engine["sat_core engine<br/>answers, jobs, benchmark, export, solver_registry, parallel, presets"]
+    engine["sat_core engine<br/>answers, jobs, benchmark, export, solver_registry, solver_process, parallel, presets"]
     problems["problems/"]
     solvers["solvers/"]
     base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify, environment"]

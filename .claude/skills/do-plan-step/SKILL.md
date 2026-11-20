@@ -70,12 +70,19 @@ the next. Tests written all at once check an imagined design.
 
 ## 5. Verify
 
-For a medium or hard task, first run `/code-review` on the diff, at `medium`
-for a medium task and `high` for a hard one, and fix what it confirms; a
-confirmed finding outside this task is filed as a new finding instead. Then
-run every check of "Before you finish" in `AGENTS.md` that applies, once,
-after the last edit, plus the plan's own rules (for a "same search" task: the
-conflicts column matches the baseline).
+For a medium or hard task, first review the diff and fix what the review
+confirms; a confirmed finding outside this task is filed as a new finding
+instead.
+
+- **Medium:** run `/code-review medium` yourself.
+- **Hard:** the review runs on Opus, and this skill is pinned to Sonnet
+  (`CLAUDE.md`, "Difficulty and models"). Hand off: tell the owner the diff
+  is ready and ask them to run `/model opus`, then `/code-review high`.
+  Wait for their findings before going on.
+
+Then run every check of "Before you finish" in `AGENTS.md` that applies,
+once, after the last edit, plus the plan's own rules (for a "same search"
+task: the conflicts column matches the baseline).
 
 If the tests will not go green after three different attempts, stop: write
 the `Escalate:` line on the task, leave it open, and report what was tried.

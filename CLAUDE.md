@@ -44,13 +44,18 @@ one-line edit:
 |---|---|---|
 | easy | Sonnet, high effort | the checks in "Before you finish" |
 | medium | Sonnet, high effort | plus `/code-review` on the diff; fix what it confirms |
-| hard | the strongest model available (Opus), or Sonnet followed by a `/code-review` run on the stronger model | plus, for solver items, unchanged conflict counts and timings |
+| hard | Sonnet inside `/fix-item` and `/do-plan-step`; otherwise the strongest model available (Opus) | plus `/code-review high` on Opus (inside the skills, the owner runs it); for solver items, unchanged conflict counts and timings |
 
 - `/fix-item` and `/do-plan-step` run on Sonnet at high effort for every
-  item: a skill's effort is set when it starts, before it has read the
-  item's difficulty.
-- If the session's model is below the item's level, say so before starting
-  and let the owner choose: switch model, or proceed with the stronger review.
+  item (`model:` and `effort:` in their frontmatter): a skill's model and
+  effort are set when it starts, before it has read the item's difficulty.
+  The pin holds for every turn of the skill, whatever `/model` says, so a
+  `/code-review` the skill runs is a Sonnet review. For a hard item the
+  skill hands the review to the owner (its step 5), who runs `/model opus`
+  and then `/code-review high` outside the skill.
+- Outside those skills, if the session's model is below the item's level,
+  say so before starting and let the owner choose: switch model, or proceed
+  with the Opus review.
 - After three failed attempts at an item's "done when", stop and write the
   `Escalate:` line (`docs/plans/README.md`). Do not keep trying variations.
 

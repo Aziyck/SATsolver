@@ -79,11 +79,18 @@ column matches the baseline).
 
 ## 5. Verify
 
-For a medium or hard item, first run `/code-review` on the diff, at `medium`
-for a medium item and `high` for a hard one, and fix what it confirms; a
-confirmed finding outside this item is filed as a new finding instead. Then
-run every check of "Before you finish" in `AGENTS.md` that applies, once,
-after the last edit.
+For a medium or hard item, first review the diff and fix what the review
+confirms; a confirmed finding outside this item is filed as a new finding
+instead.
+
+- **Medium:** run `/code-review medium` yourself.
+- **Hard:** the review runs on Opus, and this skill is pinned to Sonnet
+  (`CLAUDE.md`, "Difficulty and models"). Hand off: tell the owner the diff
+  is ready and ask them to run `/model opus`, then `/code-review high`.
+  Wait for their findings before going on.
+
+Then run every check of "Before you finish" in `AGENTS.md` that applies,
+once, after the last edit.
 
 If the loop will not go green after three different attempts, stop: write the
 `Escalate:` line on the item, leave it open, and report what was tried.

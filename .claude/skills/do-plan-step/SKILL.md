@@ -70,12 +70,24 @@ the next. Tests written all at once check an imagined design.
 
 ## 5. Verify
 
-For a medium or hard task, first run `/code-review` on the diff, at `medium`
-for a medium task and `high` for a hard one, and fix what it confirms; a
-confirmed finding outside this task is filed as a new finding instead. Then
-run every check of "Before you finish" in `AGENTS.md` that applies, once,
-after the last edit, plus the plan's own rules (for a "same search" task: the
-conflicts column matches the baseline).
+For a medium or hard task, first review the diff. Check each finding
+against the code: fix the ones that hold, and list the others with the reason
+for `write-pr`. A finding that holds but lies outside this task is filed as
+a new finding instead.
+
+- **Medium:** run `/code-review medium` yourself.
+- **Hard:** the review runs on the stronger model of the hard row in
+  `CLAUDE.md`, and this skill is pinned to Sonnet. Run `git add -N .` so the
+  new files show in the diff, then dispatch the `hard-reviewer` agent with no
+  `model` argument, and leave the working tree alone until it replies. Its
+  reply starts with the model it ran on; check that it is the hard row's.
+  If the agent is unavailable, its reply says `REVIEW FAILED`, or it ran on
+  another model, ask the owner to run `/code-review high` on the hard row's
+  model, outside this skill, and wait for their findings before going on.
+
+Then run every check of "Before you finish" in `AGENTS.md` that applies,
+once, after the last edit, plus the plan's own rules (for a "same search"
+task: the conflicts column matches the baseline).
 
 If the tests will not go green after three different attempts, stop: write
 the `Escalate:` line on the task, leave it open, and report what was tried.

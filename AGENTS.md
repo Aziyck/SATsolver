@@ -78,7 +78,8 @@ tests/           unittest suites
 docs/            guide/, algorithms/, visualisations/ (standalone HTML),
                  plans/ (features to build), reviews/ (findings to fix),
                  adr/ (decisions), report/ (thesis material)
-.claude/         skills/ (fix-item, do-plan-step, write-pr, writing-for-agents), hooks/, archive/
+.claude/         skills/ (fix-item, do-plan-step, write-pr, writing-for-agents),
+                 agents/ (hard-reviewer), hooks/, archive/
 ```
 
 ## How a request flows

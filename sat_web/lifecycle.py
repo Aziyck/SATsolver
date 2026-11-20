@@ -3,9 +3,9 @@ The job status rule: which status follows which happening.
 
 Pure and lock-free on purpose. The JobManager owns processes, threads and the
 lock; it asks `next_status` what a job's status becomes and keeps persisting
-and publishing for itself. The arrows are the state diagram in
-docs/guide/architecture.md ("Statuses"); tests/test_lifecycle.py checks that
-the two list the same ones.
+and publishing for itself. The arrows are drawn in
+docs/guide/architecture.md ("Statuses"); tests/test_lifecycle.py lists them
+as a table and checks the function against it.
 """
 
 from __future__ import annotations

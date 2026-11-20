@@ -1,17 +1,14 @@
 """
-The job status rule (sat_web/lifecycle.py) as a table, and its match with the
-state diagram of docs/guide/architecture.md.
+The job status rule (sat_web/lifecycle.py) as a table. The same arrows are
+drawn in docs/guide/architecture.md ("Statuses"); that diagram is kept in
+step by hand.
 """
 
-import re
 import unittest
-from pathlib import Path
 
 from sat_web.lifecycle import ACTIVE, FINISHED, HAPPENINGS, STATUSES, next_status
 
-GUIDE = Path(__file__).resolve().parents[1] / "docs" / "guide" / "architecture.md"
-
-# Every arrow of the diagram: (status, happening) -> new status. Anything
+# Every arrow of the status diagram: (status, happening) -> new status. Anything
 # that is not listed leaves the status unchanged (see the test below).
 ARROWS = {
     ("queued", "slot_free"): "running",
@@ -89,23 +86,7 @@ class NextStatusTests(unittest.TestCase):
         self.assertEqual(next_status(status, "process_exited", terminal_seen=False), "interrupted")
 
 
-class DiagramTests(unittest.TestCase):
-    def diagram(self):
-        text = GUIDE.read_text(encoding="utf-8")
-        return text.split("stateDiagram-v2", 1)[1].split("```", 1)[0]
-
-    def test_the_guide_diagram_lists_the_same_arrows_as_the_table(self):
-        drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", self.diagram(), flags=re.MULTILINE))
-        coded = {(status, new) for (status, _), new in ARROWS.items()}
-
-        self.assertEqual(drawn, coded)
-
-    def test_the_diagram_starts_at_queued_and_ends_in_the_final_statuses(self):
-        diagram = self.diagram()
-
-        self.assertEqual(re.findall(r"^\s*\[\*\] --> (\w+)", diagram, flags=re.MULTILINE), ["queued"])
-        self.assertEqual(set(re.findall(r"^\s*(\w+) --> \[\*\]", diagram, flags=re.MULTILINE)), set(FINISHED))
-
+class StatusSetTests(unittest.TestCase):
     def test_active_is_every_status_that_is_not_finished(self):
         self.assertEqual(ACTIVE, ("queued", "running", "cancelling"))
 

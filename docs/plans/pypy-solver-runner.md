@@ -134,11 +134,20 @@ installed.
     detail and the CSV show that interpreter's name and version.
 
 - [ ] **RUNNER-7. Measure what the child costs**
-  - **Difficulty:** easy
+  - **Difficulty:** hard (re-rated 2026-11-21: may change `START_UP_SECONDS`,
+    which decides when the parent kills a child: the stopping trigger)
   - **Blocked by:** RUNNER-2
+  - **How:** `START_UP_SECONDS` in `sat_core/solver_process.py` (RUNNER-3)
+    is how long the parent waits for the child's first log line before it
+    counts the child as hung. 60 s was a guess with no numbers behind it.
+    Too low, and a healthy child still parsing a huge formula is killed as
+    `TIMEOUT`. Too high, and a hung child holds its slot that much longer.
   - **Done when:** `docs/guide/performance.md` has measured numbers for the
     start-up cost per run and for sending a formula near the clause limit,
-    with and without the setting.
+    with and without the setting, under CPython and, if installed, PyPy; and
+    `START_UP_SECONDS` is set from the worst measured start-up (a few times
+    it, so a busy machine does not trip it), or kept at 60 s with the reason
+    written next to it.
 
 - [ ] **RUNNER-8. Documentation**
   - **Difficulty:** easy

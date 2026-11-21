@@ -443,7 +443,7 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** a test shows that a timer firing after `_finalize` adds
     no log line and does not call `terminate()`, and the API tests pass.
 
-- [ ] **F2. Tests that replace the solver child's program each build their own `Popen` spy**
+- [x] **F2. Tests that replace the solver child's program each build their own `Popen` spy** - Done 2026-11-21.
   (added 2026-11-21, found by retro)
   - **Difficulty:** easy
   - **Problem:** five tests in `tests/test_solver_process.py` and

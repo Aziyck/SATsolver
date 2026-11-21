@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from child_process_spy import replace_child_program
 from problems import build_problem
 from sat_core import solver_process, solver_registry
 from sat_core.runtime import EVENT_LOG, RunToken
@@ -27,8 +28,6 @@ from sat_core.solver_process import SolverProcessError, run_in_child
 from sat_core.solver_registry import all_solvers, get_solver, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
-# Taken before any test patches it: patches started in subtests stack up.
-REAL_POPEN = subprocess.Popen
 
 SAT_CLAUSES = [[1, 2], [-1, 2], [1, -2]]
 UNSAT_CLAUSES = [[1, 2], [-1, 2], [1, -2], [-1, -2]]
@@ -232,11 +231,7 @@ class ParentSideTests(unittest.TestCase):
         # then more than a pipe buffer: a reader thread that died on the byte
         # would leave the child blocked and the parent waiting for ever.
         script = "import sys; sys.stderr.buffer.write(b'caf\\xe9 ' + b'x' * 300000 + b' end'); sys.exit(3)"
-        real_popen = subprocess.Popen
-
-        def popen(args, **kwargs):
-            return real_popen([sys.executable, "-c", script], **kwargs)
-
+        replace_child_program(self, script=script)
         outcome = []
 
         def run():
@@ -245,10 +240,9 @@ class ParentSideTests(unittest.TestCase):
             except SolverProcessError as exc:
                 outcome.append(exc)
 
-        with mock.patch("subprocess.Popen", side_effect=popen):
-            worker = threading.Thread(target=run, daemon=True)  # a hang fails the test instead of the test run
-            worker.start()
-            worker.join(timeout=30)
+        worker = threading.Thread(target=run, daemon=True)  # a hang fails the test instead of the test run
+        worker.start()
+        worker.join(timeout=30)
 
         self.assertFalse(worker.is_alive(), "run_in_child did not return")
         # No result: the error carries the end of stderr, past the byte that is not UTF-8.
@@ -284,21 +278,7 @@ class StopReachesTheChildTests(unittest.TestCase):
         child's command line. Every child is killed at the end of the test.
         """
 
-        children = []
-        real_popen = subprocess.Popen
-
-        def popen(args, **kwargs):
-            child = real_popen(command or args, **kwargs)
-            children.append(child)
-            return child
-
-        def cleanup():
-            for child in children:
-                if child.poll() is None:
-                    child.kill()
-                    child.wait()
-
-        self.addCleanup(cleanup)
+        children = replace_child_program(self, command=command)
         first_log = threading.Event()
 
         def on_event(event):
@@ -315,13 +295,10 @@ class StopReachesTheChildTests(unittest.TestCase):
             )
             outcome["returned"] = time.perf_counter()
 
-        # Patched on the test thread, so a run that hangs cannot leave them on for later tests.
-        for patcher in (
-            mock.patch("subprocess.Popen", side_effect=popen),
-            mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}),
-        ):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        # Patched on the test thread, so a run that hangs cannot leave it on for later tests.
+        patcher = mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         worker = threading.Thread(target=run, daemon=True)  # a hang fails the test instead of the test run
         worker.start()
         return worker, outcome, children, first_log
@@ -396,7 +373,7 @@ class StopReachesTheChildTests(unittest.TestCase):
             "print(json.dumps({'type': 'result', 'status': 'SAT', 'solution': {'1': True},"
             " 'stats': {}, 'error': None, 'elapsed': 0.01}))\n"
         )
-        real_popen = subprocess.Popen
+        replace_child_program(self, script=script)
         token = RunToken()
 
         def slow_callback(event):
@@ -404,8 +381,7 @@ class StopReachesTheChildTests(unittest.TestCase):
                 token.cancel()
                 time.sleep(0.5)  # meanwhile the other lines and the end of stdout are queued
 
-        with mock.patch("subprocess.Popen", side_effect=lambda args, **kw: real_popen([sys.executable, "-c", script], **kw)):
-            result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
+        result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
 
         self.assertEqual(result["status"], "SAT")
         self.assertNotIn("killed", result)
@@ -429,26 +405,10 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
         script replaces the child's program (run as `python -c script`).
         """
 
-        children = []
-
-        def popen(args, **kwargs):
-            child = REAL_POPEN([sys.executable, "-c", script] if script else args, **kwargs)
-            children.append(child)
-            return child
-
-        def cleanup():
-            for child in children:
-                if child.poll() is None:
-                    child.kill()
-                    child.wait()
-
-        self.addCleanup(cleanup)
-        for patcher in (
-            mock.patch("subprocess.Popen", side_effect=popen),
-            mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": python}),
-        ):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        children = replace_child_program(self, script=script)
+        patcher = mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": python})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         events = []
         outcome = {}
 
@@ -552,6 +512,7 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
             "print('not json', flush=True)\n"
             "time.sleep(60)\n"
         )
+        replace_child_program(self, script=script)
         token = RunToken()
 
         def slow_callback(event):
@@ -559,8 +520,7 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
                 token.cancel()
                 time.sleep(0.5)  # meanwhile the broken line is queued
 
-        with mock.patch("subprocess.Popen", side_effect=lambda args, **kw: REAL_POPEN([sys.executable, "-c", script], **kw)):
-            result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
+        result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
 
         self.assertEqual(result["status"], "CANCELLED")
 

@@ -10,6 +10,7 @@ import contextlib
 import dataclasses
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -20,8 +21,8 @@ from pathlib import Path
 from unittest import mock
 
 from problems import build_problem
-from sat_core import solver_registry
-from sat_core.runtime import EVENT_LOG
+from sat_core import solver_process, solver_registry
+from sat_core.runtime import EVENT_LOG, RunToken
 from sat_core.solver_process import run_in_child
 from sat_core.solver_registry import all_solvers, get_solver, run_solver
 
@@ -247,6 +248,162 @@ class ParentSideTests(unittest.TestCase):
         result, stderr_tail = outcome[0]
         self.assertIsNone(result)
         self.assertTrue(stderr_tail.endswith("end"))
+
+
+# A WalkSAT budget that would run for minutes on UNSAT_CLAUSES: only a stop ends the run.
+ENDLESS = {"random_seed": 1, "max_tries": 1_000_000, "max_flips": 1_000_000_000}
+
+# A child whose solver sleeps instead of searching, so it never notices its timeout.
+SLEEPING_CHILD = (
+    "import dataclasses, sys, time\n"
+    "from sat_core import solver_process, solver_registry\n"
+    "spec = solver_registry.get_solver('walksat')\n"
+    "solver_registry._SOLVERS['walksat'] = dataclasses.replace(spec, runner=lambda *args: time.sleep(60))\n"
+    "sys.stdin.reconfigure(encoding='utf-8')\n"
+    "sys.exit(solver_process.main())\n"
+)
+
+
+class StopReachesTheChildTests(unittest.TestCase):
+    """Cancel, skip and timeout end a run in the child process (RUNNER-3)."""
+
+    def run_in_background(self, token=None, timeout=None, command=None, on_first_log=None):
+        """
+        Start run_solver in the child on an endless run, on a thread.
+
+        Returns (thread, outcome, children, first_log): outcome gets "result"
+        and "returned" (perf_counter time) when run_solver returns.
+
+        on_first_log runs once, when the child's first log line arrives, so a
+        stop is sent while the solver is really running. command replaces the
+        child's command line. Every child is killed at the end of the test.
+        """
+
+        children = []
+        real_popen = subprocess.Popen
+
+        def popen(args, **kwargs):
+            child = real_popen(command or args, **kwargs)
+            children.append(child)
+            return child
+
+        def cleanup():
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait()
+
+        self.addCleanup(cleanup)
+        first_log = threading.Event()
+
+        def on_event(event):
+            if event.type == EVENT_LOG and not first_log.is_set():
+                first_log.set()
+                if on_first_log is not None:
+                    on_first_log()
+
+        outcome = {}
+
+        def run():
+            outcome["result"] = run_solver(
+                UNSAT_CLAUSES, "walksat", ENDLESS, timeout=timeout, cancel_token=token, event_callback=on_event
+            )
+            outcome["returned"] = time.perf_counter()
+
+        # Patched on the test thread, so a run that hangs cannot leave them on for later tests.
+        for patcher in (
+            mock.patch("subprocess.Popen", side_effect=popen),
+            mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        worker = threading.Thread(target=run, daemon=True)  # a hang fails the test instead of the test run
+        worker.start()
+        return worker, outcome, children, first_log
+
+    def stop_and_wait(self, stop):
+        # Sent from the test thread while the child is quiet (log level normal),
+        # as a real Stop comes: the parent must notice it without a new line.
+        token = RunToken()
+        worker, outcome, children, first_log = self.run_in_background(token=token)
+        self.assertTrue(first_log.wait(30), "the child sent no log line")
+        time.sleep(0.3)
+        self.assertTrue(worker.is_alive(), "the run ended before the stop")
+        stopped = {"at": time.perf_counter()}
+        stop(token)
+        worker.join(timeout=10)
+        self.assertFalse(worker.is_alive(), "run_solver did not return after the stop")
+        return outcome["result"], outcome["returned"] - stopped["at"], children
+
+    def test_cancel_returns_cancelled_within_a_second_and_the_child_is_gone(self):
+        result, waited, children = self.stop_and_wait(RunToken.cancel)
+
+        self.assertEqual(result.status, "CANCELLED")
+        self.assertLess(waited, 1.0)
+        self.assertEqual(len(children), 1)
+        self.assertIsNotNone(children[0].poll(), "the child process is still running")
+        self.assertIsNone(result.solution)
+
+    def test_a_skip_request_returns_skipped(self):
+        result, waited, children = self.stop_and_wait(RunToken.skip)
+
+        self.assertEqual(result.status, "SKIPPED")
+        self.assertLess(waited, 1.0)
+        self.assertIsNotNone(children[0].poll(), "the child process is still running")
+
+    def test_a_timeout_of_a_fifth_of_a_second_returns_timeout(self):
+        worker, outcome, children, _ = self.run_in_background(timeout=0.2)
+        worker.join(timeout=30)
+
+        self.assertFalse(worker.is_alive(), "run_solver did not return")
+        result = outcome["result"]
+        self.assertEqual(result.status, "TIMEOUT")
+        # The child's own clock: from the start of its run_solver to the solver noticing the limit.
+        self.assertGreaterEqual(result.elapsed, 0.19)
+        self.assertLess(result.elapsed, 0.5)
+
+    def test_a_child_that_ignores_its_timeout_is_killed_shortly_after_the_limit(self):
+        started = {}
+        worker, outcome, children, first_log = self.run_in_background(
+            timeout=0.2,
+            command=[sys.executable, "-c", SLEEPING_CHILD],
+            on_first_log=lambda: started.setdefault("at", time.perf_counter()),
+        )
+        self.assertTrue(first_log.wait(30), "the child sent no log line")
+        worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "run_solver did not return")
+        result = outcome["result"]
+        self.assertEqual(result.status, "TIMEOUT")
+        # The sleeping solver would run for 60 s; the parent ends it within its margin of the limit.
+        self.assertLess(outcome["returned"] - started["at"], 0.2 + solver_process.KILL_MARGIN_SECONDS + 1.0)
+        self.assertIsNotNone(children[0].poll(), "the child process is still running")
+        self.assertIsNone(result.error)
+
+    def test_a_result_already_sent_wins_over_a_stop(self):
+        # The parent lags behind the child's lines (a slow event callback). The
+        # stop comes after the child sent its result: the run finished, and its
+        # result must not be replaced by CANCELLED.
+        script = (
+            "import json, sys\n"
+            "sys.stdin.read()\n"
+            "for n in range(3): print(json.dumps({'type': 'log', 'message': f'line {n}'}))\n"
+            "print(json.dumps({'type': 'result', 'status': 'SAT', 'solution': {'1': True},"
+            " 'stats': {}, 'error': None, 'elapsed': 0.01}))\n"
+        )
+        real_popen = subprocess.Popen
+        token = RunToken()
+
+        def slow_callback(event):
+            if not token.is_cancelled():
+                token.cancel()
+                time.sleep(0.5)  # meanwhile the other lines and the end of stdout are queued
+
+        with mock.patch("subprocess.Popen", side_effect=lambda args, **kw: real_popen([sys.executable, "-c", script], **kw)):
+            result, _ = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
+
+        self.assertEqual(result["status"], "SAT")
+        self.assertNotIn("killed", result)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
-- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20)
+- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
+  done 2026-11-21)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -91,7 +92,7 @@ installed.
     `sys.executable` (run the solver tests of that file twice, with and
     without the setting), and an unset setting starts no process.
 
-- [ ] **RUNNER-3. Cancel, skip and timeout reach the child**
+- [x] **RUNNER-3. Cancel, skip and timeout reach the child** - Done 2026-11-21.
   - **Difficulty:** hard (process lifetime)
   - **Blocked by:** RUNNER-2
   - **Done when:** tests on a formula that runs for seconds show that
@@ -113,6 +114,12 @@ installed.
 - [ ] **RUNNER-5. Jobs and benchmarks work through the child**
   - **Difficulty:** hard (re-rated 2026-11-20 from medium: jobs and benchmarks start the solver child process)
   - **Blocked by:** RUNNER-3, RUNNER-4
+  - **How:** the child must end when the process that started it ends. Today
+    only `run_in_child`'s own clean-up kills it, and that never runs when the
+    manager's force stop terminates the job process or a pool worker leaves
+    with `os._exit` (`exit_when_parent_dies`): the child is orphaned and, with
+    no timeout, runs for ever. For example a thread in the child that ends it
+    when its parent is gone (found in the RUNNER-3 review).
   - **Done when:** with the setting on, API tests run a solve job and a small
     benchmark sequentially and with `workers: 2`, get the same rows as without
     the setting (statuses and work counts), and Stop on a running benchmark
@@ -127,11 +134,28 @@ installed.
     detail and the CSV show that interpreter's name and version.
 
 - [ ] **RUNNER-7. Measure what the child costs**
-  - **Difficulty:** easy
+  - **Difficulty:** hard (re-rated 2026-11-21: may change `START_UP_SECONDS`,
+    which decides when the parent kills a child: the stopping trigger)
   - **Blocked by:** RUNNER-2
+  - **How:** `START_UP_SECONDS` in `sat_core/solver_process.py` (RUNNER-3)
+    is how long the parent waits for the child's first log line before it
+    counts the child as hung. 60 s was a guess with no numbers behind it.
+    Too low, and a healthy child still parsing a huge formula is killed as
+    `TIMEOUT`. Too high, and a hung child holds its slot that much longer.
   - **Done when:** `docs/guide/performance.md` has measured numbers for the
     start-up cost per run and for sending a formula near the clause limit,
-    with and without the setting.
+    with and without the setting, under CPython and, if installed, PyPy; and
+    `START_UP_SECONDS` is set from the worst measured start-up (a few times
+    it, so a busy machine does not trip it), or kept at 60 s with the reason
+    written next to it.
+  - **Note:** if sending a formula near the clause limit costs seconds,
+    file a new item for a binary request format instead of JSON: the
+    literals as 4-byte integers plus the clause lengths, read with the
+    `array` module at C speed (works under PyPy too). Smaller and faster to
+    parse than JSON text, and the change stays inside `solver_process.py`.
+    Shared memory was considered and is not worth it: the child still has
+    to build the solvers' lists from the buffer, and that is most of the
+    parse cost, and a killed child can leak the segment on POSIX.
 
 - [ ] **RUNNER-8. Documentation**
   - **Difficulty:** easy

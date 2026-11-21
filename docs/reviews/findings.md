@@ -442,3 +442,55 @@ gets a dated file of its own in this folder instead, like
     thread may wait on the child.
   - **Done when:** a test shows that a timer firing after `_finalize` adds
     no log line and does not call `terminate()`, and the API tests pass.
+
+- [ ] **F2. Tests that replace the solver child's program each build their own `Popen` spy**
+  (added 2026-11-21, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** five tests in `tests/test_solver_process.py` and
+    `tests/test_runtime.py` (`run_in_background`, `run_solver_with`, the
+    non-UTF-8 stderr test, the two "wins over a stop" tests,
+    `FAILING_DPLL_CHILD`) each patch `subprocess.Popen` with a hand-written
+    spy. In RUNNER-4 one of them captured `subprocess.Popen` after an
+    earlier subtest had patched it: the patches stacked, every subtest ran
+    the first subtest's program, and all failed with the same misleading
+    error. RUNNER-5 and RUNNER-11 will write more such tests.
+  - **Fix:** one helper in `tests/` that takes the real `Popen` once at
+    import, runs a given program in place of the child, records the
+    children and kills the ones still running in cleanup; the five tests
+    use it.
+  - **Done when:** no test in `tests/` patches `subprocess.Popen` with its
+    own spy for the solver child, and the tests pass unchanged in what they
+    check.
+
+- [ ] **F3. Nothing says that line endings need no handling in this repository**
+  (added 2026-11-21, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** in RUNNER-4 the agent edited files with Python scripts in
+    shell heredocs to keep CRLF, following the CRLF rule of the parent
+    folder's `CLAUDE.md` (meant for the coursework). The shell rewrote the
+    backslashes in those scripts twice, which gave two `SyntaxError`s and
+    four extra round trips. Here git stores LF and checks out CRLF
+    (`core.autocrlf=true` on the owner's machine, index `i/lf`), and the
+    Edit tool keeps a file's line endings, so no handling is needed.
+    `core.autocrlf` is a local setting, so a cloud clone does not share it.
+  - **Fix:** one line in the "Notes for Claude Code" of `CLAUDE.md`: git
+    normalises line endings; edit with Edit. Optionally a `.gitattributes`
+    with `* text=auto`, so the same holds for every clone.
+  - **Done when:** `CLAUDE.md` carries the line, and, if the
+    `.gitattributes` is added, `git ls-files --eol` shows `i/lf` for every
+    text file.
+
+- [ ] **F4. The hard triggers do not name `sat_core/solver_process.py`**
+  (added 2026-11-21, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** the "Concurrency" trigger in `docs/plans/README.md` lists
+    `manager.py`, `parallel.py`, `runtime.py` and `live.ts`, not the solver
+    child's module, which owns a process, three threads and a queue.
+    RUNNER-4 was rated medium, so `/do-item` on Sonnet started it,
+    re-rated it hard and stopped, costing the owner a turn; RUNNER-7 was
+    re-rated for the same reason.
+  - **Fix:** add `sat_core/solver_process.py` to the trigger's file list,
+    and re-rate the open items that touch it: RUNNER-6 (easy, changes the
+    child's `serve()`) becomes hard or gets a `Not hard:` line.
+  - **Done when:** the trigger names the file and every open item that
+    touches it is hard or carries a `Not hard:` line.

@@ -1,6 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
-- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20)
+- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
+  done 2026-11-21)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -91,7 +92,7 @@ installed.
     `sys.executable` (run the solver tests of that file twice, with and
     without the setting), and an unset setting starts no process.
 
-- [ ] **RUNNER-3. Cancel, skip and timeout reach the child**
+- [x] **RUNNER-3. Cancel, skip and timeout reach the child** - Done 2026-11-21.
   - **Difficulty:** hard (process lifetime)
   - **Blocked by:** RUNNER-2
   - **Done when:** tests on a formula that runs for seconds show that
@@ -113,6 +114,12 @@ installed.
 - [ ] **RUNNER-5. Jobs and benchmarks work through the child**
   - **Difficulty:** hard (re-rated 2026-11-20 from medium: jobs and benchmarks start the solver child process)
   - **Blocked by:** RUNNER-3, RUNNER-4
+  - **How:** the child must end when the process that started it ends. Today
+    only `run_in_child`'s own clean-up kills it, and that never runs when the
+    manager's force stop terminates the job process or a pool worker leaves
+    with `os._exit` (`exit_when_parent_dies`): the child is orphaned and, with
+    no timeout, runs for ever. For example a thread in the child that ends it
+    when its parent is gone (found in the RUNNER-3 review).
   - **Done when:** with the setting on, API tests run a solve job and a small
     benchmark sequentially and with `workers: 2`, get the same rows as without
     the setting (statuses and work counts), and Stop on a running benchmark

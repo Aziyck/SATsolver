@@ -36,7 +36,10 @@ mistakes still reaches the caller; a child that ends without a result anyway
 is reported as an ERROR run.
 
 The parent side is run_in_child, which run_solver calls when
-WIZSAT_SOLVER_PYTHON is set.
+WIZSAT_SOLVER_PYTHON is set. The child cannot see the parent's cancel token,
+so the parent watches it while it waits: a cancel or a skip kills the child,
+and so does a child still running KILL_MARGIN_SECONDS past its timeout
+(measured from its first log line, when the child's own clock has started).
 """
 
 from __future__ import annotations
@@ -50,22 +53,49 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from typing import Any, Callable, TextIO
 
-from sat_core.runtime import EVENT_LOG, RunEvent, emit
+from sat_core.models import STATUS_TIMEOUT
+from sat_core.runtime import EVENT_LOG, RunEvent, RunToken, cancellation_status, emit, stop_requested
 from sat_core.solver_registry import SOLVER_PYTHON_ENV, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
 STDERR_TAIL_LINES = 20
+# How often the waiting parent looks at the cancel token.
+POLL_SECONDS = 0.05
+# The child enforces the timeout itself. The parent kills it only when it is
+# still running this long after its limit: a hung child, or a solver that does
+# not reach a stop check in time (either way the run is over its limit).
+KILL_MARGIN_SECONDS = 1.0
+# The child's clock starts after its interpreter has started and it has parsed
+# the request, and its first log line comes right then. The parent measures
+# the limit from that line; until it arrives, it allows this much for the
+# start-up (seconds near the clause limit) before it counts a child as hung.
+START_UP_SECONDS = 60.0
+# Why the parent killed the child ("killed" in the result line it makes).
+KILLED_BY_TOKEN = "token"  # the caller's cancel token: cancel, skip or its own timeout
+KILLED_BY_TIME_LIMIT = "time limit"  # still running KILL_MARGIN_SECONDS past the request's timeout
 
 
-def run_in_child(python: str, request: dict[str, Any], event_callback=None) -> tuple[dict[str, Any] | None, str]:
+def run_in_child(
+    python: str,
+    request: dict[str, Any],
+    event_callback=None,
+    cancel_token: RunToken | None = None,
+) -> tuple[dict[str, Any] | None, str]:
     """
     Run one request in a child process of `python`; return (its result line, the end of its stderr).
 
     The result line is None when the child ended without one. Log lines reach
     event_callback on the calling thread as they arrive. The request is not
     checked here: run_solver validates it before it calls this.
+
+    A cancel or skip on cancel_token, or a child still running
+    KILL_MARGIN_SECONDS past the request's timeout, kills the child. The
+    result line is then made here, with the stop's status, no solution or
+    stats, and "killed" set to KILLED_BY_TOKEN or KILLED_BY_TIME_LIMIT. A
+    result the child had already sent wins over a stop.
     """
 
     # Without the setting the child runs the solver itself instead of starting
@@ -77,9 +107,43 @@ def run_in_child(python: str, request: dict[str, Any], event_callback=None) -> t
         # Popen runs the child in ROOT, and a relative path would be looked up
         # there on POSIX but in our own folder on Windows: fix it to ours.
         python = os.path.abspath(python)
+    # Encoded here, so a request that cannot be encoded raises to the caller.
+    text = json.dumps(request)
+    timeout = request.get("timeout")
     lines: queue.Queue[str | None] = queue.Queue()
     stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL_LINES)
     result = None
+    stop_status = killed_by = None
+    first_line_at = None
+    started = time.perf_counter()
+
+    def take(line: str) -> dict[str, Any] | None:
+        """Handle one stdout line; return it when it is the result."""
+
+        nonlocal first_line_at
+        if first_line_at is None:
+            first_line_at = time.perf_counter()
+        message = json.loads(line)
+        if message["type"] == "log":
+            emit(event_callback, EVENT_LOG, message["message"])
+        elif message["type"] == "result":
+            return message
+        return None
+
+    def drain() -> dict[str, Any] | None:
+        """Handle the lines already queued; return the result if one is among them."""
+
+        while True:
+            try:
+                line = lines.get_nowait()
+            except queue.Empty:
+                return None
+            if line is None:
+                return None
+            message = take(line)
+            if message is not None:
+                return message
+
     with subprocess.Popen(
         [python, "-m", "sat_core.solver_process"],
         stdin=subprocess.PIPE,
@@ -94,36 +158,83 @@ def run_in_child(python: str, request: dict[str, Any], event_callback=None) -> t
         env=env,
     ) as child:
         # Both pipes are read on threads from the start: a child that fills
-        # either pipe while nobody reads it would block.
-        readers = [
+        # either pipe while nobody reads it would block. The request is
+        # written on a thread too: a big one takes seconds to go through the
+        # pipe, and a stop must not wait for that.
+        threads = [
             threading.Thread(target=_read_lines, args=(child.stdout, lines.put, lines.put), daemon=True),
             threading.Thread(target=_read_lines, args=(child.stderr, stderr_tail.append, None), daemon=True),
+            threading.Thread(target=_write_request, args=(child.stdin, text), daemon=True),
         ]
-        for reader in readers:
-            reader.start()
+        for thread in threads:
+            thread.start()
         try:
-            try:
-                child.stdin.write(json.dumps(request))
-                child.stdin.close()
-            except OSError:
-                # The child ended before reading its request, so it has no
-                # result. Close again: the first close may have failed while
-                # flushing, and Popen's own close would raise the same error.
-                with contextlib.suppress(OSError):
-                    child.stdin.close()
-            while (line := lines.get()) is not None:
-                message = json.loads(line)
-                if message["type"] == "log":
-                    emit(event_callback, EVENT_LOG, message["message"])
-                elif message["type"] == "result":
-                    result = message
+            while True:
+                try:
+                    line = lines.get(timeout=POLL_SECONDS)
+                except queue.Empty:
+                    line = ""
+                if line is None:
+                    break
+                if line and (result := take(line)) is not None:
+                    # The run is over: a stop that comes now changes nothing.
+                    break
+                # Checked after every line as well: a chatty child may never
+                # leave the queue empty.
+                stop = _stop_reason(cancel_token, timeout, started, first_line_at)
+                if stop is not None:
+                    # The child may have finished already, with its result
+                    # queued behind log lines not read yet: that result wins.
+                    result = drain()
+                    if result is None:
+                        stop_status, killed_by = stop
+                    break
         finally:
+            # Also reached after the result line: the child is exiting then,
+            # and a kill only saves the wait.
             if child.poll() is None:
                 child.kill()
             child.wait()
-            for reader in readers:
-                reader.join(timeout=5)
+            for thread in threads:
+                thread.join(timeout=5)
+    if stop_status is not None:
+        result = {
+            "type": "result",
+            "status": stop_status,
+            "solution": None,
+            "stats": {},
+            "error": None,
+            "elapsed": time.perf_counter() - (first_line_at or started),
+            "killed": killed_by,
+        }
     return result, "".join(stderr_tail).strip()
+
+
+def _stop_reason(
+    cancel_token: RunToken | None, timeout: float | None, started: float, first_line_at: float | None
+) -> tuple[str, str] | None:
+    """(status, KILLED_BY_*) to kill the child with, or None while it may go on."""
+
+    if stop_requested(cancel_token):
+        return cancellation_status(cancel_token), KILLED_BY_TOKEN
+    if timeout is None:
+        return None
+    clock_start = first_line_at if first_line_at is not None else started + START_UP_SECONDS
+    if time.perf_counter() > clock_start + timeout + KILL_MARGIN_SECONDS:
+        return STATUS_TIMEOUT, KILLED_BY_TIME_LIMIT
+    return None
+
+
+def _write_request(stdin: TextIO, text: str) -> None:
+    try:
+        stdin.write(text)
+        stdin.close()
+    except OSError:
+        # The child ended (or was killed) before reading its request, so it
+        # has no result. Close again: the first close may have failed while
+        # flushing, and Popen's own close would raise the same error.
+        with contextlib.suppress(OSError):
+            stdin.close()
 
 
 def _read_lines(stream: TextIO, sink: Callable[[str], None], at_end: Callable[[None], None] | None) -> None:

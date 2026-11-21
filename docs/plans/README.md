@@ -101,7 +101,8 @@ change is. `CLAUDE.md` maps it to a model and a review.
 small the change. A one-line change in a hard area is hard.
 
 - **Concurrency:** `sat_web/manager.py`, `sat_core/parallel.py`,
-  `sat_core/runtime.py`, `frontend/src/api/live.ts`; any lock, thread,
+  `sat_core/runtime.py`, `sat_core/solver_process.py`,
+  `frontend/src/api/live.ts`; any lock, thread,
   process or queue; a race between two channels (a REST reply and a
   WebSocket event).
 - **Stopping:** how Stop, Skip or a timeout is handled, or which event ends a

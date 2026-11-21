@@ -163,6 +163,10 @@ With every run in its own child, a per-run limit becomes possible:
 
 - [ ] **MEM-3. The solver runner reports memory per run**
   - **Difficulty:** easy
+  - **Not hard:** `sat_core/solver_process.py` is a hard trigger, but this
+    adds two measurements to the child and two fields to the result line.
+    The read loop, the threads and the kill paths stay as they are, and
+    their tests pass unchanged. Touching those makes it hard.
   - **Blocked by:** MEM-1, RUNNER-2
   - **How:** the child measures its baseline after reading the clauses and its
     peak after the solver returns, and sends both with the result.

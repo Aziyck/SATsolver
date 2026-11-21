@@ -480,7 +480,7 @@ gets a dated file of its own in this folder instead, like
     `.gitattributes` is added, `git ls-files --eol` shows `i/lf` for every
     text file.
 
-- [ ] **F4. The hard triggers do not name `sat_core/solver_process.py`**
+- [x] **F4. The hard triggers do not name `sat_core/solver_process.py`** - Done 2026-11-21.
   (added 2026-11-21, found by retro)
   - **Difficulty:** easy
   - **Problem:** the "Concurrency" trigger in `docs/plans/README.md` lists

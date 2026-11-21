@@ -128,6 +128,10 @@ installed.
 
 - [ ] **RUNNER-6. Results say which interpreter ran them**
   - **Difficulty:** easy
+  - **Not hard:** `sat_core/solver_process.py` is a hard trigger, but this
+    adds one field to the result line and how the parent reads it. The read
+    loop, the threads and the kill paths stay as they are, and their tests
+    pass unchanged. Touching those makes it hard.
   - **Blocked by:** RUNNER-2, META-2
   - **How:** the child sends `run_environment()` with its result; it replaces
     the job process's own environment for that run.

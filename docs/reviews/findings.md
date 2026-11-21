@@ -462,7 +462,7 @@ gets a dated file of its own in this folder instead, like
     own spy for the solver child, and the tests pass unchanged in what they
     check.
 
-- [ ] **F3. Nothing says that line endings need no handling in this repository**
+- [x] **F3. Nothing says that line endings need no handling in this repository** - Done 2026-11-21.
   (added 2026-11-21, found by retro)
   - **Difficulty:** easy
   - **Problem:** in RUNNER-4 the agent edited files with Python scripts in

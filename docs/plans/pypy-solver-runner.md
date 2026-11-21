@@ -148,6 +148,14 @@ installed.
     `START_UP_SECONDS` is set from the worst measured start-up (a few times
     it, so a busy machine does not trip it), or kept at 60 s with the reason
     written next to it.
+  - **Note:** if sending a formula near the clause limit costs seconds,
+    file a new item for a binary request format instead of JSON: the
+    literals as 4-byte integers plus the clause lengths, read with the
+    `array` module at C speed (works under PyPy too). Smaller and faster to
+    parse than JSON text, and the change stays inside `solver_process.py`.
+    Shared memory was considered and is not worth it: the child still has
+    to build the solvers' lists from the buffer, and that is most of the
+    parse cost, and a killed child can leak the segment on POSIX.
 
 - [ ] **RUNNER-8. Documentation**
   - **Difficulty:** easy

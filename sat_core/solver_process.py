@@ -40,6 +40,9 @@ WIZSAT_SOLVER_PYTHON is set. The child cannot see the parent's cancel token,
 so the parent watches it while it waits: a cancel or a skip kills the child,
 and so does a child still running KILL_MARGIN_SECONDS past its timeout
 (measured from its first log line, when the child's own clock has started).
+An interpreter that cannot start, a child that ends without a result and a
+line that is not part of the protocol raise SolverProcessError, with a
+readable message; run_solver turns it into an ERROR run.
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ from __future__ import annotations
 from collections import deque
 import contextlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -56,12 +60,13 @@ import threading
 import time
 from typing import Any, Callable, TextIO
 
-from sat_core.models import STATUS_TIMEOUT
+from sat_core.models import STATUS_SAT, STATUS_TIMEOUT, STATUSES
 from sat_core.runtime import EVENT_LOG, RunEvent, RunToken, cancellation_status, emit, stop_requested
 from sat_core.solver_registry import SOLVER_PYTHON_ENV, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
 STDERR_TAIL_LINES = 20
+STDERR_TAIL_CHARACTERS = 2000  # a traceback's end fits; one huge line does not flood the message
 # How often the waiting parent looks at the cancel token.
 POLL_SECONDS = 0.05
 # The child enforces the timeout itself. The parent kills it only when it is
@@ -76,6 +81,14 @@ START_UP_SECONDS = 60.0
 # Why the parent killed the child ("killed" in the result line it makes).
 KILLED_BY_TOKEN = "token"  # the caller's cancel token: cancel, skip or its own timeout
 KILLED_BY_TIME_LIMIT = "time limit"  # still running KILL_MARGIN_SECONDS past the request's timeout
+# The fields every result line carries.
+RESULT_FIELDS = ("status", "solution", "stats", "error", "elapsed")
+# How much of a broken line an error message quotes.
+QUOTED_CHARACTERS = 200
+
+
+class SolverProcessError(Exception):
+    """The child could not start, or ended or broke the protocol without a result. The message is for the user."""
 
 
 def run_in_child(
@@ -83,13 +96,18 @@ def run_in_child(
     request: dict[str, Any],
     event_callback=None,
     cancel_token: RunToken | None = None,
-) -> tuple[dict[str, Any] | None, str]:
+) -> dict[str, Any]:
     """
-    Run one request in a child process of `python`; return (its result line, the end of its stderr).
+    Run one request in a child process of `python`; return its result line.
 
-    The result line is None when the child ended without one. Log lines reach
-    event_callback on the calling thread as they arrive. The request is not
-    checked here: run_solver validates it before it calls this.
+    Log lines reach event_callback on the calling thread as they arrive. The
+    model's variables come back as ints. The request is not checked here:
+    run_solver validates it before it calls this.
+
+    SolverProcessError, with a message that carries the end of the child's
+    stderr, when the interpreter cannot be started, the child ends without a
+    result, or it sends a line that is not part of the protocol (the child is
+    killed then: whatever it sends next cannot be trusted either).
 
     A cancel or skip on cancel_token, or a child still running
     KILL_MARGIN_SECONDS past the request's timeout, kills the child. The
@@ -113,7 +131,7 @@ def run_in_child(
     lines: queue.Queue[str | None] = queue.Queue()
     stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL_LINES)
     result = None
-    stop_status = killed_by = None
+    stop_status = killed_by = broken = None
     first_line_at = None
     started = time.perf_counter()
 
@@ -123,12 +141,11 @@ def run_in_child(
         nonlocal first_line_at
         if first_line_at is None:
             first_line_at = time.perf_counter()
-        message = json.loads(line)
+        message = _parse_line(line)
         if message["type"] == "log":
             emit(event_callback, EVENT_LOG, message["message"])
-        elif message["type"] == "result":
-            return message
-        return None
+            return None
+        return message
 
     def drain() -> dict[str, Any] | None:
         """Handle the lines already queued; return the result if one is among them."""
@@ -144,19 +161,23 @@ def run_in_child(
             if message is not None:
                 return message
 
-    with subprocess.Popen(
-        [python, "-m", "sat_core.solver_process"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        # A byte that is not UTF-8 must not kill a reader thread: nobody would
-        # drain that pipe any more, and the child would block on it.
-        errors="replace",
-        cwd=ROOT,
-        env=env,
-    ) as child:
+    try:
+        child = subprocess.Popen(
+            [python, "-m", "sat_core.solver_process"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            # A byte that is not UTF-8 must not kill a reader thread: nobody
+            # would drain that pipe any more, and the child would block on it.
+            errors="replace",
+            cwd=ROOT,
+            env=env,
+        )
+    except OSError as exc:
+        raise SolverProcessError(_start_failure(python, exc)) from exc
+    with child:
         # Both pipes are read on threads from the start: a child that fills
         # either pipe while nobody reads it would block. The request is
         # written on a thread too: a big one takes seconds to go through the
@@ -185,10 +206,16 @@ def run_in_child(
                 if stop is not None:
                     # The child may have finished already, with its result
                     # queued behind log lines not read yet: that result wins.
-                    result = drain()
+                    try:
+                        result = drain()
+                    except _BrokenLine:
+                        # Killed anyway: the stop the user asked for is the answer.
+                        result = None
                     if result is None:
                         stop_status, killed_by = stop
                     break
+        except _BrokenLine as exc:
+            broken = exc.line
         finally:
             # Also reached after the result line: the child is exiting then,
             # and a kill only saves the wait.
@@ -197,8 +224,19 @@ def run_in_child(
             child.wait()
             for thread in threads:
                 thread.join(timeout=5)
+    stderr = "".join(stderr_tail).strip()
+    if len(stderr) > STDERR_TAIL_CHARACTERS:
+        # The message lands in the log, the database and the page.
+        stderr = "..." + stderr[-STDERR_TAIL_CHARACTERS:]
+    if broken is not None:
+        quoted = broken.strip()
+        if len(quoted) > QUOTED_CHARACTERS:
+            quoted = quoted[:QUOTED_CHARACTERS] + "..."
+        raise SolverProcessError(
+            _with_stderr(f"The solver process ({python}) sent a line that is not part of the protocol: {quoted!r}.", stderr)
+        )
     if stop_status is not None:
-        result = {
+        return {
             "type": "result",
             "status": stop_status,
             "solution": None,
@@ -207,7 +245,73 @@ def run_in_child(
             "elapsed": time.perf_counter() - (first_line_at or started),
             "killed": killed_by,
         }
-    return result, "".join(stderr_tail).strip()
+    if result is None:
+        raise SolverProcessError(_with_stderr(f"The solver process ({python}) ended without a result.", stderr))
+    return result
+
+
+class _BrokenLine(Exception):
+    def __init__(self, line: str) -> None:
+        super().__init__(line)
+        self.line = line
+
+
+def _parse_line(line: str) -> dict[str, Any]:
+    """One stdout line as a protocol message (the model's variables as ints), or _BrokenLine."""
+
+    try:
+        message = json.loads(line)
+    except (ValueError, RecursionError):
+        # RecursionError: a deeply nested line. It is not a ValueError.
+        raise _BrokenLine(line) from None
+    if not isinstance(message, dict):
+        raise _BrokenLine(line)
+    if message.get("type") == "log" and isinstance(message.get("message"), str):
+        return message
+    if message.get("type") != "result" or any(field not in message for field in RESULT_FIELDS):
+        raise _BrokenLine(line)
+    solution, stats = message["solution"], message["stats"]
+    if (
+        message["status"] not in STATUSES
+        or not _is_finite_number(message["elapsed"])
+        or not (message["error"] is None or isinstance(message["error"], str))
+        or not isinstance(stats, dict)
+        # The child sends public_stats: small scalars only. json accepts NaN,
+        # which the API's JSON responses refuse.
+        or not all(_is_scalar(value) for value in stats.values())
+        # A model goes with SAT only, as run_solver does in-process.
+        or (solution is not None and (message["status"] != STATUS_SAT or not isinstance(solution, dict)))
+    ):
+        raise _BrokenLine(line)
+    # Only the parent marks a run as killed (run_in_child's own result line).
+    message.pop("killed", None)
+    if solution is not None:
+        # JSON object keys are strings; variables are ints.
+        model = {}
+        for var, value in solution.items():
+            if not (var.isdigit() and int(var) > 0 and isinstance(value, bool)):
+                raise _BrokenLine(line)
+            model[int(var)] = value
+        message["solution"] = model
+    return message
+
+
+def _is_finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _is_scalar(value: Any) -> bool:
+    return value is None or isinstance(value, (bool, str)) or _is_finite_number(value)
+
+
+def _start_failure(python: str, exc: OSError) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return f"The solver interpreter {python} was not found. Check {SOLVER_PYTHON_ENV}."
+    return f"The solver interpreter {python} could not be started ({exc}). Check {SOLVER_PYTHON_ENV}."
+
+
+def _with_stderr(message: str, stderr: str) -> str:
+    return f"{message} Its last output: {stderr}" if stderr else message
 
 
 def _stop_reason(

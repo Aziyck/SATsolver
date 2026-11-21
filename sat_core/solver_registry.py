@@ -731,7 +731,7 @@ def run_solver(
     if python:
         # Imported here: solver_process imports this module, and without the
         # setting nothing of it is needed.
-        from sat_core.solver_process import KILLED_BY_TIME_LIMIT, run_in_child
+        from sat_core.solver_process import KILLED_BY_TIME_LIMIT, SolverProcessError, run_in_child
 
         request = {
             "clauses": clauses,
@@ -744,11 +744,10 @@ def run_solver(
         }
         # The caller's token, not `token`: the child enforces the timeout on
         # its own clock, which starts later than ours.
-        line, stderr_tail = run_in_child(python, request, event_callback, cancel_token)
-        if line is None:
-            message = f"The solver process ({python}) ended without a result."
-            if stderr_tail:
-                message += f" Its last output: {stderr_tail}"
+        try:
+            line = run_in_child(python, request, event_callback, cancel_token)
+        except SolverProcessError as exc:
+            message = str(exc)
             emit(event_callback, EVENT_LOG, f"{name} error: {message}")
             return result(STATUS_ERROR, error=message)
         if line.get("killed"):
@@ -759,11 +758,7 @@ def run_solver(
                 message += " The solver process was still running past its time limit and was ended."
             emit(event_callback, EVENT_LOG, message)
             return result(status, elapsed)
-        solution = line["solution"]
-        if solution is not None:
-            # JSON object keys are strings; variables are ints.
-            solution = {int(var): value for var, value in solution.items()}
-        return result(line["status"], line["elapsed"], solution, line["stats"], line["error"])
+        return result(line["status"], line["elapsed"], line["solution"], line["stats"], line["error"])
 
     emit(event_callback, EVENT_LOG, f"Solving with {name}...")
     solver_clauses, original = clauses, None

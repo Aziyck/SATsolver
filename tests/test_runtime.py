@@ -241,9 +241,32 @@ class SparseNumberingTests(unittest.TestCase):
         self.assertFalse(any("renumbered" in message for message in log_messages(events)))
 
 
+# The child's own program, with DPLL replaced by one that raises (as failing_solver does in this process).
+FAILING_DPLL_CHILD = (
+    "import dataclasses, sys\n"
+    "from sat_core import solver_process, solver_registry\n"
+    "def boom(*args):\n"
+    "    raise RecursionError('maximum recursion depth exceeded')\n"
+    "spec = solver_registry.get_solver('dpll')\n"
+    "solver_registry._SOLVERS['dpll'] = dataclasses.replace(spec, runner=boom)\n"
+    "sys.stdin.reconfigure(encoding='utf-8')\n"
+    "sys.exit(solver_process.main())\n"
+)
+
+
 class RunSolverInChildTests(InChildProcess, RunSolverTests):
     def test_solver_exceptions_become_error_status(self):
-        self.skipTest("the broken solver is patched into this process, not into the child (child failures: RUNNER-4)")
+        # A patch in this process does not reach the child, so the child patches itself.
+        real_popen = subprocess.Popen
+
+        def popen(args, **kwargs):
+            return real_popen([sys.executable, "-c", FAILING_DPLL_CHILD], **kwargs)
+
+        with mock.patch("subprocess.Popen", side_effect=popen):
+            result = run_solver([[1, 2]], "dpll")
+
+        self.assertEqual(result.status, "ERROR")
+        self.assertIn("recursion limit", result.error)
 
 
 class SparseNumberingInChildTests(InChildProcess, SparseNumberingTests):

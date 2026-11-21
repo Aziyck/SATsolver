@@ -23,10 +23,12 @@ from unittest import mock
 from problems import build_problem
 from sat_core import solver_process, solver_registry
 from sat_core.runtime import EVENT_LOG, RunToken
-from sat_core.solver_process import run_in_child
+from sat_core.solver_process import SolverProcessError, run_in_child
 from sat_core.solver_registry import all_solvers, get_solver, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
+# Taken before any test patches it: patches started in subtests stack up.
+REAL_POPEN = subprocess.Popen
 
 SAT_CLAUSES = [[1, 2], [-1, 2], [1, -2]]
 UNSAT_CLAUSES = [[1, 2], [-1, 2], [1, -2], [-1, -2]]
@@ -236,18 +238,21 @@ class ParentSideTests(unittest.TestCase):
             return real_popen([sys.executable, "-c", script], **kwargs)
 
         outcome = []
+
+        def run():
+            try:
+                run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES))
+            except SolverProcessError as exc:
+                outcome.append(exc)
+
         with mock.patch("subprocess.Popen", side_effect=popen):
-            worker = threading.Thread(
-                target=lambda: outcome.append(run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES))),
-                daemon=True,  # a hang fails the test instead of stopping the test run
-            )
+            worker = threading.Thread(target=run, daemon=True)  # a hang fails the test instead of the test run
             worker.start()
             worker.join(timeout=30)
 
         self.assertFalse(worker.is_alive(), "run_in_child did not return")
-        result, stderr_tail = outcome[0]
-        self.assertIsNone(result)
-        self.assertTrue(stderr_tail.endswith("end"))
+        # No result: the error carries the end of stderr, past the byte that is not UTF-8.
+        self.assertTrue(str(outcome[0]).endswith("end"))
 
 
 # A WalkSAT budget that would run for minutes on UNSAT_CLAUSES: only a stop ends the run.
@@ -400,10 +405,164 @@ class StopReachesTheChildTests(unittest.TestCase):
                 time.sleep(0.5)  # meanwhile the other lines and the end of stdout are queued
 
         with mock.patch("subprocess.Popen", side_effect=lambda args, **kw: real_popen([sys.executable, "-c", script], **kw)):
-            result, _ = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
+            result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
 
         self.assertEqual(result["status"], "SAT")
         self.assertNotIn("killed", result)
+
+
+def result_line(**fields):
+    """A result line as the child writes it, with some fields replaced."""
+
+    line = {"type": "result", "status": "SAT", "solution": {"1": True}, "stats": {}, "error": None, "elapsed": 0.01}
+    line.update(fields)
+    return json.dumps(line)
+
+
+class ChildFailuresBecomeErrorTests(unittest.TestCase):
+    """A child that cannot run, or breaks the protocol, gives an ERROR run; run_solver never raises (RUNNER-4)."""
+
+    def run_solver_with(self, python=sys.executable, script=None):
+        """
+        run_solver in the child, on a thread so a hang fails the test; return (result, log messages, children).
+
+        script replaces the child's program (run as `python -c script`).
+        """
+
+        children = []
+
+        def popen(args, **kwargs):
+            child = REAL_POPEN([sys.executable, "-c", script] if script else args, **kwargs)
+            children.append(child)
+            return child
+
+        def cleanup():
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait()
+
+        self.addCleanup(cleanup)
+        for patcher in (
+            mock.patch("subprocess.Popen", side_effect=popen),
+            mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": python}),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        events = []
+        outcome = {}
+
+        def run():
+            try:
+                outcome["result"] = run_solver(SAT_CLAUSES, "cdcl", event_callback=events.append)
+            except BaseException as exc:  # noqa: BLE001 - the test reports it
+                outcome["raised"] = exc
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(timeout=30)
+        self.assertFalse(worker.is_alive(), "run_solver did not return")
+        self.assertNotIn("raised", outcome, f"run_solver raised {outcome.get('raised')!r}")
+        return outcome["result"], [event.message for event in events if event.type == EVENT_LOG], children
+
+    def assert_error(self, result, messages, *parts):
+        self.assertEqual(result.status, "ERROR")
+        self.assertIsNone(result.solution)
+        for part in parts:
+            self.assertIn(part, result.error)
+        # The run's log says what went wrong too.
+        self.assertTrue(any(result.error in message for message in messages), messages)
+
+    def test_an_interpreter_that_does_not_exist(self):
+        missing = str(Path(ROOT, "no-such-folder", "python"))
+
+        result, messages, _ = self.run_solver_with(python=missing)
+
+        self.assert_error(result, messages, missing, "not found", "WIZSAT_SOLVER_PYTHON")
+
+    def test_a_child_that_exits_without_a_result_shows_the_end_of_its_stderr(self):
+        script = "import sys; sys.stderr.write('early lines\\n' * 50 + 'Traceback: the last words\\n'); sys.exit(1)"
+
+        result, messages, _ = self.run_solver_with(script=script)
+
+        self.assert_error(result, messages, "ended without a result", "the last words")
+
+    def test_a_child_that_prints_a_broken_line(self):
+        # Each child then hangs: the parent must not wait for it to end.
+        broken_lines = {
+            "not JSON": "not json at all",
+            "JSON that is not an object": "[1, 2]",
+            "an unknown type": json.dumps({"type": "progress"}),
+            "a log line without its message": json.dumps({"type": "log"}),
+            "a result without its fields": json.dumps({"type": "result", "status": "SAT"}),
+            "a result with an unknown status": json.dumps(
+                {"type": "result", "status": "MAYBE", "solution": None, "stats": {}, "error": None, "elapsed": 0}
+            ),
+            "a model with a variable that is not a number": result_line(solution={"x": True}),
+            "a model with a value that is not a boolean": result_line(solution={"1": "yes"}),
+            "a model with an UNSAT status": result_line(status="UNSAT", solution={"1": True}),
+            "an elapsed time that is NaN": result_line(elapsed=float("nan")),
+            "an error that is not a string": result_line(error={"x": 1}),
+            "a statistic that is not a scalar": result_line(stats={"conflicts": [1, 2]}),
+        }
+        # Built in the child: too long for a command line. json raises RecursionError on it, not ValueError.
+        deep = "'[' * 100000 + ']' * 100000"
+        for name, line, expression in [(name, line, repr(line)) for name, line in broken_lines.items()] + [
+            ("a line nested too deeply", "[[[[[[[[", deep)
+        ]:
+            with self.subTest(name):
+                script = (
+                    "import sys, time\n"
+                    "sys.stdin.read()\n"
+                    f"print({expression}, flush=True)\n"
+                    "sys.stderr.write('stderr of the broken child\\n'); sys.stderr.flush()\n"
+                    "time.sleep(60)\n"
+                )
+                started = time.perf_counter()
+                result, messages, children = self.run_solver_with(script=script)
+
+                self.assert_error(result, messages, "not part of the protocol", line[:20])
+                self.assertLess(time.perf_counter() - started, 10)
+                self.assertIsNotNone(children[-1].poll(), "the child process is still running")
+
+    def test_a_good_result_line_is_accepted(self):
+        # Guards the broken lines above: the same line with nothing replaced is a result.
+        script = f"import sys; sys.stdin.read(); print({result_line()!r})"
+
+        result, _, _ = self.run_solver_with(script=script)
+
+        self.assertEqual((result.status, result.solution), ("SAT", {1: True}))
+
+    def test_a_huge_stderr_does_not_flood_the_message(self):
+        script = "import sys; sys.stderr.write('x' * 5_000_000 + ' the last words'); sys.exit(1)"
+
+        result, _, _ = self.run_solver_with(script=script)
+
+        self.assertEqual(result.status, "ERROR")
+        self.assertLess(len(result.error), 3000)
+        self.assertTrue(result.error.endswith("the last words"))
+
+    def test_a_stop_wins_over_a_broken_line_read_after_it(self):
+        # The stop comes while the broken line waits in the queue: the child is
+        # killed for the stop, and the run is CANCELLED, not ERROR.
+        script = (
+            "import json, sys, time\n"
+            "sys.stdin.read()\n"
+            "print(json.dumps({'type': 'log', 'message': 'started'}), flush=True)\n"
+            "print('not json', flush=True)\n"
+            "time.sleep(60)\n"
+        )
+        token = RunToken()
+
+        def slow_callback(event):
+            if not token.is_cancelled():
+                token.cancel()
+                time.sleep(0.5)  # meanwhile the broken line is queued
+
+        with mock.patch("subprocess.Popen", side_effect=lambda args, **kw: REAL_POPEN([sys.executable, "-c", script], **kw)):
+            result = run_in_child(sys.executable, request_for("cdcl", SAT_CLAUSES), slow_callback, token)
+
+        self.assertEqual(result["status"], "CANCELLED")
 
 
 if __name__ == "__main__":

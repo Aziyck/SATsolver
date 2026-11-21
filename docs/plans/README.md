@@ -31,22 +31,22 @@ plans move to [`done/`](done/).
 Free to do at any point, when there is time or when the code is being
 touched anyway:
 
-- the remaining audit findings: A4-A6, A8, A9, A11, A14-A17;
-- the open findings in [`findings.md`](../reviews/findings.md): A23-A25,
-  A27-A33, A35, A36, A40;
-- the solver clean-up B1-B17 in the same audit;
-- [solver-optimisations.md](solver-optimisations.md), after the CDCL clean-up
-  items B6-B9 that touch the same code.
+- the open findings of the [2026-10-16 audit](../reviews/2026-10-16-audit.md),
+  whole-repo and solver clean-up alike;
+- the open findings in [`findings.md`](../reviews/findings.md);
+- [solver-optimisations.md](solver-optimisations.md), once the audit's CDCL
+  clean-up items that touch the same code are closed (its first task names
+  them in `Blocked by`).
 
 | File | What | Waits on |
 |---|---|---|
-| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings (A1-A17), solver simplification (B1-B17) | nothing |
-| [../reviews/findings.md](../reviews/findings.md) | findings made while working (A18-A41, then F1 onwards) | nothing |
+| [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings, solver simplification | nothing |
+| [../reviews/findings.md](../reviews/findings.md) | findings made while working | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | nothing |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
-| [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | audit B6-B9 |
+| [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | the audit's CDCL clean-up |
 
-To list every open item: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.
+To list every open item, the findings above included: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.
 
 ## The item format
 

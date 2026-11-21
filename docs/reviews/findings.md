@@ -495,7 +495,7 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** the trigger names the file and every open item that
     touches it is hard or carries a `Not hard:` line.
 
-- [ ] **F5. "Order of work" lists finding IDs that go stale**
+- [x] **F5. "Order of work" lists finding IDs that go stale** - Done 2026-11-21.
   (added 2026-11-21, found by retro)
   - **Difficulty:** easy
   - **Problem:** `docs/plans/README.md` names the open findings of

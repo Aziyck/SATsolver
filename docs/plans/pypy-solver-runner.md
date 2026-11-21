@@ -1,7 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  done 2026-11-21)
+  and RUNNER-4 done 2026-11-21)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -103,8 +103,9 @@ installed.
     - a child that ignores its timeout (patch it to sleep) is killed by the
       parent shortly after the limit and reported as `TIMEOUT`.
 
-- [ ] **RUNNER-4. Failures become `ERROR`, never an exception**
-  - **Difficulty:** medium
+- [x] **RUNNER-4. Failures become `ERROR`, never an exception** - Done 2026-11-21.
+  - **Difficulty:** hard (re-rated 2026-11-21 from medium: the fix is in `run_in_child`'s
+    read loop, which owns the child process, its reader threads and its queue)
   - **Blocked by:** RUNNER-2
   - **Done when:** tests show status `ERROR` with a readable message for: an
     interpreter path that does not exist; a child that exits without a result

@@ -182,6 +182,27 @@ installed.
     machine used for the thesis, and `docs/guide/performance.md` carries those
     numbers with the machine's metadata.
 
+- [ ] **RUNNER-11. The child protocol in its own pure module**
+  - **Difficulty:** medium
+  - **Not hard:** it moves pure code only (the message shapes and the
+    parent's parser); `run_in_child`'s read loop, threads and kill paths stay
+    as they are, proven by the stop and failure tests passing unchanged.
+  - **Blocked by:** RUNNER-4, RUNNER-6, MEM-3
+  - **What:** the protocol (the request, the log and result lines, and the
+    rules a line must follow) lives in `sat_core/solver_process.py` beside
+    the process handling. RUNNER-6 (the interpreter) and MEM-3 (memory) add
+    fields to the result line, so it grows. As with `sat_web/lifecycle.py`
+    and `sat_core/answers.py`, the rule moves out of the stateful code, so it
+    is tested without starting processes.
+  - **How:** a module `sat_core/solver_protocol.py` with the message shapes
+    the child writes and the parser the parent uses (after RUNNER-4,
+    `_parse_line` and `RESULT_FIELDS`). Both sides in `solver_process.py`
+    import it, and `tests/test_layers.py` places it in the engine layer.
+  - **Done when:** the broken-line cases of RUNNER-4 are tested against the
+    parser directly, without a child process; one broken-line test through a
+    real child remains; the other tests in `tests/test_solver_process.py`
+    pass unchanged.
+
 ## Measurements (2026-10-19)
 
 **Method:**

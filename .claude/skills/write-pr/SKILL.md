@@ -45,7 +45,9 @@ An **easy** item gets the opening line and `## Evidence`, nothing else.
    check as its command and result line (`262 tests OK, none skipped`), and
    each check not run with the reason. For a medium or hard item, the
    review's level and what it found.
-4. `## Rulings`: one bullet each: the choice, why, what it costs if wrong.
+4. `## Rulings`: one bullet each: the choice, why, the alternatives (one
+   line), what it costs if wrong, and where to change it (a file, function
+   or constant).
 5. `## Merge danger` (medium and hard):
    - **Door:** `two-way` (a revert restores everything) or `one-way` (a
      revert leaves something changed). One-way when the change writes the
@@ -61,5 +63,15 @@ An **easy** item gets the opening line and `## Evidence`, nothing else.
 
 Write the commit message to `commit.txt` and the body to `pr.md` in the
 scratchpad, for `git commit -F` and `gh pr create --body-file` unchanged.
-The owner report is short: the pull request link, the door, review findings
-left and why, new findings filed, and which item can start next.
+The owner report is short: the pull request link, the door, the choices the
+owner may want to change, review findings left and why, new findings filed,
+and which item can start next.
+
+**Choices the owner may want to change:** the rulings the owner would want a
+say in, at most three; the rest stay in the pull request. One line each:
+
+```text
+- <choice>. Why: <reason>. Alternatives: <A>; <B>. To change: <file, function or constant>.
+```
+
+A choice the owner overturns becomes a new item.

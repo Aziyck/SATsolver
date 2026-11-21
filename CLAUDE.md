@@ -33,6 +33,9 @@
   switch role with `{ force: true }`.
 - A push to `main` starts two workflows: "CI" (the tests) and "pages build
   and deployment". Check "CI".
+- Line endings: git stores LF and converts on checkout (`.gitattributes`), and
+  Edit keeps a file's own endings. Edit files with Edit; a CRLF rule from a
+  parent folder's `CLAUDE.md` does not apply here.
 
 ## Difficulty and models
 

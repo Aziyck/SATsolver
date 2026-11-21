@@ -494,3 +494,18 @@ gets a dated file of its own in this folder instead, like
     child's `serve()`) becomes hard or gets a `Not hard:` line.
   - **Done when:** the trigger names the file and every open item that
     touches it is hard or carries a `Not hard:` line.
+
+- [ ] **F5. "Order of work" lists finding IDs that go stale**
+  (added 2026-11-21, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** `docs/plans/README.md` names the open findings of
+    `findings.md` by ID ("A23-A25, A27-A33, A35, A36, A40"). A40 is done
+    and F1-F5 are missing, although the same file says statuses live on
+    the items, not there. The list is a copy of what the items already
+    record, and every closed or new finding makes it wrong.
+  - **Fix:** replace the ID list with a pointer to the items themselves
+    (the file already gives the command: `grep -n "^- \[ \]"
+    docs/reviews/*.md docs/plans/*.md`). Check the audit list on the line
+    above it the same way.
+  - **Done when:** "Order of work" names no finding ID that can go stale,
+    and following it still leads to every open finding.

@@ -7,6 +7,7 @@ import time
 import unittest
 from unittest import mock
 
+from child_process_spy import replace_child_program
 from problems import build_problem
 from sat_core.runtime import EVENT_LOG, EVENT_PROGRESS, RunEvent, RunToken
 from sat_core import solver_registry
@@ -257,13 +258,9 @@ FAILING_DPLL_CHILD = (
 class RunSolverInChildTests(InChildProcess, RunSolverTests):
     def test_solver_exceptions_become_error_status(self):
         # A patch in this process does not reach the child, so the child patches itself.
-        real_popen = subprocess.Popen
+        replace_child_program(self, script=FAILING_DPLL_CHILD)
 
-        def popen(args, **kwargs):
-            return real_popen([sys.executable, "-c", FAILING_DPLL_CHILD], **kwargs)
-
-        with mock.patch("subprocess.Popen", side_effect=popen):
-            result = run_solver([[1, 2]], "dpll")
+        result = run_solver([[1, 2]], "dpll")
 
         self.assertEqual(result.status, "ERROR")
         self.assertIn("recursion limit", result.error)

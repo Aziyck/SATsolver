@@ -11,8 +11,9 @@ with run_solver, and writes one JSON object per line to stdout:
 
 The request is {"clauses", "solver", "options", "log_level",
 "progress_interval", "timeout"}, and optionally "label" (the name the log
-lines use, as run_solver's label). The child reads stdin to its end before it
-starts, so the parent closes stdin after writing the request. "timeout" is
+lines use, as run_solver's label). It comes as one line (json.dumps writes no
+line breaks), and stdin then stays open for the whole run: it is the child's
+lifeline (below). "timeout" is
 enforced here, by run_solver; its clock starts after the interpreter has
 started and the request has been parsed, which can take seconds for a
 formula near the clause limit. A parent that kills a hung child counts that
@@ -43,6 +44,14 @@ and so does a child still running KILL_MARGIN_SECONDS past its timeout
 An interpreter that cannot start, a child that ends without a result and a
 line that is not part of the protocol raise SolverProcessError, with a
 readable message; run_solver turns it into an ERROR run.
+
+The lifeline (ADR 0006): a parent that is itself ended (a job process
+terminated, a pool worker that leaves with os._exit) cannot kill its child.
+But the operating system closes every pipe of a process that ends, however
+it ends, so the parent keeps the write end of the child's stdin until the
+run is over, and the child ends itself when its stdin reaches its end
+(exit_when_stdin_closes). A child whose stdin closes early (`echo request |
+python -m sat_core.solver_process`) therefore ends without a result.
 """
 
 from __future__ import annotations
@@ -126,7 +135,7 @@ def run_in_child(
         # there on POSIX but in our own folder on Windows: fix it to ours.
         python = os.path.abspath(python)
     # Encoded here, so a request that cannot be encoded raises to the caller.
-    text = json.dumps(request)
+    text = json.dumps(request) + "\n"
     timeout = request.get("timeout")
     lines: queue.Queue[str | None] = queue.Queue()
     stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL_LINES)
@@ -182,10 +191,11 @@ def run_in_child(
         # either pipe while nobody reads it would block. The request is
         # written on a thread too: a big one takes seconds to go through the
         # pipe, and a stop must not wait for that.
+        writer = threading.Thread(target=_write_request, args=(child.stdin, text), daemon=True)
         threads = [
             threading.Thread(target=_read_lines, args=(child.stdout, lines.put, lines.put), daemon=True),
             threading.Thread(target=_read_lines, args=(child.stderr, stderr_tail.append, None), daemon=True),
-            threading.Thread(target=_write_request, args=(child.stdin, text), daemon=True),
+            writer,
         ]
         for thread in threads:
             thread.start()
@@ -221,6 +231,14 @@ def run_in_child(
             # and a kill only saves the wait.
             if child.poll() is None:
                 child.kill()
+            # The lifeline next, before waiting for the readers: when the
+            # interpreter path is a wrapper that started the real interpreter
+            # as its own child, the kill ended the wrapper alone, and that
+            # child, which still holds stdout, ends only when its stdin does.
+            # The writer goes first: a close waits for a write in progress.
+            writer.join(timeout=5)
+            with contextlib.suppress(OSError):
+                child.stdin.close()
             child.wait()
             for thread in threads:
                 thread.join(timeout=5)
@@ -330,13 +348,16 @@ def _stop_reason(
 
 
 def _write_request(stdin: TextIO, text: str) -> None:
+    # stdin stays open after the request: it is the child's lifeline, closed
+    # when the run is over (Popen's `with` block), or by the OS when this
+    # process ends.
     try:
         stdin.write(text)
-        stdin.close()
+        stdin.flush()
     except OSError:
         # The child ended (or was killed) before reading its request, so it
-        # has no result. Close again: the first close may have failed while
-        # flushing, and Popen's own close would raise the same error.
+        # has no result. Close now: the unsent text would make Popen's own
+        # close raise the same error while flushing.
         with contextlib.suppress(OSError):
             stdin.close()
 
@@ -349,6 +370,37 @@ def _read_lines(stream: TextIO, sink: Callable[[str], None], at_end: Callable[[N
     finally:
         if at_end is not None:
             at_end(None)
+
+
+def exit_when_stdin_closes(stdin: TextIO) -> None:
+    """
+    Start a daemon thread that ends this process once stdin reaches its end.
+
+    The parent kills the child itself when a run stops, but a parent that is
+    killed (the manager's force stop terminates a job process; a pool worker
+    leaves with os._exit) never gets to: without this, its child would run
+    on, with no one to report to and, without a timeout, for ever. The write
+    end of stdin is held by the parent alone (Popen passes a child only its
+    own pipes), so its end means the parent closed it or is gone. Nothing
+    in between counts: a launcher or wrapper that starts the real
+    interpreter as its own child (a venv's python.exe on Windows) passes the
+    pipe on, and the signal still comes when the parent ends, or when it
+    closes stdin right after killing the wrapper (run_in_child).
+    """
+
+    # The file descriptor, not the stream: a daemon thread blocked inside the
+    # stream would hold its lock, and Python aborts when it cannot take that
+    # lock at shutdown, after a normal run. The parent sends nothing after the
+    # request line, so the stream's buffer holds nothing this misses.
+    descriptor = stdin.fileno()
+
+    def watch() -> None:
+        with contextlib.suppress(OSError):
+            while os.read(descriptor, 4096):
+                pass
+        os._exit(1)  # no one is left to read a result or the exit code
+
+    threading.Thread(target=watch, daemon=True, name="stdin-lifeline").start()
 
 
 def serve(request: dict[str, Any], out: TextIO) -> None:
@@ -385,10 +437,14 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
     )
 
 
-def main(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
+def main(stdin: TextIO | None = None, stdout: TextIO | None = None, lifeline: bool = False) -> int:
+    """Serve the request on stdin's first line. With lifeline, the process also ends when stdin does."""
+
     stdin = stdin if stdin is not None else sys.stdin
     stdout = stdout if stdout is not None else sys.stdout
-    request = json.loads(stdin.read())
+    request = json.loads(stdin.readline())
+    if lifeline:
+        exit_when_stdin_closes(stdin)
 
     real_stdout, sys.stdout = sys.stdout, sys.stderr
     try:
@@ -403,4 +459,4 @@ if __name__ == "__main__":
     # a child started any other way cannot start a chain of children.
     os.environ.pop(SOLVER_PYTHON_ENV, None)
     sys.stdin.reconfigure(encoding="utf-8")
-    sys.exit(main())
+    sys.exit(main(lifeline=True))

@@ -21,6 +21,7 @@ from pathlib import Path
 from unittest import mock
 
 from child_process_spy import replace_child_program
+import process_table
 from problems import build_problem
 from sat_core import solver_process, solver_registry
 from sat_core.runtime import EVENT_LOG, RunToken
@@ -57,16 +58,41 @@ def request_for(solver, clauses, **extra):
 def start_child(request):
     """Run the child on one request; return (exit code, parsed stdout lines, stderr)."""
 
-    done = subprocess.run(
+    # Not subprocess.run(input=...): it closes stdin after the request, and
+    # stdin is the child's lifeline. It stays open until the child has ended.
+    child = subprocess.Popen(
         [sys.executable, "-m", "sat_core.solver_process"],
-        input=json.dumps(request),
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         cwd=ROOT,
-        timeout=120,
     )
-    lines = [json.loads(line) for line in done.stdout.splitlines()]
-    return done.returncode, lines, done.stderr
+    stdout, stderr = [], []
+    readers = [
+        threading.Thread(target=lambda: stdout.append(child.stdout.read()), daemon=True),
+        threading.Thread(target=lambda: stderr.append(child.stderr.read()), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    try:
+        child.stdin.write(json.dumps(request) + "\n")
+        child.stdin.flush()
+        # A child that hangs fails its test instead of the whole test run.
+        code = child.wait(timeout=120)
+        for reader in readers:
+            reader.join(timeout=10)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        child.stdin.close()
+        for reader in readers:
+            reader.join(timeout=10)
+        child.stdout.close()
+        child.stderr.close()
+    lines = [json.loads(line) for line in "".join(stdout).splitlines()]
+    return code, lines, "".join(stderr)
 
 
 def child_result(lines):
@@ -158,8 +184,8 @@ class ChildProtocolTests(unittest.TestCase):
             cwd=ROOT,
         )
         try:
-            child.stdin.write(json.dumps(request))
-            child.stdin.close()
+            child.stdin.write(json.dumps(request) + "\n")
+            child.stdin.flush()
             started = time.perf_counter()
             first = json.loads(child.stdout.readline())
             waited = time.perf_counter() - started
@@ -167,6 +193,7 @@ class ChildProtocolTests(unittest.TestCase):
         finally:
             child.kill()
             child.wait()
+            child.stdin.close()
             child.stdout.close()
 
         self.assertEqual(first["type"], "log")
@@ -259,7 +286,7 @@ SLEEPING_CHILD = (
     "spec = solver_registry.get_solver('walksat')\n"
     "solver_registry._SOLVERS['walksat'] = dataclasses.replace(spec, runner=lambda *args: time.sleep(60))\n"
     "sys.stdin.reconfigure(encoding='utf-8')\n"
-    "sys.exit(solver_process.main())\n"
+    "sys.exit(solver_process.main(lifeline=True))\n"
 )
 
 
@@ -362,13 +389,30 @@ class StopReachesTheChildTests(unittest.TestCase):
         self.assertIsNotNone(children[0].poll(), "the child process is still running")
         self.assertIsNone(result.error)
 
+    def test_a_cancel_reaches_a_child_behind_a_wrapper(self):
+        # The interpreter path can be a wrapper that starts the real child as
+        # its own child instead of exec'ing it. Killing the wrapper leaves the
+        # real child holding the pipes: only closing its stdin ends it.
+        wrapper = "import subprocess, sys; sys.exit(subprocess.call([sys.executable, '-m', 'sat_core.solver_process']))"
+        token = RunToken()
+        worker, outcome, _, first_log = self.run_in_background(token=token, command=[sys.executable, "-c", wrapper])
+        self.assertTrue(first_log.wait(30), "the child sent no log line")
+        behind = process_table.hold(self, process_table.solver_children_of(os.getpid()))
+
+        token.cancel()
+
+        worker.join(timeout=10)
+        self.assertFalse(worker.is_alive(), "run_solver did not return after the cancel")
+        self.assertEqual(outcome["result"].status, "CANCELLED")
+        self.assertEqual(process_table.wait_until_ended(behind), set())
+
     def test_a_result_already_sent_wins_over_a_stop(self):
         # The parent lags behind the child's lines (a slow event callback). The
         # stop comes after the child sent its result: the run finished, and its
         # result must not be replaced by CANCELLED.
         script = (
             "import json, sys\n"
-            "sys.stdin.read()\n"
+            "sys.stdin.readline()\n"
             "for n in range(3): print(json.dumps({'type': 'log', 'message': f'line {n}'}))\n"
             "print(json.dumps({'type': 'result', 'status': 'SAT', 'solution': {'1': True},"
             " 'stats': {}, 'error': None, 'elapsed': 0.01}))\n"
@@ -385,6 +429,96 @@ class StopReachesTheChildTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "SAT")
         self.assertNotIn("killed", result)
+
+
+# A parent that runs one endless request through run_in_child and prints the
+# pid of the child it starts. The request comes as the first argument.
+PARENT_OF_AN_ENDLESS_CHILD = (
+    "import json, subprocess, sys\n"
+    "real_popen = subprocess.Popen\n"
+    "def popen(*args, **kwargs):\n"
+    "    child = real_popen(*args, **kwargs)\n"
+    "    print(child.pid, flush=True)\n"
+    "    return child\n"
+    "subprocess.Popen = popen\n"
+    "from sat_core.solver_process import run_in_child\n"
+    "run_in_child(sys.executable, json.loads(sys.argv[1]))\n"
+)
+
+
+class ChildEndsWithItsParentTests(unittest.TestCase):
+    """A child whose parent dies without killing it ends too (RUNNER-5)."""
+
+    def test_a_child_ends_when_its_parent_is_killed(self):
+        # As the manager's force stop terminates a job process, or a pool
+        # worker leaves with os._exit: run_in_child's clean-up never runs.
+        request = request_for("walksat", UNSAT_CLAUSES, options=ENDLESS)
+        parent = subprocess.Popen(
+            [sys.executable, "-c", PARENT_OF_AN_ENDLESS_CHILD, json.dumps(request)],
+            stdout=subprocess.PIPE,
+            text=True,
+            cwd=ROOT,
+        )
+        try:
+            child = process_table.hold(self, [int(parent.stdout.readline())])
+            time.sleep(1.0)  # the child is solving now
+            self.assertTrue(child[0].is_running(), "the child ended before its parent")
+        finally:
+            parent.kill()
+            parent.wait()
+            parent.stdout.close()
+
+        self.assertEqual(process_table.wait_until_ended(child, timeout=10), set(), "the child outlived its parent")
+
+    def test_a_running_child_ends_when_its_stdin_closes(self):
+        # stdin is the lifeline: the parent holds its write end for the whole
+        # run, and the OS closes it however the parent ends.
+        request = request_for("walksat", UNSAT_CLAUSES, options=ENDLESS, log_level="debug", progress_interval=1000)
+        child = subprocess.Popen(
+            [sys.executable, "-m", "sat_core.solver_process"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            cwd=ROOT,
+        )
+        try:
+            child.stdin.write(json.dumps(request) + "\n")
+            child.stdin.flush()
+            first = []
+            reader = threading.Thread(target=lambda: first.append(child.stdout.readline()), daemon=True)
+            reader.start()
+            reader.join(timeout=30)
+            self.assertTrue(first and json.loads(first[0])["type"] == "log", "the child did not start on one request line")
+
+            child.stdin.close()
+
+            child.wait(timeout=10)
+            rest = child.stdout.read()
+        except subprocess.TimeoutExpired:
+            self.fail("the child ran on after its stdin closed")
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            child.stdout.close()
+        self.assertNotIn('"result"', rest)
+
+    def test_a_child_whose_parent_dies_while_sending_the_request_ends(self):
+        # Half a request, then the pipe closes, as when the parent dies mid-write.
+        for sent in ("", '{"clauses": [[1, 2]], "sol'):
+            with self.subTest(sent=sent):
+                done = subprocess.run(
+                    [sys.executable, "-m", "sat_core.solver_process"],
+                    input=sent,
+                    capture_output=True,
+                    text=True,
+                    cwd=ROOT,
+                    timeout=60,
+                )
+
+                self.assertNotEqual(done.returncode, 0)
+                self.assertNotIn('"result"', done.stdout)
 
 
 def result_line(**fields):
@@ -473,7 +607,7 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
             with self.subTest(name):
                 script = (
                     "import sys, time\n"
-                    "sys.stdin.read()\n"
+                    "sys.stdin.readline()\n"
                     f"print({expression}, flush=True)\n"
                     "sys.stderr.write('stderr of the broken child\\n'); sys.stderr.flush()\n"
                     "time.sleep(60)\n"
@@ -487,7 +621,7 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
 
     def test_a_good_result_line_is_accepted(self):
         # Guards the broken lines above: the same line with nothing replaced is a result.
-        script = f"import sys; sys.stdin.read(); print({result_line()!r})"
+        script = f"import sys; sys.stdin.readline(); print({result_line()!r})"
 
         result, _, _ = self.run_solver_with(script=script)
 
@@ -507,7 +641,7 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
         # killed for the stop, and the run is CANCELLED, not ERROR.
         script = (
             "import json, sys, time\n"
-            "sys.stdin.read()\n"
+            "sys.stdin.readline()\n"
             "print(json.dumps({'type': 'log', 'message': 'started'}), flush=True)\n"
             "print('not json', flush=True)\n"
             "time.sleep(60)\n"

@@ -1,7 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  and RUNNER-4 done 2026-11-21)
+  and RUNNER-4 done 2026-11-21, RUNNER-5 done 2026-11-22)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -40,8 +40,10 @@ honest per-run memory number possible (see the memory plan).
     `{"clauses", "solver", "options", "log_level", "progress_interval", "timeout"}`,
     and optionally `"label"` (the solver name in log lines, as `run_solver`'s
     `label`; a benchmark passes its solver label).
-    The child reads stdin to its end, so the parent closes stdin after
-    writing the request.
+    The request is one line; stdin then stays open for the whole run as the
+    child's lifeline: the child ends when stdin reaches its end, so a parent
+    that dies takes its child with it
+    ([ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md)).
   - Out, one JSON object per line on stdout: `{"type": "log", "message"}` for
     each log line, then one
     `{"type": "result", "status", "solution", "stats", "error", "elapsed"}`
@@ -112,15 +114,17 @@ installed.
     (message carries the end of its stderr); a child that prints a broken
     line.
 
-- [ ] **RUNNER-5. Jobs and benchmarks work through the child**
+- [x] **RUNNER-5. Jobs and benchmarks work through the child** - Done 2026-11-22.
   - **Difficulty:** hard (re-rated 2026-11-20 from medium: jobs and benchmarks start the solver child process)
   - **Blocked by:** RUNNER-3, RUNNER-4
   - **How:** the child must end when the process that started it ends. Today
     only `run_in_child`'s own clean-up kills it, and that never runs when the
     manager's force stop terminates the job process or a pool worker leaves
     with `os._exit` (`exit_when_parent_dies`): the child is orphaned and, with
-    no timeout, runs for ever. For example a thread in the child that ends it
-    when its parent is gone (found in the RUNNER-3 review).
+    no timeout, runs for ever (found in the RUNNER-3 review). The fix is the
+    stdin lifeline in the Design ("Protocol"): the parent keeps the child's
+    stdin open until the run is over, the OS closes it when the parent ends,
+    and the child exits at the end of its stdin (`exit_when_stdin_closes`).
   - **Done when:** with the setting on, API tests run a solve job and a small
     benchmark sequentially and with `workers: 2`, get the same rows as without
     the setting (statuses and work counts), and Stop on a running benchmark
@@ -319,3 +323,12 @@ for case in json.load(open(sys.argv[2])):
   comparable.
 - **mypyc, Cython, Numba:** see the
   [solver optimisations plan](solver-optimisations.md#considered-and-rejected).
+- **A watchdog thread in the child that watches its parent's pid
+  (RUNNER-5's first fix):** needs a different mechanism per platform, an
+  extra variable to name the parent past a launcher, and still misses a
+  parent behind a POSIX wrapper that forks. See
+  [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md).
+- **A Windows job object (and `PR_SET_PDEATHSIG` on Linux) set up by the
+  parent:** two platform-specific mechanisms, none for macOS, and
+  `PR_SET_PDEATHSIG` fires when the starting thread ends, not the process.
+  See [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md).

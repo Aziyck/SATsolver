@@ -14,6 +14,7 @@ import json
 import os
 import platform
 import sqlite3
+import sys
 import tempfile
 import time
 import unittest
@@ -30,6 +31,7 @@ except ImportError as exc:  # pragma: no cover
         raise ImportError(f"WIZSAT_REQUIRE_API_TESTS is set, but {install_hint}") from exc
     raise unittest.SkipTest(install_hint) from None
 
+import process_table
 from sat_web.api import create_app
 from sat_web.config import Settings
 
@@ -378,6 +380,111 @@ class JobTests(ApiTestCase):
             self.assertEqual(revs, sorted(set(revs)))
             self.assertIn(job["rev"], revs)
             self.assertEqual(self.client.get(f"/api/jobs/{job['id']}").json()["rev"], revs[-1])
+
+
+def work(stats):
+    """A run's statistics without its times: the same search gives the same work."""
+    return {key: value for key, value in stats.items() if key != "elapsed"}
+
+
+class SolverChildTests(ApiTestCase):
+    """Jobs and benchmarks with WIZSAT_SOLVER_PYTHON set (RUNNER-5, docs/plans/pypy-solver-runner.md)."""
+
+    SOLVE = {"problem": "random_3sat", "params": {"variables": 30, "ratio": 4.26, "mode": "random", "seed": 2}, "solver": "cdcl"}
+    BENCHMARK = {
+        "problems": ["random_3sat"],
+        "segments": [{"variables": 20, "ratio": "3, 5", "seed": 1}],
+        # Seeded, or the local search takes a different path on every run.
+        "solvers": ["cdcl", "dpll", {"solver": "walksat", "options": {"random_seed": 1}}],
+        "repeats": 1,
+    }
+    # Cases that run for minutes: only a stop ends them.
+    ENDLESS = {
+        "problems": ["random_3sat"],
+        "segments": [{"variables": 250, "ratio": 4.26, "mode": "random", "seed": "1..4"}],
+        "solvers": ["dpll"],
+        "timeout": None,
+        "rules": [],
+    }
+
+    def set_solver_python(self, python):
+        """Jobs started from now on (and their pool workers) run the solvers in a child of `python`."""
+        patcher = mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": python})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def outcomes(self):
+        """(status, work) of the solve job, then (index, solver, status, work) of each benchmark row, sequential and with workers 2."""
+        detail = self.wait(self.submit("solve", self.SOLVE)["id"])
+        self.assertEqual(detail["status"], "done", detail["error"])
+        found = {"solve": [(detail["result"]["status"], work(detail["result"]["stats"]))]}
+        for workers in (1, 2):
+            detail = self.wait(self.submit("benchmark", {**self.BENCHMARK, "workers": workers})["id"])
+            self.assertEqual(detail["status"], "done", detail["error"])
+            rows = self.client.get(f"/api/jobs/{detail['id']}/rows").json()["rows"]
+            found[f"workers {workers}"] = sorted((row["index"], row["solver"], row["status"], work(row["stats"])) for row in rows)
+        return found
+
+    def test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child(self):
+        expected = self.outcomes()
+        self.set_solver_python(sys.executable)
+
+        found = self.outcomes()
+
+        self.assertEqual(len(expected["workers 1"]), 6)
+        self.assertNotIn("ERROR", {row[2] for row in expected["workers 2"]})
+        self.assertEqual(found, expected)
+
+    def test_the_setting_reaches_solve_jobs_benchmarks_and_pool_workers(self):
+        # Guards the comparison above: an interpreter that cannot start shows
+        # wherever the setting is read, so it is read in every one of them.
+        self.set_solver_python(str(Path(self.folder.name, "no-such-python")))
+
+        found = self.outcomes()
+
+        for name, runs in found.items():
+            with self.subTest(name):
+                self.assertEqual({run[-2] for run in runs}, {"ERROR"})
+
+    def start_endless_benchmark(self, workers):
+        """Start ENDLESS on `workers` processes; return (job id, job process, the solver children it runs)."""
+        self.set_solver_python(sys.executable)
+        job_id = self.submit("benchmark", {**self.ENDLESS, "workers": workers})["id"]
+        manager = self.client.app.state.manager
+        deadline = time.monotonic() + 30
+        while (manager.get(job_id).process is None or not manager.get(job_id).process.is_alive()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        process = manager.get(job_id).process
+        self.assertTrue(process.is_alive(), "the job did not start")
+        children = process_table.wait_for_solver_children(self, process.pid, count=workers)
+        self.assertGreaterEqual(len(children), workers, "the job started no solver child")
+        # An interpreter path can be a launcher whose real interpreter starts a moment later.
+        time.sleep(1.0)
+        found = {child.pid for child in children}
+        children += process_table.hold(self, process_table.solver_children_of(process.pid) - found)
+        return job_id, process, children
+
+    def test_stop_on_a_running_benchmark_leaves_no_child_behind(self):
+        for workers in (1, 2):
+            with self.subTest(workers=workers):
+                job_id, _, children = self.start_endless_benchmark(workers)
+
+                self.client.post(f"/api/jobs/{job_id}/cancel")
+
+                self.assertEqual(self.wait(job_id, timeout=15)["status"], "cancelled")
+                self.assertEqual(process_table.wait_until_ended(children, timeout=10), set())
+
+    def test_a_job_process_that_is_killed_leaves_no_child_behind(self):
+        # The manager's force stop and shutdown() terminate a job process that
+        # did not stop in time; run_in_child's own clean-up then never runs.
+        for workers in (1, 2):
+            with self.subTest(workers=workers):
+                job_id, process, children = self.start_endless_benchmark(workers)
+
+                process.kill()
+
+                self.assertEqual(self.wait(job_id, timeout=15)["status"], "failed")
+                self.assertEqual(process_table.wait_until_ended(children, timeout=10), set())
 
 
 class OriginAndHostTests(ApiTestCase):

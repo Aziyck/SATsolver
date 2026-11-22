@@ -251,7 +251,7 @@ FAILING_DPLL_CHILD = (
     "spec = solver_registry.get_solver('dpll')\n"
     "solver_registry._SOLVERS['dpll'] = dataclasses.replace(spec, runner=boom)\n"
     "sys.stdin.reconfigure(encoding='utf-8')\n"
-    "sys.exit(solver_process.main())\n"
+    "sys.exit(solver_process.main(lifeline=True))\n"
 )
 
 

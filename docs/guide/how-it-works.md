@@ -417,6 +417,18 @@ parent". Two things replace it:
   process with `os._exit`. The parent does not kill anything. After a server
   crash the jobs exit within about a second, and then each pool worker sees
   that its parent, the job, is gone and exits too.
+- With `WIZSAT_SOLVER_PYTHON` set, each run is a child process that
+  `subprocess` starts (`sat_core/solver_process.py`), outside
+  `multiprocessing`. Its stdin is its lifeline
+  ([ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md)): the
+  parent sends the request as one line and keeps the pipe open until the run
+  is over. The operating system closes a process's pipes however it ends, so
+  when the parent is ended without killing the child first (the manager's
+  force stop or `shutdown()` terminating a job, or a pool worker leaving
+  through its watchdog), the child reads the end of its stdin and exits
+  (`exit_when_stdin_closes`). This works the same on every platform, and
+  through a launcher that starts the real interpreter as its own child (a
+  venv's `python.exe` on Windows).
 
 The watchdog itself is a daemon *thread*, a third use of the word: a thread
 that does not keep its process alive.

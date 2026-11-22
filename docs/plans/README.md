@@ -132,7 +132,6 @@ as the work.
 | open | `- [ ] **A3. Title**` |
 | done | `- [x] **A3. Title** - Done 2026-11-20.` The commit subject starts with the ID (`A3: ...`), so `git log --grep "^A3:"` finds the change. |
 | dropped | `- [x] **A3. Title** - Dropped 2026-11-20: the reason.` |
-| needs a stronger model | stays `- [ ]`, with a line `- **Escalate:** 2026-11-20, what was tried and where it failed.` |
 | waiting | stays `- [ ]`, with its `Blocked by:` or `Needs decision:` line |
 
 - A `Blocked by:` item may start once every item it names is closed (done or
@@ -140,9 +139,9 @@ as the work.
 - A `Needs decision:` line is answered by the owner and then rewritten as
   `- **Decided (2026-11-20):** the choice.` A choice that shapes the project
   also gets an ADR.
-- After three failed attempts to make the "done when" test pass, stop, write
-  the `Escalate:` line and leave the item open. A wrong fix that looks done
-  costs more than an open item.
+- After three failed attempts to make the "done when" test pass, stop, leave
+  the item open, and report to the owner what was tried and where it failed.
+  A wrong fix that looks done costs more than an open item.
 - When every task of a plan is closed, set its status line to
   `done (date)`, move decisions worth keeping into an ADR, and move the file
   to `docs/plans/done/` (fix its relative links and the links to it).

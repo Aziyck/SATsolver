@@ -141,5 +141,4 @@ Details: [docs/plans/README.md](docs/plans/README.md).
 | difficulty | easy, medium or hard: how much can go wrong, which decides the model and the review an item gets. |
 | blocked | An item that must wait until the items it names are closed. |
 | needs decision | An open choice only the user can make. Work on the item stops there. |
-| escalate | Mark an item that a session could not finish, with what was tried, for a stronger model. |
 | ADR | Architecture decision record: a short, numbered, never-edited note of one decision and its reasons (`docs/adr/`). |

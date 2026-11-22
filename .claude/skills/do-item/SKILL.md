@@ -128,8 +128,8 @@ baseline, the tests pass and the conflicts column matches it.
    applies, once, after the last edit, plus the plan's own rules (for a
    "same search" task: the conflicts column matches the baseline).
 
-If the loop will not go green after three different attempts, stop: write
-the `Escalate:` line on the item, leave it open, and report what was tried.
+If the loop will not go green after three different attempts, stop: leave
+the item open, and report what was tried and where it failed.
 
 ## 6. Close
 

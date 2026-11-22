@@ -59,8 +59,9 @@ model change is a one-line edit:
 - Outside the skills, if the session's model is below the item's level, say
   so before starting and let the owner choose: switch model, or proceed and
   dispatch `reviewer` for the review.
-- After three failed attempts at an item's "done when", stop and write the
-  `Escalate:` line (`docs/plans/README.md`). Do not keep trying variations.
+- After three failed attempts at an item's "done when", stop, leave the item
+  open and report what was tried (`docs/plans/README.md`). Do not keep trying
+  variations.
 
 ## Subagents
 

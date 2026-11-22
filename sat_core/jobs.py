@@ -15,6 +15,7 @@ can be reopened) and model.txt (the satisfying assignment, if any).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import time
 import traceback
@@ -40,7 +41,7 @@ from sat_core.runtime import (
     RunEvent,
     RunToken,
 )
-from sat_core.solver_registry import LOG_LEVELS, SolverSpec, get_solver, options_summary, run_solver
+from sat_core.solver_registry import LOG_LEVELS, SOLVER_PYTHON_ENV, SolverSpec, get_solver, options_summary, run_solver
 
 
 JOB_KINDS = ("solve", "generate", "benchmark")
@@ -252,6 +253,8 @@ def benchmark_job(request: dict[str, Any], workdir: str | None, emit_event: Emit
 
 
 JOB_FUNCTIONS = {"solve": solve_job, "generate": generate_job, "benchmark": benchmark_job}
+# The kinds whose work runs in run_solver, so under WIZSAT_SOLVER_PYTHON when it is set.
+SOLVER_KINDS = {"solve", "benchmark"}
 
 
 def execute_job(
@@ -271,7 +274,11 @@ def execute_job(
 
     try:
         # First, before the request is checked: a job that fails still records where it ran.
-        emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment(machine)))
+        # With the setting on, the solvers run under that interpreter, so it is the one recorded
+        # (RUNNER-6). run_solver reads the same setting, the same way, for every run. A generate
+        # job encodes in this process and runs no solver, so it records this interpreter.
+        solver_python = (os.environ.get(SOLVER_PYTHON_ENV, "").strip() or None) if kind in SOLVER_KINDS else None
+        emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment(machine, solver_python)))
         if kind not in JOB_FUNCTIONS:
             raise ValueError(f"Unknown job kind: {kind}")
         completed = JOB_FUNCTIONS[kind](request, workdir, emit_event, token)

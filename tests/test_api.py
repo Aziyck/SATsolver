@@ -32,6 +32,7 @@ except ImportError as exc:  # pragma: no cover
     raise unittest.SkipTest(install_hint) from None
 
 import process_table
+from fake_python import write_fake_python
 from sat_web.api import create_app
 from sat_web.config import Settings
 
@@ -445,6 +446,24 @@ class SolverChildTests(ApiTestCase):
         for name, runs in found.items():
             with self.subTest(name):
                 self.assertEqual({run[-2] for run in runs}, {"ERROR"})
+
+    def test_the_job_detail_and_the_csv_name_the_solver_interpreter(self):
+        # The fake answers the job's question about its name and version but
+        # runs no solver, so its runs end as ERROR; what is checked is where
+        # the name lands (RUNNER-6).
+        self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
+
+        solve = self.wait(self.submit("solve", self.SOLVE)["id"])
+        benchmark = self.wait(self.submit("benchmark", {**self.BENCHMARK, "workers": 2})["id"])
+
+        for detail in (solve, benchmark):
+            with self.subTest(detail["kind"]):
+                found = (detail["environment"]["python_implementation"], detail["environment"]["python_version"])
+                self.assertEqual(found, ("PyPy", "3.10.14"))
+        table = list(csv.DictReader(io.StringIO(self.client.get(f"/api/jobs/{benchmark['id']}/export.csv").text)))
+        self.assertEqual(len(table), 6)
+        self.assertEqual({row["python"] for row in table}, {"PyPy 3.10.14"})
+        self.assertEqual({row["status"] for row in table}, {"ERROR"})
 
     def start_endless_benchmark(self, workers):
         """Start ENDLESS on `workers` processes; return (job id, job process, the solver children it runs)."""

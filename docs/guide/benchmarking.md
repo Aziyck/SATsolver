@@ -230,7 +230,7 @@ Every benchmark exports the same format, whatever the problem:
 | `decisions`, `conflicts`, `propagations`, `learned_clauses`, `restarts` | CDCL/DPLL statistics (`learned_clauses` and `restarts` are CDCL only) |
 | `tries`, `flips`, `best_unsatisfied` | WalkSAT/ProbSAT statistics |
 | `error` | the error message for ERROR rows |
-| `python` | the interpreter that ran the job, such as `CPython 3.11.15` |
+| `python` | the interpreter that ran the solvers, such as `CPython 3.11.15`: the job's own, or the `WIZSAT_SOLVER_PYTHON` one when that is set |
 | `cpu`, `cores` | the processor model and its logical core count |
 | `ram_gb` | RAM the run could use (the container's limit when that is smaller) |
 | `os` | operating system, release and architecture |

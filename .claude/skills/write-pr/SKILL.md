@@ -25,18 +25,19 @@ say what it risks.
 
 Subject `<ID>: <what changed>` (several IDs: `A13, A26: ...`), at most 72
 characters. Body wrapped at 72: the cause or reason in one or two
-sentences; one `Ruling: <what> - <why> - <what it costs if wrong>` per
+lines; one `Ruling: <what> - <why> - <what it costs if wrong>` per
 ruling; measurements; one line of checks.
 
 ## 3. Pull request
 
-Title: the commit subject. Full sentences, terms as in `GLOSSARY.md`. Omit a
-section that would be empty.
+Title: the commit subject. Terse, fragments fine (`AGENTS.md`,
+"Conventions"); terms as in `GLOSSARY.md`. Omit a section that would be
+empty.
 
 An **easy** item gets the opening line and `## Evidence`, nothing else.
 
 1. **Opening line**, no heading: `Closes **<ID>** in [<file>](<file>)`, then
-   one or two sentences: what was wrong or missing, what is true now.
+   one or two lines: what was wrong or missing, what is true now.
 2. `## Shape` (medium and hard): the smallest view of the change. A
    `diff` block of a call tree, file tree or control flow, or pseudocode.
    Five to fifteen lines. Not a list of files.

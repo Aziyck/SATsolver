@@ -182,10 +182,11 @@ and on pull requests: lint and Python tests on Ubuntu (3.10, 3.13) and Windows
 
 ## Conventions
 
-- Replies and progress updates in a session: shortest form that stays
-  clear. Grammar may go for concision (fragments, no articles). Commit
-  messages, pull requests and docs are read later without the session's
-  context: full sentences there.
+- Replies, progress updates, commit messages and pull requests: shortest
+  form that stays clear. Grammar may go for concision (fragments, no
+  articles). Commits and pull requests are read later without the
+  session's context: each claim names its file, test or term instead of
+  leaning on the session. Docs: full sentences.
 - **Skills.** A new skill must replace an existing one, or do a job already
   done by hand three times. A skill is refined only after three uses since
   its last change. Before writing or changing a skill, `AGENTS.md` or

@@ -21,6 +21,7 @@ from pathlib import Path
 from unittest import mock
 
 from child_process_spy import replace_child_program
+import process_table
 from problems import build_problem
 from sat_core import solver_process, solver_registry
 from sat_core.runtime import EVENT_LOG, RunToken
@@ -385,6 +386,70 @@ class StopReachesTheChildTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "SAT")
         self.assertNotIn("killed", result)
+
+
+# A parent that runs one endless request through run_in_child and prints the
+# pid of the child it starts. The request comes as the first argument.
+PARENT_OF_AN_ENDLESS_CHILD = (
+    "import json, subprocess, sys\n"
+    "real_popen = subprocess.Popen\n"
+    "def popen(*args, **kwargs):\n"
+    "    child = real_popen(*args, **kwargs)\n"
+    "    print(child.pid, flush=True)\n"
+    "    return child\n"
+    "subprocess.Popen = popen\n"
+    "from sat_core.solver_process import run_in_child\n"
+    "run_in_child(sys.executable, json.loads(sys.argv[1]))\n"
+)
+
+
+class ChildEndsWithItsParentTests(unittest.TestCase):
+    """A child whose parent dies without killing it ends too (RUNNER-5)."""
+
+    def test_a_child_ends_when_its_parent_is_killed(self):
+        # As the manager's force stop terminates a job process, or a pool
+        # worker leaves with os._exit: run_in_child's clean-up never runs.
+        request = request_for("walksat", UNSAT_CLAUSES, options=ENDLESS)
+        parent = subprocess.Popen(
+            [sys.executable, "-c", PARENT_OF_AN_ENDLESS_CHILD, json.dumps(request)],
+            stdout=subprocess.PIPE,
+            text=True,
+            cwd=ROOT,
+        )
+        try:
+            child = process_table.hold(self, [int(parent.stdout.readline())])
+            time.sleep(1.0)  # the child is solving now
+            self.assertTrue(child[0].is_running(), "the child ended before its parent")
+        finally:
+            parent.kill()
+            parent.wait()
+            parent.stdout.close()
+
+        self.assertEqual(process_table.wait_until_ended(child, timeout=10), set(), "the child outlived its parent")
+
+    def test_a_child_whose_parent_is_already_gone_does_not_run(self):
+        # The parent died before the child's watchdog started: the pid it named is free.
+        # The Popen stays referenced: on Windows its handle keeps the ended
+        # pid from being reused meanwhile (by the very child under test).
+        ended = subprocess.Popen([sys.executable, "-c", "pass"])
+        ended.wait()
+        env = {**os.environ, solver_process.PARENT_PID_ENV: str(ended.pid)}
+        request = request_for("walksat", UNSAT_CLAUSES, options=ENDLESS)
+
+        started = time.perf_counter()
+        done = subprocess.run(
+            [sys.executable, "-m", "sat_core.solver_process"],
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            env=env,
+            timeout=60,
+        )
+
+        self.assertNotIn('"result"', done.stdout)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertLess(time.perf_counter() - started, 30)
 
 
 def result_line(**fields):

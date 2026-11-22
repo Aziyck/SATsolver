@@ -43,6 +43,10 @@ and so does a child still running KILL_MARGIN_SECONDS past its timeout
 An interpreter that cannot start, a child that ends without a result and a
 line that is not part of the protocol raise SolverProcessError, with a
 readable message; run_solver turns it into an ERROR run.
+
+A parent that is itself ended (a job process terminated, a pool worker that
+leaves with os._exit) cannot kill its child, so the child watches the parent
+and ends itself when the parent is gone (exit_when_parent_dies).
 """
 
 from __future__ import annotations
@@ -85,6 +89,11 @@ KILLED_BY_TIME_LIMIT = "time limit"  # still running KILL_MARGIN_SECONDS past th
 RESULT_FIELDS = ("status", "solution", "stats", "error", "elapsed")
 # How much of a broken line an error message quotes.
 QUOTED_CHARACTERS = 200
+# How often a child on POSIX checks that its parent is still there (Windows
+# waits on the parent's handle instead, and needs no interval).
+PARENT_CHECK_SECONDS = 0.5
+# The pid of the process that runs run_in_child, for the child's watchdog.
+PARENT_PID_ENV = "WIZSAT_SOLVER_PARENT_PID"
 
 
 class SolverProcessError(Exception):
@@ -121,6 +130,8 @@ def run_in_child(
     # Windows; UTF-8 keeps the error tail readable.
     env = {name: value for name, value in os.environ.items() if name != SOLVER_PYTHON_ENV}
     env["PYTHONIOENCODING"] = "utf-8"
+    # The child ends itself when this process is gone (exit_when_parent_dies).
+    env[PARENT_PID_ENV] = str(os.getpid())
     if os.path.dirname(python):
         # Popen runs the child in ROOT, and a relative path would be looked up
         # there on POSIX but in our own folder on Windows: fix it to ours.
@@ -351,6 +362,115 @@ def _read_lines(stream: TextIO, sink: Callable[[str], None], at_end: Callable[[N
             at_end(None)
 
 
+def exit_when_parent_dies() -> None:
+    """
+    Start a daemon thread that ends this process once its parent is gone.
+
+    The parent kills the child itself when a run stops, but a parent that is
+    killed (the manager's force stop terminates a job process; a pool worker
+    leaves with os._exit) never gets to: without this, its child would run
+    on, with no one to report to and, without a timeout, for ever. This is
+    sat_core.parallel.exit_when_parent_dies for a child that subprocess
+    started, which multiprocessing.parent_process() does not know.
+
+    The process watched is the one run_in_child names in PARENT_PID_ENV, not
+    simply this one's parent: an interpreter path can be a launcher that
+    starts the real interpreter as its own child (a venv's python.exe on
+    Windows), and a launcher outlives a killed parent. A child started any
+    other way watches its parent.
+    """
+
+    direct = os.getppid()
+    try:
+        parent = int(os.environ.get(PARENT_PID_ENV, ""))
+    except ValueError:
+        parent = direct
+    if sys.platform == "win32":
+        handle = _open_for_waiting(parent)
+        if handle is None:
+            return
+
+        def parent_gone() -> None:
+            _wait_for_handle(handle)
+
+    else:
+
+        def parent_gone() -> None:
+            # A child whose parent dies is given to another process (init or
+            # a subreaper), so its parent pid changes. That holds even while
+            # the dead parent is a zombie no one has collected yet; the pid
+            # check covers a parent behind a launcher.
+            while os.getppid() == direct and _pid_exists(parent):
+                time.sleep(PARENT_CHECK_SECONDS)
+
+    def watch() -> None:
+        parent_gone()
+        os._exit(1)  # no one is left to read the exit code or a result
+
+    threading.Thread(target=watch, daemon=True, name="parent-watchdog").start()
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)  # POSIX only: on Windows os.kill ends the process
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _open_for_waiting(pid: int) -> Any:
+    """A Windows handle to wait on until process `pid` ends, or None if it cannot be watched."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(ctypes.c_ulonglong),) * 4
+    synchronize, query_limited_information = 0x00100000, 0x1000
+    # Windows does not tell a child that its parent ended. Once open, the
+    # handle holds on to that process, not to its pid.
+    handle = kernel32.OpenProcess(synchronize | query_limited_information, False, pid)
+    if not handle:
+        error = ctypes.get_last_error()
+        if error == 87:  # ERROR_INVALID_PARAMETER: no process with that pid
+            os._exit(1)
+        # Not allowed to watch it: run as before rather than end a healthy run.
+        # stderr reaches the parent's error tail if the run goes wrong.
+        sys.stderr.write(f"Cannot watch the parent process {pid} (error {error}); this run will not end with it.\n")
+        return None
+
+    def created_at(process: Any) -> int | None:
+        times = [ctypes.c_ulonglong() for _ in range(4)]  # FILETIMEs: creation, exit, kernel, user
+        if not kernel32.GetProcessTimes(process, *(ctypes.byref(value) for value in times)):
+            return None
+        return times[0].value
+
+    # A parent killed while this child was starting can have its pid reused
+    # before the handle is opened. Every process started before its children,
+    # so one started after this one is not the parent: the parent is gone.
+    parent_created, own_created = created_at(handle), created_at(kernel32.GetCurrentProcess())
+    if parent_created is not None and own_created is not None and parent_created > own_created:
+        os._exit(1)
+    return handle
+
+
+def _wait_for_handle(handle: Any) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    infinite = 0xFFFFFFFF
+    # ctypes lets go of the GIL during the call, so the solver runs meanwhile.
+    kernel32.WaitForSingleObject(handle, infinite)
+
+
 def serve(request: dict[str, Any], out: TextIO) -> None:
     """Run the request and write its log lines and its result to `out`."""
 
@@ -402,5 +522,7 @@ if __name__ == "__main__":
     # The parent leaves the setting out already; dropping it here as well means
     # a child started any other way cannot start a chain of children.
     os.environ.pop(SOLVER_PYTHON_ENV, None)
+    # Before the request is read: a parent can die while it is still sending it.
+    exit_when_parent_dies()
     sys.stdin.reconfigure(encoding="utf-8")
     sys.exit(main())

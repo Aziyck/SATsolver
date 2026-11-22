@@ -1,7 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  and RUNNER-4 done 2026-11-21)
+  and RUNNER-4 done 2026-11-21, RUNNER-5 done 2026-11-22)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -112,7 +112,7 @@ installed.
     (message carries the end of its stderr); a child that prints a broken
     line.
 
-- [ ] **RUNNER-5. Jobs and benchmarks work through the child**
+- [x] **RUNNER-5. Jobs and benchmarks work through the child** - Done 2026-11-22.
   - **Difficulty:** hard (re-rated 2026-11-20 from medium: jobs and benchmarks start the solver child process)
   - **Blocked by:** RUNNER-3, RUNNER-4
   - **How:** the child must end when the process that started it ends. Today

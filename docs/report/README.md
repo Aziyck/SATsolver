@@ -14,6 +14,7 @@ can be used the same way.
 | [random-3sat-benchmark-plan.md](random-3sat-benchmark-plan.md) | `random_3sat_benchmark_plan.md` | the Random 3-SAT presets A, B, C |
 | [screenshot-checklist.md](screenshot-checklist.md) | `screenshot_checklist.md` | figures to capture from the web interface |
 | [table-templates.md](table-templates.md) | `tables_template.md` | tables to fill in with measured results |
+| [defense-questions.md](defense-questions.md) | (new) | questions the committee may ask, with answers and evidence |
 
 These documents are thesis material, written for people. Coding agents do not
 update them as part of code changes; they edit them only when the owner asks

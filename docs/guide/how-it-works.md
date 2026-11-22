@@ -430,6 +430,14 @@ parent". Two things replace it:
   through a launcher that starts the real interpreter as its own child (a
   venv's `python.exe` on Windows).
 
+  The parent and the child talk JSON over the child's standard pipes. The
+  parent writes the request (clauses, solver, options, log level, timeout)
+  as one line on stdin; the child writes one line per log message on stdout,
+  then one result line (status, model, statistics, error, elapsed), and
+  exits. stderr carries only error text, which the parent reads on its own
+  thread and quotes when a run ends without a result. The full format is in
+  the docstring of `sat_core/solver_process.py`.
+
 The watchdog itself is a daemon *thread*, a third use of the word: a thread
 that does not keep its process alive.
 

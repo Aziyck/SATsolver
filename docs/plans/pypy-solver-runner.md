@@ -1,7 +1,7 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  and RUNNER-4 done 2026-11-21, RUNNER-5 done 2026-11-22)
+  and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -130,17 +130,29 @@ installed.
     the setting (statuses and work counts), and Stop on a running benchmark
     leaves no child process behind.
 
-- [ ] **RUNNER-6. Results say which interpreter ran them**
-  - **Difficulty:** easy
-  - **Not hard:** `sat_core/solver_process.py` is a hard trigger, but this
-    adds one field to the result line and how the parent reads it. The read
-    loop, the threads and the kill paths stay as they are, and their tests
-    pass unchanged. Touching those makes it hard.
+- [x] **RUNNER-6. Results say which interpreter ran them** - Done 2026-11-22.
+  - **Difficulty:** medium (re-rated 2026-11-22 twice: hard while the
+    interpreter was to travel with each result line, which crosses
+    `sat_core/parallel.py` (a pool worker hands back only its log lines and
+    rows) and `sat_web/manager.py`; medium once the owner chose a probe at
+    job start, which touches neither)
   - **Blocked by:** RUNNER-2, META-2
-  - **How:** the child sends `run_environment()` with its result; it replaces
-    the job process's own environment for that run.
+  - **Decided (2026-11-22):** one probe per job, not one answer per run. The
+    setting cannot change while a job runs (the job process's environment is
+    fixed when it starts), so one answer covers every run of the job.
+  - **Built as:** `execute_job` (`sat_core/jobs.py`) passes the setting to
+    `run_environment(machine, solver_python)`, which asks that interpreter
+    for its name and version (`interpreter_facts()` in
+    `sat_core/environment.py`: one `-c` process start per job) and records
+    them instead of the job process's own; a generate job runs no solver and
+    keeps its own. The result line of the child is unchanged. An interpreter
+    that does not answer is recorded as `unknown`, never as the job process's
+    interpreter.
   - **Done when:** with the setting pointing at a second interpreter, the job
-    detail and the CSV show that interpreter's name and version.
+    detail and the CSV show that interpreter's name and version
+    (`test_the_job_detail_and_the_csv_name_the_solver_interpreter` in
+    `tests/test_api.py`, with a stand-in interpreter from
+    `tests/fake_python.py`).
 
 - [ ] **RUNNER-7. Measure what the child costs**
   - **Difficulty:** hard (re-rated 2026-11-21: may change `START_UP_SECONDS`,
@@ -199,8 +211,8 @@ installed.
   - **Blocked by:** RUNNER-4, RUNNER-6, MEM-3
   - **What:** the protocol (the request, the log and result lines, and the
     rules a line must follow) lives in `sat_core/solver_process.py` beside
-    the process handling. RUNNER-6 (the interpreter) and MEM-3 (memory) add
-    fields to the result line, so it grows. As with `sat_web/lifecycle.py`
+    the process handling. MEM-3 (memory) adds fields to the result line, so
+    it grows (RUNNER-6 left it as it was). As with `sat_web/lifecycle.py`
     and `sat_core/answers.py`, the rule moves out of the stateful code, so it
     is tested without starting processes.
   - **How:** a module `sat_core/solver_protocol.py` with the message shapes
@@ -321,6 +333,12 @@ for case in json.load(open(sys.argv[2])):
 - **Switching to PyPy only for big instances:** within one benchmark, different
   cases would then run on different interpreters, so the times would not be
   comparable.
+- **The interpreter in every result line (RUNNER-6's first design):** the
+  child would send `run_environment()` with each result. A pool worker hands
+  back only its log lines and rows, so the answer would need a path through
+  `sat_core/parallel.py` and a merge in `sat_web/manager.py`, and asking git
+  and the machine on every run costs 70-95 ms. The interpreter cannot change
+  within a job, so one probe at job start gives the same answer.
 - **mypyc, Cython, Numba:** see the
   [solver optimisations plan](solver-optimisations.md#considered-and-rejected).
 - **A watchdog thread in the child that watches its parent's pid

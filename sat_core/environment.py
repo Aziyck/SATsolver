@@ -6,9 +6,16 @@ solver, so it reports PyPy when PyPy runs the job. The machine facts (OS, CPU,
 RAM) are the same for every process, so the server reads them once with
 machine_facts() and passes them in (A39). Every lookup is wrapped: a fact that
 cannot be found is None, never an error (docs/plans/done/run-metadata.md).
+
+With WIZSAT_SOLVER_PYTHON set, the solvers run in a child of another
+interpreter, and the job asks that interpreter for its name and version once
+(interpreter_facts, RUNNER-6). The setting is read when a run starts, and a
+job process's environment does not change while it runs, so every run of the
+job uses that interpreter.
 """
 
 import functools
+import json
 import os
 import platform
 import subprocess
@@ -26,6 +33,12 @@ CGROUP_MEMORY_FILES = (
 )
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUBPROCESS_TIMEOUT_SECONDS = 5
+# A cold PyPy start on a busy machine (or the first start after an antivirus
+# scan on Windows) can take seconds.
+INTERPRETER_TIMEOUT_SECONDS = 15
+# One line from the interpreter that is asked: ["PyPy", "3.10.14"].
+INTERPRETER_PROBE = "import json, platform; print(json.dumps([platform.python_implementation(), platform.python_version()]))"
+UNKNOWN_INTERPRETER = {"python_implementation": "unknown", "python_version": ""}
 
 
 def _first(*lookups):
@@ -206,21 +219,68 @@ def machine_facts() -> dict:
     return dict(_machine())
 
 
-def run_environment(machine: dict | None = None) -> dict:
+def interpreter_facts(python: str | None = None) -> dict:
+    """python_implementation and python_version of the interpreter `python` (a path or a command).
+
+    Without `python`, this process's. The interpreter is started the way the
+    solver child is (sat_core.solver_process.run_in_child: the same folder,
+    the setting left out), so the one asked is the one that runs the solvers.
+    An interpreter that cannot be started, does not answer within
+    INTERPRETER_TIMEOUT_SECONDS or gives no readable answer is
+    UNKNOWN_INTERPRETER, never this process's own: that would put the wrong
+    interpreter on the runs.
+    """
+
+    if python is None:
+        return {"python_implementation": platform.python_implementation(), "python_version": platform.python_version()}
+    if os.path.dirname(python):
+        # Resolved against our folder before the probe runs in REPO_ROOT, as run_in_child does.
+        python = os.path.abspath(python)
+    # The setting's name, written out: solver_registry is a layer above this module.
+    env = {name: value for name, value in os.environ.items() if name != "WIZSAT_SOLVER_PYTHON"}
+    try:
+        out = subprocess.run(
+            [python, "-c", INTERPRETER_PROBE],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=REPO_ROOT,
+            env=env,
+            timeout=INTERPRETER_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        return dict(UNKNOWN_INTERPRETER)
+    if out.returncode != 0:
+        return dict(UNKNOWN_INTERPRETER)
+    # The first line that is the answer: a site hook may print around it.
+    for line in out.stdout.splitlines():
+        try:
+            answer = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(answer, list) and len(answer) == 2 and all(isinstance(fact, str) for fact in answer) and answer[0]:
+            return {"python_implementation": answer[0], "python_version": answer[1]}
+    return dict(UNKNOWN_INTERPRETER)
+
+
+def run_environment(machine: dict | None = None, solver_python: str | None = None) -> dict:
     """Every fact above as a JSON-ready dict.
 
     `machine` is what machine_facts() returned, possibly in another process;
-    without it this process reads them. The interpreter facts always come from
-    this process, so they name the interpreter that runs the job. Git is asked
-    on every call: a worker imports the code from disk when it starts, so a
-    solver edited while the server runs has to show up as a dirty tree.
+    without it this process reads them. The interpreter facts come from this
+    process, so they name the interpreter that runs the job, or, with
+    `solver_python` (the WIZSAT_SOLVER_PYTHON setting), from the interpreter
+    that runs its solvers. Git is asked on every call: a worker imports the
+    code from disk when it starts, so a solver edited while the server runs
+    has to show up as a dirty tree.
     """
 
     machine = machine_facts() if machine is None else machine
     commit, dirty = _git_facts()
     return {
-        "python_implementation": platform.python_implementation(),
-        "python_version": platform.python_version(),
+        **interpreter_facts(solver_python),
         "os": machine.get("os"),
         "cpu_model": machine.get("cpu_model"),
         "cpu_logical_cores": machine.get("cpu_logical_cores"),

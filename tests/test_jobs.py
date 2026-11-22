@@ -1,9 +1,12 @@
 import json
 import os
+import platform
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from fake_python import write_fake_python
 from sat_core.dimacs import parse_dimacs
 from sat_core.environment import run_environment
 from sat_core.jobs import execute_job, solve_job
@@ -58,11 +61,27 @@ class JobTests(unittest.TestCase):
             ("benchmark", {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"]}),
             ("solve", {"problem": "chess"}),
         ):
-            with self.subTest(kind=kind, request=request):
+            with self.subTest(kind=kind, request=request), mock.patch.dict(os.environ):
+                # The job's own interpreter is the one compared with.
+                os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
                 events = run(kind, request)
                 self.assertEqual(events[0].type, EVENT_ENVIRONMENT)
                 self.assertEqual(events[0].payload, run_environment())
                 self.assertEqual(len(of_type(events, EVENT_ENVIRONMENT)), 1)
+
+    def test_jobs_that_run_solvers_record_the_solver_interpreter(self):
+        # RUNNER-6: with the setting on, the solvers run under that
+        # interpreter. A generate job runs none, so it keeps its own.
+        with tempfile.TemporaryDirectory() as folder:
+            fake = write_fake_python(folder, "PyPy", "3.10.14")
+            for kind, request, expected in (
+                ("solve", {"problem": "n_queens", "params": {"size": 4}, "solver": "cdcl"}, ("PyPy", "3.10.14")),
+                ("benchmark", {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"]}, ("PyPy", "3.10.14")),
+                ("generate", {"problem": "n_queens", "params": {"size": 4}}, (platform.python_implementation(), platform.python_version())),
+            ):
+                with self.subTest(kind=kind), mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": fake}):
+                    environment = of_type(run(kind, request), EVENT_ENVIRONMENT)[0].payload
+                    self.assertEqual((environment["python_implementation"], environment["python_version"]), expected)
 
     def test_generate_job_only_encodes(self):
         events = run("generate", {"problem": "graph_coloring", "params": {"seed": None}})

@@ -222,14 +222,17 @@ The summary plus:
 | `instance` | the encoded instance (solve and generate jobs): `name`, `problem`, `params`, `variables`, `clauses`, `size_variables`, `facts`, `visual`, `expected`, `encode_seconds`, `cnf_file` |
 | `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats`, `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
 | `errors` | field errors if the job failed validation inside the worker |
-| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set; any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it. See [The `environment` value](#the-environment-value) |
+| `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set (the first two are `"unknown"` and `""` when the `WIZSAT_SOLVER_PYTHON` interpreter does not answer); any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it. See [The `environment` value](#the-environment-value) |
 | `logs` | the last 400 log lines as `[time, text]` pairs |
 | `log_count` | total log lines kept |
 
 ### The `environment` value
 
 Read inside the process that runs the job, so it names the interpreter that
-ran the solver. The server reads the operating system, processor and RAM once
+ran the solver. With `WIZSAT_SOLVER_PYTHON` set, the solvers run in a child
+of that interpreter instead, and a solve or benchmark job asks it once for
+its name and version: those two facts are then the solver interpreter's (a
+generate job runs no solver and keeps the worker's). The server reads the operating system, processor and RAM once
 and hands them to each job; git is asked again for every job, so code edited
 while the server runs shows up as `git_dirty`.
 
@@ -250,7 +253,7 @@ while the server runs shows up as `git_dirty`.
 
 | Key | Meaning |
 |---|---|
-| `python_implementation`, `python_version` | `platform.python_implementation()` and `platform.python_version()` of the worker |
+| `python_implementation`, `python_version` | `platform.python_implementation()` and `platform.python_version()` of the worker, or of the `WIZSAT_SOLVER_PYTHON` interpreter when that is set (solve and benchmark jobs); `"unknown"` and `""` when that interpreter cannot be started, does not answer within 15 seconds or gives no readable answer |
 | `os` | system, release and machine, as `Windows 11 (AMD64)` |
 | `cpu_model` | the processor's name |
 | `cpu_logical_cores` | `os.cpu_count()` |

@@ -1,10 +1,14 @@
 """run_environment(): the machine and software facts recorded with every run."""
 
 import json
+import platform
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from fake_python import write_fake_python
 from sat_core import environment
 from sat_core.environment import VERSION, run_environment
 
@@ -136,6 +140,41 @@ class RunEnvironmentTests(unittest.TestCase):
         self.assertEqual(set(facts), KEYS)
         self.assertEqual({key: facts[key] for key in given}, given)
         self.assertEqual(facts["python_implementation"], environment.platform.python_implementation())
+
+    def test_the_solver_interpreter_replaces_this_processs_interpreter(self):
+        # With WIZSAT_SOLVER_PYTHON set, the solvers run in a child of that
+        # interpreter, so a job records its name and version (RUNNER-6).
+        given = {"os": "Given OS", "cpu_model": "Given CPU", "cpu_logical_cores": 3, "cpu_physical_cores": None, "ram_total_gb": 1.5}
+        with tempfile.TemporaryDirectory() as folder:
+            facts = run_environment(machine=given, solver_python=write_fake_python(folder, "PyPy", "3.10.14"))
+        self.assertEqual(set(facts), KEYS)
+        self.assertEqual((facts["python_implementation"], facts["python_version"]), ("PyPy", "3.10.14"))
+        self.assertEqual({key: facts[key] for key in given}, given)
+
+    def test_the_probe_reads_a_real_interpreter(self):
+        facts = environment.interpreter_facts(sys.executable)
+        self.assertEqual(
+            facts, {"python_implementation": platform.python_implementation(), "python_version": platform.python_version()}
+        )
+
+    def test_output_around_the_answer_does_not_hide_it(self):
+        # A sitecustomize or atexit hook of that interpreter may print too.
+        printed = 'site hook\n{"a": "b"}\n["PyPy", "3.10.14"]\nbye\n'
+        with mock.patch.object(environment.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=printed)) as run:
+            facts = environment.interpreter_facts("pypy3")
+        self.assertEqual(facts, {"python_implementation": "PyPy", "python_version": "3.10.14"})
+        self.assertEqual(run.call_args.kwargs["stdin"], environment.subprocess.DEVNULL)
+        self.assertEqual(run.call_args.kwargs["cwd"], environment.REPO_ROOT)
+
+    def test_an_interpreter_that_cannot_answer_is_unknown_not_this_one(self):
+        # Reporting this process's interpreter instead would label the runs
+        # with the wrong one, which is what the record is there to prevent.
+        with tempfile.TemporaryDirectory() as folder:
+            missing = str(Path(folder, "no-such-python"))
+            for python in (missing, write_fake_python(folder, line="Python 3.10")):
+                with self.subTest(python=python):
+                    facts = environment.interpreter_facts(python)
+                    self.assertEqual(facts, {"python_implementation": "unknown", "python_version": ""})
 
     def test_git_status_takes_no_lock_on_the_index(self):
         # Every job asks, so a plain "git status" would hold .git/index.lock while

@@ -272,7 +272,14 @@ and software the worker runs on (`run_environment()` in
 `sat_core/environment.py`). It is sent first, before the request is checked,
 so a job that fails still records where it ran. The interpreter and git
 facts come from the worker, so they name the interpreter that ran the job
-and the code it imported. The OS, CPU and RAM facts do not change while the
+and the code it imported. With `WIZSAT_SOLVER_PYTHON` set, the solvers of a
+solve or benchmark job run under that interpreter instead, so the worker asks
+it once for its name and version (`interpreter_facts()`, one short process
+start per job) and records those. The setting cannot change while a job
+runs, so one answer covers every run of the job, pool workers included. An
+interpreter that does not answer within 15 seconds is recorded as `unknown`,
+never as the worker's own. A generate job runs no solver and records the
+worker's interpreter. The OS, CPU and RAM facts do not change while the
 server runs: `JobManager` reads them once with `machine_facts()` and passes
 them to `run_job`, so a fresh worker does not read them again
 ([ADR 0004](../adr/0004-where-the-run-environment-is-read.md)).

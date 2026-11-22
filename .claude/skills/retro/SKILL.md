@@ -17,8 +17,8 @@ Start with what the repository already records, before any transcript:
 
 - the pull requests' review findings and the owner's comments:
   `gh pr view <n> --comments`, `gh api repos/{owner}/{repo}/pulls/<n>/comments`;
-- `Escalate:` lines, and findings filed "found while" an item
-  (`grep -rn "Escalate:\|found while" docs/reviews docs/plans`).
+- findings filed "found while" an item
+  (`grep -rn "found while" docs/reviews docs/plans`).
 
 Then the sessions. This session is in your context. Earlier sessions of a
 local Claude Code are JSONL files in `~/.claude/projects/<repo path with

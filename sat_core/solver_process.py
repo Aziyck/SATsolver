@@ -11,8 +11,9 @@ with run_solver, and writes one JSON object per line to stdout:
 
 The request is {"clauses", "solver", "options", "log_level",
 "progress_interval", "timeout"}, and optionally "label" (the name the log
-lines use, as run_solver's label). The child reads stdin to its end before it
-starts, so the parent closes stdin after writing the request. "timeout" is
+lines use, as run_solver's label). It comes as one line (json.dumps writes no
+line breaks), and stdin then stays open for the whole run: it is the child's
+lifeline (below). "timeout" is
 enforced here, by run_solver; its clock starts after the interpreter has
 started and the request has been parsed, which can take seconds for a
 formula near the clause limit. A parent that kills a hung child counts that
@@ -44,9 +45,13 @@ An interpreter that cannot start, a child that ends without a result and a
 line that is not part of the protocol raise SolverProcessError, with a
 readable message; run_solver turns it into an ERROR run.
 
-A parent that is itself ended (a job process terminated, a pool worker that
-leaves with os._exit) cannot kill its child, so the child watches the parent
-and ends itself when the parent is gone (exit_when_parent_dies).
+The lifeline (ADR 0006): a parent that is itself ended (a job process
+terminated, a pool worker that leaves with os._exit) cannot kill its child.
+But the operating system closes every pipe of a process that ends, however
+it ends, so the parent keeps the write end of the child's stdin until the
+run is over, and the child ends itself when its stdin reaches its end
+(exit_when_stdin_closes). A child whose stdin closes early (`echo request |
+python -m sat_core.solver_process`) therefore ends without a result.
 """
 
 from __future__ import annotations
@@ -89,11 +94,6 @@ KILLED_BY_TIME_LIMIT = "time limit"  # still running KILL_MARGIN_SECONDS past th
 RESULT_FIELDS = ("status", "solution", "stats", "error", "elapsed")
 # How much of a broken line an error message quotes.
 QUOTED_CHARACTERS = 200
-# How often a child on POSIX checks that its parent is still there (Windows
-# waits on the parent's handle instead, and needs no interval).
-PARENT_CHECK_SECONDS = 0.5
-# The pid of the process that runs run_in_child, for the child's watchdog.
-PARENT_PID_ENV = "WIZSAT_SOLVER_PARENT_PID"
 
 
 class SolverProcessError(Exception):
@@ -130,14 +130,12 @@ def run_in_child(
     # Windows; UTF-8 keeps the error tail readable.
     env = {name: value for name, value in os.environ.items() if name != SOLVER_PYTHON_ENV}
     env["PYTHONIOENCODING"] = "utf-8"
-    # The child ends itself when this process is gone (exit_when_parent_dies).
-    env[PARENT_PID_ENV] = str(os.getpid())
     if os.path.dirname(python):
         # Popen runs the child in ROOT, and a relative path would be looked up
         # there on POSIX but in our own folder on Windows: fix it to ours.
         python = os.path.abspath(python)
     # Encoded here, so a request that cannot be encoded raises to the caller.
-    text = json.dumps(request)
+    text = json.dumps(request) + "\n"
     timeout = request.get("timeout")
     lines: queue.Queue[str | None] = queue.Queue()
     stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL_LINES)
@@ -193,10 +191,11 @@ def run_in_child(
         # either pipe while nobody reads it would block. The request is
         # written on a thread too: a big one takes seconds to go through the
         # pipe, and a stop must not wait for that.
+        writer = threading.Thread(target=_write_request, args=(child.stdin, text), daemon=True)
         threads = [
             threading.Thread(target=_read_lines, args=(child.stdout, lines.put, lines.put), daemon=True),
             threading.Thread(target=_read_lines, args=(child.stderr, stderr_tail.append, None), daemon=True),
-            threading.Thread(target=_write_request, args=(child.stdin, text), daemon=True),
+            writer,
         ]
         for thread in threads:
             thread.start()
@@ -232,6 +231,14 @@ def run_in_child(
             # and a kill only saves the wait.
             if child.poll() is None:
                 child.kill()
+            # The lifeline next, before waiting for the readers: when the
+            # interpreter path is a wrapper that started the real interpreter
+            # as its own child, the kill ended the wrapper alone, and that
+            # child, which still holds stdout, ends only when its stdin does.
+            # The writer goes first: a close waits for a write in progress.
+            writer.join(timeout=5)
+            with contextlib.suppress(OSError):
+                child.stdin.close()
             child.wait()
             for thread in threads:
                 thread.join(timeout=5)
@@ -341,13 +348,16 @@ def _stop_reason(
 
 
 def _write_request(stdin: TextIO, text: str) -> None:
+    # stdin stays open after the request: it is the child's lifeline, closed
+    # when the run is over (Popen's `with` block), or by the OS when this
+    # process ends.
     try:
         stdin.write(text)
-        stdin.close()
+        stdin.flush()
     except OSError:
         # The child ended (or was killed) before reading its request, so it
-        # has no result. Close again: the first close may have failed while
-        # flushing, and Popen's own close would raise the same error.
+        # has no result. Close now: the unsent text would make Popen's own
+        # close raise the same error while flushing.
         with contextlib.suppress(OSError):
             stdin.close()
 
@@ -362,113 +372,35 @@ def _read_lines(stream: TextIO, sink: Callable[[str], None], at_end: Callable[[N
             at_end(None)
 
 
-def exit_when_parent_dies() -> None:
+def exit_when_stdin_closes(stdin: TextIO) -> None:
     """
-    Start a daemon thread that ends this process once its parent is gone.
+    Start a daemon thread that ends this process once stdin reaches its end.
 
     The parent kills the child itself when a run stops, but a parent that is
     killed (the manager's force stop terminates a job process; a pool worker
     leaves with os._exit) never gets to: without this, its child would run
-    on, with no one to report to and, without a timeout, for ever. This is
-    sat_core.parallel.exit_when_parent_dies for a child that subprocess
-    started, which multiprocessing.parent_process() does not know.
-
-    The process watched is the one run_in_child names in PARENT_PID_ENV, not
-    simply this one's parent: an interpreter path can be a launcher that
-    starts the real interpreter as its own child (a venv's python.exe on
-    Windows), and a launcher outlives a killed parent. A child started any
-    other way watches its parent.
+    on, with no one to report to and, without a timeout, for ever. The write
+    end of stdin is held by the parent alone (Popen passes a child only its
+    own pipes), so its end means the parent closed it or is gone. Nothing
+    in between counts: a launcher or wrapper that starts the real
+    interpreter as its own child (a venv's python.exe on Windows) passes the
+    pipe on, and the signal still comes when the parent ends, or when it
+    closes stdin right after killing the wrapper (run_in_child).
     """
 
-    direct = os.getppid()
-    try:
-        parent = int(os.environ.get(PARENT_PID_ENV, ""))
-    except ValueError:
-        parent = direct
-    if sys.platform == "win32":
-        handle = _open_for_waiting(parent)
-        if handle is None:
-            return
-
-        def parent_gone() -> None:
-            _wait_for_handle(handle)
-
-    else:
-
-        def parent_gone() -> None:
-            # A child whose parent dies is given to another process (init or
-            # a subreaper), so its parent pid changes. That holds even while
-            # the dead parent is a zombie no one has collected yet; the pid
-            # check covers a parent behind a launcher.
-            while os.getppid() == direct and _pid_exists(parent):
-                time.sleep(PARENT_CHECK_SECONDS)
+    # The file descriptor, not the stream: a daemon thread blocked inside the
+    # stream would hold its lock, and Python aborts when it cannot take that
+    # lock at shutdown, after a normal run. The parent sends nothing after the
+    # request line, so the stream's buffer holds nothing this misses.
+    descriptor = stdin.fileno()
 
     def watch() -> None:
-        parent_gone()
-        os._exit(1)  # no one is left to read the exit code or a result
+        with contextlib.suppress(OSError):
+            while os.read(descriptor, 4096):
+                pass
+        os._exit(1)  # no one is left to read a result or the exit code
 
-    threading.Thread(target=watch, daemon=True, name="parent-watchdog").start()
-
-
-def _pid_exists(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)  # POSIX only: on Windows os.kill ends the process
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _open_for_waiting(pid: int) -> Any:
-    """A Windows handle to wait on until process `pid` ends, or None if it cannot be watched."""
-
-    import ctypes
-    from ctypes import wintypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
-    kernel32.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(ctypes.c_ulonglong),) * 4
-    synchronize, query_limited_information = 0x00100000, 0x1000
-    # Windows does not tell a child that its parent ended. Once open, the
-    # handle holds on to that process, not to its pid.
-    handle = kernel32.OpenProcess(synchronize | query_limited_information, False, pid)
-    if not handle:
-        error = ctypes.get_last_error()
-        if error == 87:  # ERROR_INVALID_PARAMETER: no process with that pid
-            os._exit(1)
-        # Not allowed to watch it: run as before rather than end a healthy run.
-        # stderr reaches the parent's error tail if the run goes wrong.
-        sys.stderr.write(f"Cannot watch the parent process {pid} (error {error}); this run will not end with it.\n")
-        return None
-
-    def created_at(process: Any) -> int | None:
-        times = [ctypes.c_ulonglong() for _ in range(4)]  # FILETIMEs: creation, exit, kernel, user
-        if not kernel32.GetProcessTimes(process, *(ctypes.byref(value) for value in times)):
-            return None
-        return times[0].value
-
-    # A parent killed while this child was starting can have its pid reused
-    # before the handle is opened. Every process started before its children,
-    # so one started after this one is not the parent: the parent is gone.
-    parent_created, own_created = created_at(handle), created_at(kernel32.GetCurrentProcess())
-    if parent_created is not None and own_created is not None and parent_created > own_created:
-        os._exit(1)
-    return handle
-
-
-def _wait_for_handle(handle: Any) -> None:
-    import ctypes
-    from ctypes import wintypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.WaitForSingleObject.restype = wintypes.DWORD
-    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-    infinite = 0xFFFFFFFF
-    # ctypes lets go of the GIL during the call, so the solver runs meanwhile.
-    kernel32.WaitForSingleObject(handle, infinite)
+    threading.Thread(target=watch, daemon=True, name="stdin-lifeline").start()
 
 
 def serve(request: dict[str, Any], out: TextIO) -> None:
@@ -505,10 +437,14 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
     )
 
 
-def main(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
+def main(stdin: TextIO | None = None, stdout: TextIO | None = None, lifeline: bool = False) -> int:
+    """Serve the request on stdin's first line. With lifeline, the process also ends when stdin does."""
+
     stdin = stdin if stdin is not None else sys.stdin
     stdout = stdout if stdout is not None else sys.stdout
-    request = json.loads(stdin.read())
+    request = json.loads(stdin.readline())
+    if lifeline:
+        exit_when_stdin_closes(stdin)
 
     real_stdout, sys.stdout = sys.stdout, sys.stderr
     try:
@@ -522,7 +458,5 @@ if __name__ == "__main__":
     # The parent leaves the setting out already; dropping it here as well means
     # a child started any other way cannot start a chain of children.
     os.environ.pop(SOLVER_PYTHON_ENV, None)
-    # Before the request is read: a parent can die while it is still sending it.
-    exit_when_parent_dies()
     sys.stdin.reconfigure(encoding="utf-8")
-    sys.exit(main())
+    sys.exit(main(lifeline=True))

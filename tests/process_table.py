@@ -13,6 +13,15 @@ import sys
 import time
 
 SOLVER_CHILD_MODULE = "sat_core.solver_process"
+# Taken at import: a test may patch subprocess.Popen to start another child
+# program (child_process_spy), and the lookups below must still run.
+REAL_POPEN = subprocess.Popen
+
+
+def _output(command):
+    with REAL_POPEN(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="replace") as process:
+        output, _ = process.communicate(timeout=60)
+    return output
 
 
 def process_table():
@@ -26,7 +35,7 @@ def process_table():
         command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
     else:
         command = ["ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", "args="]
-    output = subprocess.run(command, capture_output=True, text=True, errors="replace", check=True, timeout=60).stdout
+    output = _output(command)
     table = []
     for line in output.splitlines():
         parts = line.split(None, 2)
@@ -92,7 +101,7 @@ class HeldProcess:
             return True
         # A zombie has ended; it waits only for a parent to collect it (a
         # container without an init process may never do that).
-        state = subprocess.run(["ps", "-o", "stat=", "-p", str(self.pid)], capture_output=True, text=True).stdout.strip()
+        state = _output(["ps", "-o", "stat=", "-p", str(self.pid)]).strip()
         return bool(state) and not state.startswith("Z")
 
     def release(self):

@@ -14,6 +14,7 @@ export function catalog(partial: Partial<Catalog> = {}): Catalog {
     stats: [],
     presets: [],
     log_levels: ["normal"],
+    interpreters: { pypy: { available: false, version: null } },
     limits: { max_clauses: 1, max_benchmark_runs: 1, max_workers: 1 },
     defaults: { solve_timeout: 1, benchmark_timeout: 1, benchmark_rules: [] },
     ...partial,

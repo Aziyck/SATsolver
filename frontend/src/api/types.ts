@@ -105,6 +105,7 @@ export interface Catalog {
   stats: StatSpec[];
   presets: Preset[];
   log_levels: string[];
+  interpreters: { pypy: { available: boolean; version: string | null } };
   limits: { max_clauses: number; max_benchmark_runs: number; max_workers: number };
   defaults: { solve_timeout: number; benchmark_timeout: number; benchmark_rules: Rule[] };
 }

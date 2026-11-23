@@ -63,6 +63,7 @@ Everything the UI needs to draw its forms:
   "stats": [StatSpec, ...],
   "presets": [Preset, ...],
   "log_levels": ["normal", "periodic", "debug"],
+  "interpreters": {"pypy": {"available": true, "version": "3.12.15"}},
   "limits": {"max_clauses": 2000000, "max_benchmark_runs": 200000, "max_workers": 4},
   "defaults": {
     "solve_timeout": 60,
@@ -71,6 +72,13 @@ Everything the UI needs to draw its forms:
   }
 }
 ```
+
+`interpreters.pypy` says whether the server found a PyPy it can run solvers
+in (`WIZSAT_SOLVER_PYTHON`, else `pypy3` or `pypy` on `PATH`; PyPy 3.10 or
+newer) and its Python version. The path is never sent. The server looks once,
+when it starts, so installing PyPy needs a restart, and so does a PyPy that
+did not answer the probe in time (a cold start after an antivirus scan, for
+example).
 
 A `ProblemSpec` has `key`, `title`, `summary`, `description`, `category`,
 `image`, `result_view` (`sudoku`, `queens`, `graph` or `assignment`),

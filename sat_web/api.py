@@ -27,7 +27,7 @@ from problems import all_problems, get_problem
 from problems.base import MAX_CLAUSES
 from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMARK_RUNS, max_workers, parse_cases, parse_request
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
-from sat_core.environment import VERSION
+from sat_core.environment import VERSION, find_pypy
 from sat_core.export import rows_to_csv
 from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
@@ -248,6 +248,7 @@ HOST_REFUSED = (
 
 
 def catalog() -> dict[str, Any]:
+    pypy = find_pypy()  # one probe per server: create_app builds the catalog once, at start-up
     return {
         "version": VERSION,
         "problems": [spec.to_dict() for spec in all_problems()],
@@ -255,6 +256,8 @@ def catalog() -> dict[str, Any]:
         "stats": [spec.to_dict() for spec in STAT_SPECS],
         "presets": [preset.to_dict() for preset in all_presets()],
         "log_levels": list(LOG_LEVELS),
+        # Availability and version only: the path names a folder of the owner's disk (INTERP-1).
+        "interpreters": {"pypy": {"available": pypy is not None, "version": pypy["version"] if pypy else None}},
         "limits": {"max_clauses": MAX_CLAUSES, "max_benchmark_runs": MAX_BENCHMARK_RUNS, "max_workers": max_workers()},
         "defaults": {
             "solve_timeout": DEFAULT_SOLVE_TIMEOUT,
@@ -274,6 +277,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         settings.ensure_dirs()
+        # The catalog runs the PyPy probe (find_pypy, up to a few seconds): once, here, so the
+        # first page load does not wait for it and concurrent requests do not each start one.
+        catalog_cache.update(await run_in_threadpool(catalog))
         store = Store(settings.db_path)
         manager = JobManager(settings, store)
         manager.attach_loop(asyncio.get_running_loop())
@@ -313,8 +319,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/catalog")
     async def get_catalog() -> dict[str, Any]:
-        if not catalog_cache:
-            catalog_cache.update(await run_in_threadpool(catalog))
         return catalog_cache
 
     @app.post("/api/problems/{key}/preview")

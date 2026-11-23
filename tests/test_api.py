@@ -54,6 +54,10 @@ def local_client(settings: Settings) -> TestClient:
 
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
+        # The catalog probes for PyPy at start-up; a fixed answer keeps the tests off the machine's own PyPy.
+        no_pypy = mock.patch("sat_web.api.find_pypy", return_value=None)
+        no_pypy.start()
+        self.addCleanup(no_pypy.stop)
         self.folder = tempfile.TemporaryDirectory()
         self.client = local_client(make_settings(self.folder.name, self.make_dist(Path(self.folder.name))))
         self.client.__enter__()
@@ -92,6 +96,38 @@ class CatalogTests(ApiTestCase):
         self.assertEqual(data["defaults"]["benchmark_rules"][0]["seconds"], 10.0)
         graph_fields = next(p for p in data["problems"] if p["key"] == "clique")["fields"]
         self.assertEqual(graph_fields[2]["show_if"], {"graph_mode": ["manual"]})
+
+    def catalog_with_solver_python(self, implementation, version):
+        """The catalog of a server started with a stand-in interpreter as WIZSAT_SOLVER_PYTHON, and the stand-in's folder."""
+
+        mock.patch.stopall()  # the real find_pypy, not setUp's fixed answer
+        folder = tempfile.mkdtemp(dir=self.folder.name)
+        fake = write_fake_python(folder, implementation, version)
+        with mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": fake}):
+            with local_client(make_settings(tempfile.mkdtemp(dir=self.folder.name))) as client:
+                return client.get("/api/catalog"), folder
+
+    def test_catalog_says_whether_pypy_is_available_and_never_where_it_is(self):
+        response, folder = self.catalog_with_solver_python("PyPy", "3.12.15")
+
+        self.assertEqual(response.json()["interpreters"], {"pypy": {"available": True, "version": "3.12.15"}})
+        self.assertNotIn(Path(folder).name, response.text)  # the path names a folder of the owner's disk
+        self.assertNotIn("fake-python", response.text)
+
+    def test_catalog_says_so_when_pypy_is_not_available(self):
+        response, _folder = self.catalog_with_solver_python("CPython", "3.12.0")
+
+        self.assertEqual(response.json()["interpreters"], {"pypy": {"available": False, "version": None}})
+
+    def test_the_server_looks_for_pypy_once_when_it_starts(self):
+        # Not at the first catalog request: that would hold up the first page load, once per concurrent request.
+        with mock.patch("sat_web.api.find_pypy", return_value=None) as probe:
+            with local_client(make_settings(tempfile.mkdtemp(dir=self.folder.name))) as client:
+                self.assertEqual(probe.call_count, 1)
+                client.get("/api/catalog")
+                client.get("/api/catalog")
+
+        self.assertEqual(probe.call_count, 1)
 
     def test_catalog_declares_the_statistics(self):
         stats = {entry["key"]: entry for entry in self.client.get("/api/catalog").json()["stats"]}

@@ -1,6 +1,6 @@
 # Plan: choose Python or PyPy per job, in the UI
 
-- **Status:** proposed
+- **Status:** in progress (INTERP-1 done 2026-11-23)
 - **Written:** 2026-11-23
 - **Related:** [solver runner](pypy-solver-runner.md) (the child process and
   `WIZSAT_SOLVER_PYTHON`), [Solver performance](../guide/performance.md#running-the-solvers-under-pypy),
@@ -64,8 +64,15 @@ the long runs, means restarting the server with a different environment.
 
 ## Tasks
 
-- [ ] **INTERP-1. The server finds PyPy and says so in the catalog**
+- [x] **INTERP-1. The server finds PyPy and says so in the catalog** - Done 2026-11-23.
   - **Difficulty:** medium
+  - **Built as:** `find_pypy()` in `sat_core/environment.py`; `catalog()` in
+    `sat_web/api.py` reports `interpreters.pypy`. Rulings: a setting that is
+    set but unusable gives "not available" and does not fall back to `PATH`
+    (a wrong setting must show); the catalog, with its probe, is built once
+    when the server starts (FastAPI lifespan); a probe that times out stays
+    "not available" until a restart; the `PATH` lookup skips the current
+    folder (Windows `shutil.which` searches it first).
   - **How:** a `find_pypy()` in `sat_core/environment.py` returning the path
     and version, or None, by the lookup in the Design; the catalog reports
     availability and version, not the path.

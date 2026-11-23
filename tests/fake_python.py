@@ -11,20 +11,24 @@ import sys
 from pathlib import Path
 
 
-def write_fake_python(folder: str, implementation: str = "PyPy", version: str = "3.10.14", line: str | None = None) -> str:
+def write_fake_python(
+    folder: str, implementation: str = "PyPy", version: str = "3.10.14", line: str | None = None, name: str = "fake-python"
+) -> str:
     """Write the script into `folder`; return the path to set as WIZSAT_SOLVER_PYTHON.
 
     `line` replaces the whole output line (an answer the probe cannot read).
+    `name` is the file name without extension: "pypy3" makes a stand-in that
+    a PATH lookup for pypy3 finds (INTERP-1).
     """
 
     if line is None:
         line = f'["{implementation}", "{version}"]'
     if sys.platform == "win32":
         # CreateProcess runs a .cmd file through cmd.exe, so Popen can start it.
-        path = Path(folder, "fake-python.cmd")
+        path = Path(folder, f"{name}.cmd")
         path.write_text(f"@echo {line}\r\n", encoding="ascii")
     else:
-        path = Path(folder, "fake-python")
+        path = Path(folder, name)
         path.write_text(f"#!/bin/sh\necho '{line}'\n", encoding="ascii")
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return os.fspath(path)

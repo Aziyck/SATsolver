@@ -1,6 +1,7 @@
 """run_environment(): the machine and software facts recorded with every run."""
 
 import json
+import os
 import platform
 import sys
 import tempfile
@@ -201,6 +202,111 @@ class RunEnvironmentTests(unittest.TestCase):
             facts = run_environment()
         self.assertIsNone(facts["git_commit"])
         self.assertIsNone(facts["git_dirty"])
+
+
+class FindPypyTests(unittest.TestCase):
+    """find_pypy: the setting first, then pypy3 or pypy on PATH; only PyPy 3.10 or newer counts (INTERP-1)."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+
+    def find(self, setting=None, path_folder=None):
+        """find_pypy with the setting and PATH as given; PATH is only `path_folder` (an empty one when None)."""
+
+        path = path_folder or tempfile.mkdtemp(dir=self.folder.name)
+        with mock.patch.dict("os.environ", {"PATH": path}):
+            if setting is None:
+                os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
+            else:
+                os.environ["WIZSAT_SOLVER_PYTHON"] = setting
+            return environment.find_pypy()
+
+    def test_the_setting_wins_over_path(self):
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        write_fake_python(str(on_path), "PyPy", "3.11.0", name="pypy3")
+        named = Path(self.folder.name, "named")
+        named.mkdir()
+        setting = write_fake_python(str(named), "PyPy", "3.12.15")
+
+        found = self.find(setting=setting, path_folder=str(on_path))
+
+        self.assertEqual(found, {"path": setting, "version": "3.12.15"})
+
+    def test_pypy3_on_path_is_found_when_the_setting_is_unset(self):
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        fake = write_fake_python(str(on_path), "PyPy", "3.11.0", name="pypy3")
+
+        found = self.find(path_folder=str(on_path))
+
+        self.assertEqual(found["version"], "3.11.0")
+        self.assertEqual(Path(found["path"]).resolve(), Path(fake).resolve())
+
+    def test_pypy_on_path_is_found_when_there_is_no_pypy3(self):
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        write_fake_python(str(on_path), "PyPy", "3.10.1", name="pypy")
+
+        self.assertEqual(self.find(path_folder=str(on_path))["version"], "3.10.1")
+
+    def test_nothing_on_path_and_no_setting_is_none(self):
+        self.assertIsNone(self.find())
+
+    def test_a_candidate_that_is_not_usable_pypy_is_none(self):
+        bad = {
+            "CPython": ("CPython", "3.12.0", None),
+            "PyPy older than 3.10": ("PyPy", "3.9.18", None),
+            "an answer that cannot be read": ("PyPy", "3.10.1", "Python 3.10"),
+            "a version that is not numbers": ("PyPy", "banana", None),
+        }
+        for label, (implementation, version, line) in bad.items():
+            with self.subTest(label):
+                folder = tempfile.mkdtemp(dir=self.folder.name)
+                setting = write_fake_python(folder, implementation, version, line=line)
+                self.assertIsNone(self.find(setting=setting))
+
+    def test_a_setting_that_does_not_exist_is_none(self):
+        self.assertIsNone(self.find(setting=str(Path(self.folder.name, "no-such-python"))))
+
+    def test_a_bad_setting_does_not_fall_back_to_path(self):
+        # The setting names the owner's choice; when it is wrong the owner has to hear it, not get another PyPy.
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        write_fake_python(str(on_path), "PyPy", "3.11.0", name="pypy3")
+        wrong = write_fake_python(tempfile.mkdtemp(dir=self.folder.name), "CPython", "3.12.0")
+
+        self.assertIsNone(self.find(setting=wrong, path_folder=str(on_path)))
+
+    def test_a_pypy3_in_the_current_folder_is_not_found(self):
+        # shutil.which on Windows searches the current folder before PATH; the server's folder is not a place to look.
+        here = tempfile.mkdtemp(dir=self.folder.name)
+        write_fake_python(here, "PyPy", "3.11.0", name="pypy3")
+        previous = os.getcwd()
+        os.chdir(here)
+        try:
+            self.assertIsNone(self.find())
+        finally:
+            os.chdir(previous)
+
+    def test_pypy_and_pypy3_that_are_one_interpreter_are_probed_once(self):
+        same = str(Path(self.folder.name, "pypy3"))
+        with (
+            mock.patch.dict("os.environ", {"WIZSAT_SOLVER_PYTHON": ""}),
+            mock.patch.object(environment, "_on_path", return_value=same),
+            mock.patch.object(environment, "interpreter_facts", return_value=dict(environment.UNKNOWN_INTERPRETER)) as probe,
+        ):
+            self.assertIsNone(environment.find_pypy())
+
+        self.assertEqual(probe.call_count, 1)
+
+    def test_a_blank_setting_counts_as_unset(self):
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        write_fake_python(str(on_path), "PyPy", "3.11.0", name="pypy3")
+
+        self.assertEqual(self.find(setting="  ", path_folder=str(on_path))["version"], "3.11.0")
 
 
 if __name__ == "__main__":

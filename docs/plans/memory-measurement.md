@@ -1,6 +1,6 @@
 # Plan: memory use in the results
 
-- **Status:** proposed, not started
+- **Status:** in progress (MEM-1 done 2026-11-23)
 - **Written:** 2026-10-19; tasks rewritten 2026-11-13
 - **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
   RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](done/run-metadata.md)).
@@ -33,6 +33,7 @@ CPython 3.11 on Linux. Each finding below changes the design.
 | Peak memory of the shared job process (`resource.getrusage(...).ru_maxrss`) | CDCL on 3-SAT n=200 showed 39 MB; after a Sudoku 16x16 run the peak stayed at 116 MB, so the same 3-SAT run again would report 116 MB | The value only ever goes up. In a benchmark every row after a big case reports that case's peak. It also includes the interpreter, the imports and the encoding. |
 | The same 3-SAT run alone in a fresh child process | baseline 17 MB, peak 21 MB | Exact for that run. Cost: starting a child with the solver imports took about 0.05 s. |
 | `tracemalloc` (Python's allocation tracker) | the same CDCL run took 25.6 s instead of 3.7 s (7x slower); traced Python peak 3.6 MB | Precise, but it ruins the times, and it only sees Python allocations, not the process. |
+| `ru_maxrss` in a child started by `subprocess` (Linux, measured 2026-11-23 while MEM-1) | a child of a 316 MB process read 316 MB at start and still 316 MB after allocating 50 MB; `VmHWM` in `/proc/self/status` read 11.9 MB, then 62.2 MB | On Linux the child inherits its parent's peak in `ru_maxrss`, even after the parent freed the memory. The solver child would report the job process's peak. `VmHWM` belongs to the process alone. |
 | A thread sampling the process memory | not measured | Python's allocator keeps freed memory for reuse, so a later run can use a lot without the number moving; short spikes between samples are missed. |
 
 How the numbers above were taken, to repeat them: in one Python process, build
@@ -52,8 +53,11 @@ after each run. For the child, run the same code with `subprocess.run([sys.execu
      starts). The UI shows the peak and offers "peak minus baseline" as the
      solver's own share.
    - Reading the peak, standard library only:
-     - Linux: `resource.getrusage(resource.RUSAGE_SELF).ru_maxrss` is in
-       kilobytes.
+     - Linux: `VmHWM` in `/proc/self/status`, in kilobytes (decided
+       2026-11-23, MEM-1): `ru_maxrss` carries the parent's peak into a child
+       (table above). `resource.getrusage(...).ru_maxrss`, also kilobytes, is
+       only the fallback when `/proc` cannot be read; there a child can still
+       report its parent's peak.
      - macOS: the same call returns **bytes**. Convert by platform; this is an
        easy bug.
      - Windows: `GetProcessMemoryInfo` from `psapi.dll` through `ctypes`,
@@ -139,7 +143,7 @@ With every run in its own child, a per-run limit becomes possible:
 
 ## Tasks
 
-- [ ] **MEM-1. Read a process's peak memory on every platform**
+- [x] **MEM-1. Read a process's peak memory on every platform** - Done 2026-11-23.
   - **Difficulty:** medium (three operating systems, units differ)
   - **How:** a new module `sat_core/memory.py` with `peak_memory_mb()`,
     standard library only: `resource.getrusage` on Linux (kilobytes) and macOS
@@ -149,6 +153,16 @@ With every run in its own child, a per-run limit becomes possible:
     Windows), a value that grows by roughly the right amount after allocating
     a 50 MB list, and `None` instead of an exception when the platform call is
     patched to fail.
+  - **Decided (2026-11-23):** Linux reads `VmHWM` from `/proc/self/status`,
+    with `getrusage` as the fallback, because `ru_maxrss` in a child reports
+    its parent's peak (measured, see "Why the obvious ways mislead").
+  - **Built as:** `peak_memory_mb()` in `sat_core/memory.py` (base layer).
+    Whether macOS's `ru_maxrss` has the same inheritance was not measured
+    (no macOS here); MEM-3 should check it before relying on it.
+    The unit is MiB (1024**2 bytes), like `ram_total_gb` in GiB; the stats
+    keep the `_mb` names. The growth test allocates 50 MB in a fresh
+    interpreter: the peak never falls, so in the test process an earlier
+    test's higher peak would hide the growth.
 
 - [ ] **MEM-2. Solve jobs report peak memory**
   - **Difficulty:** easy

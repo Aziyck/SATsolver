@@ -2,7 +2,7 @@
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
   and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
-  RUNNER-7, RUNNER-8 and RUNNER-9 done 2026-11-23)
+  RUNNER-7 to RUNNER-10 done 2026-11-23)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -216,9 +216,17 @@ installed.
     PR #68 under PyPy 7.3.19 (Python 3.10.16).
   - **Done when:** that job is green on a pull request.
 
-- [ ] **RUNNER-10. Real numbers on the target machine**
+- [x] **RUNNER-10. Real numbers on the target machine** - Done 2026-11-23.
   - **Difficulty:** easy (needs PyPy 3.10 or newer on the owner's machine)
   - **Blocked by:** RUNNER-5
+  - **Built as:** `scripts/pypy_timings.py` runs the table's cases through
+    `run_solver`, in process and in a PyPy child. On Windows 11, Ryzen 7
+    4800H, CPython 3.13.14 and PyPy 8.0.1 (Python 3.12.15): 3.0x to 4.2x on
+    the long CDCL runs, 8.0x for DPLL, same work counts; slower on runs
+    under a second once the child's start-up is counted. `child_cost.py`
+    under PyPy: 0.35 s per run, window 3.3 s at most at the clause limit,
+    so `START_UP_SECONDS` stays at 60 s. Numbers in
+    [Solver performance](../guide/performance.md#running-the-solvers-under-pypy).
   - **Done when:** the measurement table is re-run with the app itself on the
     machine used for the thesis, and `docs/guide/performance.md` carries those
     numbers with the machine's metadata.

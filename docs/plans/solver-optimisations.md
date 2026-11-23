@@ -92,6 +92,10 @@ between machines, ratios are what matter.
     slots is not enough; they are less readable.
   - **Done when:** rules 1-3 hold with an unchanged conflicts column and a
     measured gain; expect a few percent.
+  - **Memory:** slots also drop the per-instance attribute dict, roughly 100
+    bytes per clause on CPython (estimate, not measured); PyPy already stores
+    such objects compactly. Record the peak memory before and after as in
+    OPT-7, so the gain is known even if the speed gain is small.
 
 - [ ] **OPT-3. Fast path for two-literal clauses** (CDCL)
   - **Difficulty:** hard (CDCL hot loop; may change the search)
@@ -108,6 +112,13 @@ between machines, ratios are what matter.
     measurably faster (estimate, not measured: 1.2-1.5x on those). If the
     search changed, `docs/algorithms/cdcl.md` and `docs/guide/performance.md`
     say so.
+  - **Memory:** this can also be the largest memory saving for the pairwise
+    encodings: nearly all of N-Queens' 2,194,280 clauses at n=110 have two
+    literals. If a binary clause lives only as "the other literal" in the
+    binary watch lists, without a `Clause` object and its literal list, its
+    cost falls to two list entries. That holds only if the reason for a
+    binary implication is kept without a `Clause` object too. Record the peak
+    memory before and after as in OPT-7.
 
 - **OPT-4. Renumber huge variable numbers:** this is audit item A2; do it
   there.
@@ -152,6 +163,32 @@ own functions (`propagate`, `analyse_conflict`, `enqueue`, ...). The profiler
 slows everything down, so use it to compare shares of time, not absolute
 times.
 
+- [ ] **OPT-7. Fewer copies of the formula in CDCL** (CDCL, same search)
+  - **Difficulty:** medium
+  - **Not hard:** the change is in the setup of `cdcl()`, before the search
+    starts, not in propagation or the main loop; unchanged conflict counts
+    prove the search is the same.
+  - **What:** a CDCL run holds each input clause about three times: the list
+    the caller passed, the cleaned list from `_normalise_formula`, and the
+    `list(lits)` copy that `add_clause()` puts in each `Clause`. Measured
+    2026-11-23 on CPython (Windows): 110-Queens needs 359 MiB once encoded and
+    peaks at 1,120 MiB after a CDCL solve (SAT in 24.8 s), about 0.5 KB per
+    clause in all. Through the PyPy child the solve reported a peak of 999 MiB.
+  - **How:** let `add_clause()` keep the cleaned list from
+    `_normalise_formula` for input clauses instead of copying it; learned
+    clauses keep their copy. The cleaned list is a fresh list, so reusing it
+    never changes the caller's clauses.
+  - **Out of scope:** the caller's list. `serve()` in
+    `sat_core/solver_process.py`, `run_solver()` and `cdcl()` each keep a
+    reference to it for the whole solve, so freeing it changes how clauses
+    are handed to the solver, and `solver_process.py` is a hard trigger. File
+    it as its own item if this task's measurement shows it is worth doing.
+  - **Done when:** rules 1-3 hold with an unchanged conflicts column, and the
+    peak memory of a CDCL solve of 110-Queens (`WIZSAT_MAX_CLAUSES=3000000`),
+    read with `peak_memory_mb()` (`sat_core/memory.py`) in a fresh process,
+    is lower than before on CPython and on PyPy. `docs/guide/performance.md`
+    records both peaks.
+
 ## Considered and rejected
 
 These came up on 2026-10-19 and were set aside; reopen only with a new reason.
@@ -168,3 +205,9 @@ These came up on 2026-10-19 and were set aside; reopen only with a new reason.
   of clauses, dicts, closures or classes well.
 - **Moving the heap or propagation into classes:** attribute lookups in the hot
   path would make CPython slower; the closures are the speed trick.
+- **Flat `array('i')` storage for the clauses** (added 2026-11-23): all
+  literals in one flat typed array instead of lists of Python ints would save
+  the most memory per clause. Every read from an `array` creates a new Python
+  int, so propagation, which reads literals all the time, would likely become
+  slower on CPython. It would also mean rewriting the hot loops around
+  offsets. OPT-3 and OPT-7 cut memory without that cost.

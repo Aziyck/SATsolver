@@ -427,8 +427,14 @@ class SolverChildTests(ApiTestCase):
         return found
 
     def test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child(self):
+        # CI's PyPy job names its PyPy here (RUNNER-9); same statuses and work counts across interpreters.
+        # The baseline runs in-process even when the shell has the setting (a PyPy user's would).
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
         expected = self.outcomes()
-        self.set_solver_python(sys.executable)
+        self.set_solver_python(os.environ.get("WIZSAT_TEST_SOLVER_PYTHON") or sys.executable)
 
         found = self.outcomes()
 
@@ -496,6 +502,11 @@ class SolverChildTests(ApiTestCase):
     def test_a_job_process_that_is_killed_leaves_no_child_behind(self):
         # The manager's force stop and shutdown() terminate a job process that
         # did not stop in time; run_in_child's own clean-up then never runs.
+        # Expected side effect (F8): the killed job cannot delete the
+        # semaphores of its queues and its pool, so the run ends with
+        # "resource_tracker: There appear to be N leaked semaphore objects";
+        # the tracker deletes them then. Left visible on purpose: silencing it
+        # would hide a real leak elsewhere.
         for workers in (1, 2):
             with self.subTest(workers=workers):
                 job_id, process, children = self.start_endless_benchmark(workers)

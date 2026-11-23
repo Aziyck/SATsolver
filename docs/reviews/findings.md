@@ -549,3 +549,28 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** at a formula whose count takes a measurable time, a run
     killed by its time limit through the child reports an `elapsed` no
     shorter than its timeout.
+
+- [x] **F8. The test suite ends with a warning about leaked semaphores** - Dropped 2026-11-23: accepted. All 11 come from
+  `test_a_job_process_that_is_killed_leaves_no_child_behind`
+  (`tests/test_api.py`), which kills a job process on purpose; every other
+  test leaves none (each test file, then each test of `SolverChildTests`,
+  run alone). The killed job cannot delete its pool's and queues'
+  semaphores; the resource tracker deletes them at exit, so in the server
+  they last only until it stops, after a force stop. Explained next to that
+  test and in `README.md`; not silenced, so a real leak still shows.
+  (added 2026-11-23, found while RUNNER-9; seen in the output, cause not traced)
+  - **Difficulty:** hard (the fix is in how processes, queues or events are
+    closed)
+  - **Problem:** `WIZSAT_REQUIRE_API_TESTS=1 python -m unittest discover -s
+    tests` passes, then `multiprocessing`'s resource tracker warns "There
+    appear to be 11 leaked semaphore objects to clean up at shutdown" (Linux,
+    CPython 3.13, on `main` at 005dd0f). Something creates `multiprocessing`
+    locks, queues or events and never closes them: in the tests, or in
+    `JobManager` or the benchmark pool when a job ends. If it is the server,
+    a long-running server holds one more set per job.
+  - **Fix:** find which test leaves them (run the files one at a time), then
+    close the objects where they are made; a test fixture that is not torn
+    down is fixed in the test.
+  - **Done when:** the full suite ends without the resource tracker warning,
+    and a test that runs one job through `JobManager` and shuts it down sees
+    no leaked semaphore.

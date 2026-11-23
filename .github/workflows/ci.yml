@@ -46,6 +46,39 @@ jobs:
       - name: Solver smoke benchmark
         run: python scripts/benchmark_cdcl.py
 
+  pypy:
+    # The server stays on CPython; only the solvers run under PyPy (docs/plans/pypy-solver-runner.md).
+    name: Solvers under PyPy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: pypy
+        with:
+          python-version: pypy3.10
+      # Set up last, so `python` is this CPython.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Solver agreement under PyPy
+        env:
+          PYPY: ${{ steps.pypy.outputs.python-path }}
+        run: |
+          "$PYPY" --version
+          "$PYPY" -m unittest discover -s tests -p test_solver_agreement.py -v
+      - name: Jobs and benchmarks with the solvers in a PyPy child
+        env:
+          WIZSAT_REQUIRE_API_TESTS: "1"
+          WIZSAT_TEST_SOLVER_PYTHON: ${{ steps.pypy.outputs.python-path }}
+        # The test falls back to this CPython when the path is empty; refuse anything but PyPy first.
+        run: |
+          "$WIZSAT_TEST_SOLVER_PYTHON" -c "import platform, sys; print(platform.python_implementation()); sys.exit(platform.python_implementation() != 'PyPy')"
+          python -m unittest discover -s tests -p test_api.py -k test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child -v
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

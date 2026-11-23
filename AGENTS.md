@@ -182,7 +182,9 @@ command ran in this session after the last edit.
 
 CI (`.github/workflows/ci.yml`) runs the same checks on every push to `main`
 and on pull requests: lint and Python tests on Ubuntu (3.10, 3.13) and Windows
-(3.12), the frontend checks, then the end-to-end tests.
+(3.12); the solver agreement tests under PyPy 3.10 and one API test with
+the solvers in a PyPy child (`WIZSAT_TEST_SOLVER_PYTHON`); the frontend
+checks, then the end-to-end tests.
 
 ## Conventions
 

@@ -74,7 +74,10 @@ jobs:
         env:
           WIZSAT_REQUIRE_API_TESTS: "1"
           WIZSAT_TEST_SOLVER_PYTHON: ${{ steps.pypy.outputs.python-path }}
-        run: python -m unittest discover -s tests -p test_api.py -k test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child -v
+        # The test falls back to this CPython when the path is empty; refuse anything but PyPy first.
+        run: |
+          "$WIZSAT_TEST_SOLVER_PYTHON" -c "import platform, sys; print(platform.python_implementation()); sys.exit(platform.python_implementation() != 'PyPy')"
+          python -m unittest discover -s tests -p test_api.py -k test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child -v
 
   frontend:
     name: Frontend

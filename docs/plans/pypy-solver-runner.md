@@ -210,7 +210,10 @@ installed.
     `test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child`:
     it takes the child's interpreter from `WIZSAT_TEST_SOLVER_PYTHON` (default
     `sys.executable`), so under PyPy it checks that statuses and work counts
-    match a CPython run.
+    match a CPython run. The step refuses an interpreter that is not PyPy
+    first, so an empty path cannot fall back to CPython and pass. Closed
+    with the change; the done-when was seen afterwards: the job passed on
+    PR #68 under PyPy 7.3.19 (Python 3.10.16).
   - **Done when:** that job is green on a pull request.
 
 - [ ] **RUNNER-10. Real numbers on the target machine**

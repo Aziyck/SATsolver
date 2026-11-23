@@ -428,6 +428,11 @@ class SolverChildTests(ApiTestCase):
 
     def test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child(self):
         # CI's PyPy job names its PyPy here (RUNNER-9); same statuses and work counts across interpreters.
+        # The baseline runs in-process even when the shell has the setting (a PyPy user's would).
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
         expected = self.outcomes()
         self.set_solver_python(os.environ.get("WIZSAT_TEST_SOLVER_PYTHON") or sys.executable)
 

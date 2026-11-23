@@ -580,6 +580,21 @@ STAT_SPECS: tuple[StatSpec, ...] = (
         "Time spent inside the solver, without encoding and checking.",
         unit="s",
     ),
+    # Not reported by a solver: solve_job adds these two (MEM-2). MEM-6 turns on csv and chart.
+    StatSpec(
+        "peak_memory_mb",
+        "Peak memory of the job",
+        "",
+        "The most memory the job process used, encoded formula and interpreter included, so even a trivial run shows a few MiB.",
+        unit="MiB",
+    ),
+    StatSpec(
+        "baseline_memory_mb",
+        "Memory after encoding",
+        "",
+        "The job process's peak when the formula was encoded and the solver had not started: subtract it from the peak for the solver's own share.",
+        unit="MiB",
+    ),
 )
 _STAT_SPEC_KEYS = [spec.key for spec in STAT_SPECS]
 if len(_STAT_SPEC_KEYS) != len(set(_STAT_SPEC_KEYS)):

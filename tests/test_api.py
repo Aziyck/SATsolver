@@ -164,6 +164,19 @@ class JobTests(ApiTestCase):
         self.assertEqual(self.client.delete(f"/api/jobs/{job['id']}").status_code, 204)
         self.assertEqual(self.client.get(f"/api/jobs/{job['id']}").status_code, 404)
 
+    def test_a_finished_solve_job_reports_its_peak_memory_and_the_catalog_explains_it(self):
+        # Measured in the worker process, which runs this one solve (MEM-2).
+        job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
+        stats = self.wait(job["id"])["result"]["stats"]
+
+        self.assertGreater(stats["baseline_memory_mb"], 0)
+        self.assertGreaterEqual(stats["peak_memory_mb"], stats["baseline_memory_mb"])
+        # The Statistics tab takes label, unit and explanation from the catalog.
+        specs = {spec["key"]: spec for spec in self.client.get("/api/catalog").json()["stats"]}
+        for key in ("peak_memory_mb", "baseline_memory_mb"):
+            self.assertEqual(specs[key]["unit"], "MiB")
+            self.assertTrue(specs[key]["label"] and specs[key]["help"])
+
     def test_a_finished_job_reports_the_environment_it_ran_in(self):
         job = self.submit("solve", {"problem": "n_queens", "params": {"size": 5}, "solver": "cdcl"})
         detail = self.wait(job["id"])
@@ -384,8 +397,10 @@ class JobTests(ApiTestCase):
 
 
 def work(stats):
-    """A run's statistics without its times: the same search gives the same work."""
-    return {key: value for key, value in stats.items() if key != "elapsed"}
+    """A run's statistics without its times and memory: the same search gives the same work.
+
+    Memory is the job process's (MEM-2); with the solver child there is none, by design."""
+    return {key: value for key, value in stats.items() if key not in ("elapsed", "peak_memory_mb", "baseline_memory_mb")}
 
 
 class SolverChildTests(ApiTestCase):

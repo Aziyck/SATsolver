@@ -40,6 +40,16 @@ class CatalogTests(unittest.TestCase):
                 self.assertTrue(spec.label)
                 self.assertTrue(spec.help)
 
+    def test_the_job_memory_statistics_are_declared_and_say_what_they_measure(self):
+        # Reported by solve_job (MEM-2), not by a solver; the CSV and chart flags come with MEM-6.
+        specs = {spec.key: spec for spec in STAT_SPECS}
+        for key, words in (("peak_memory_mb", "job"), ("baseline_memory_mb", "encoding")):
+            with self.subTest(key=key):
+                self.assertIn(key, specs)
+                self.assertEqual(specs[key].unit, "MiB")
+                self.assertIn(words, (specs[key].label + " " + specs[key].help).lower())
+                self.assertFalse(specs[key].csv or specs[key].chart)
+
     def test_csv_columns_are_the_csv_entries_in_catalog_order(self):
         self.assertEqual(
             export.STAT_COLUMNS,

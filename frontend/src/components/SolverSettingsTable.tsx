@@ -141,6 +141,7 @@ export function StatsTable({ stats, size = "sm" }: { stats: Stats; size?: "xs" |
       <Table.Tbody>
         {Object.entries(stats).map(([key, value]) => {
           const help = statHelp(key, specs);
+          const unit = specs.find((spec) => spec.key === key)?.unit;
           return (
             <Table.Tr key={key}>
               <Table.Td>
@@ -148,7 +149,11 @@ export function StatsTable({ stats, size = "sm" }: { stats: Stats; size?: "xs" |
                   <span className={help ? "wz-explained" : undefined}>{statLabel(key, specs)}</span>
                 </Tooltip>
               </Table.Td>
-              <Table.Td ta="right">{key === "elapsed" && typeof value === "number" ? formatSeconds(value) : formatStat(value)}</Table.Td>
+              <Table.Td ta="right">
+                {key === "elapsed" && typeof value === "number"
+                  ? formatSeconds(value)
+                  : `${formatStat(value)}${unit && typeof value === "number" ? ` ${unit}` : ""}`}
+              </Table.Td>
             </Table.Tr>
           );
         })}

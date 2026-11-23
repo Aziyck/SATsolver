@@ -95,8 +95,9 @@ the long runs, means restarting the server with a different environment.
   - **Difficulty:** medium
   - **Blocked by:** INTERP-2
   - **How:** a SegmentedControl "Run with" (Python | PyPy, with the version)
-    sent as `interpreter`; PyPy disabled with a tooltip ("PyPy not found:
-    install it from pypy.org or set WIZSAT_SOLVER_PYTHON, then restart")
+    sent as `interpreter`; PyPy disabled with a tooltip ("PyPy not found.
+    Install it from pypy.org, then add its folder to PATH or set
+    WIZSAT_SOLVER_PYTHON, and restart the server.")
     when the catalog says it is unavailable; a "PyPy" badge in the job list.
   - **Done when:** component tests show the request carries the choice, the
     switch starts on Python, and PyPy is disabled when unavailable; an e2e

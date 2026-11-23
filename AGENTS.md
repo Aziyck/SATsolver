@@ -24,6 +24,7 @@ python -m ruff check .                   # lint (settings in pyproject.toml)
 python -m unittest discover -s tests     # Python tests
 python scripts/benchmark_cdcl.py         # smoke-run every solver
 python scripts/solver_timings.py         # time the solvers on a fixed set (docs/guide/performance.md)
+python scripts/mutation_sample.py <file.py ...>  # do the tests catch small bugs? (minutes; run alone)
 
 cd frontend
 npm run typecheck                        # tsc

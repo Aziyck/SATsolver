@@ -26,7 +26,7 @@ from problems.base import ProblemSpec
 from sat_core.answers import judge_answer
 from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
-from sat_core.environment import pypy_path, run_environment
+from sat_core.environment import UNKNOWN_INTERPRETER, pypy_path, run_environment
 from sat_core.models import STATUS_CANCELLED, InstanceSummary, ProblemInstance, SolveOutcome
 from sat_core.params import ParamError
 from sat_core.runtime import (
@@ -284,15 +284,19 @@ def recorded_interpreter(kind: str, request: dict[str, Any], environment: dict[s
 
     The request's choice when it has one (every job submitted since INTERP-2).
     A job saved before the field existed ran on PyPy exactly when the server
-    had WIZSAT_SOLVER_PYTHON set, and its environment record then names PyPy.
-    One rule for the job summary (INTERP-4) and for Rerun (sat_web/api.py).
+    had WIZSAT_SOLVER_PYTHON set. Its environment record then names PyPy, or
+    "unknown" when PyPy did not answer the probe in time (F10): only that
+    interpreter is probed, the job's own is read in-process and always
+    answers. One rule for the job summary (INTERP-4) and for Rerun
+    (sat_web/api.py).
     """
 
     if kind not in SOLVER_KINDS:
         return None
     if "interpreter" in request:
         return "pypy" if request["interpreter"] == "pypy" else "python"
-    return "pypy" if (environment or {}).get("python_implementation") == "PyPy" else "python"
+    recorded = (environment or {}).get("python_implementation")
+    return "pypy" if recorded in ("PyPy", UNKNOWN_INTERPRETER["python_implementation"]) else "python"
 
 
 def choose_solver_python(kind: str, request: dict[str, Any]) -> str | None:

@@ -72,6 +72,11 @@ step consumes it.
   and `python scripts/solver_timings.py`) and keep the output before
   touching code.
 
+Before trusting a test, name one wrong implementation it would catch: a
+flipped comparison, a skipped case, an answer that is off by one. If none
+comes to mind, the assertion is too loose. A test of a checker or a
+validator includes an input it must reject.
+
 **Done when** you have seen the command fail for the item's reason (not for
 a typo or a missing import), or saved the baseline. If no loop can be built
 after a real attempt, say what you tried and what you would need, and stop.

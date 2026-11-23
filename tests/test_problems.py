@@ -1,8 +1,9 @@
+import copy
 import json
 import unittest
 
 from problems import all_problems, build_problem, get_problem
-from problems.base import MAX_CLAUSES
+from problems.base import MAX_CLAUSES, ProblemSpec
 from problems.graph import build_graph
 from problems.sudoku import generated_puzzle, givens_conflicts, units
 from sat_core.params import ParamError
@@ -132,6 +133,58 @@ class GraphTests(unittest.TestCase):
         spec, instance, result, decoded = solve_and_decode("hamiltonian_path", {"graph_mode": "manual", "nodes": 4, "edges": "1-2, 2-3, 3-4"})
         self.assertIn(decoded["path"], ([1, 2, 3, 4], [4, 3, 2, 1]))
         self.assertTrue(spec.check(instance, {"path": [1, 3, 2, 4]}))
+
+
+PATH_1_2_3 = {"graph_mode": "manual", "nodes": 3, "edges": "1-2, 2-3"}
+TRIANGLE = {"graph_mode": "manual", "nodes": 3, "edges": "1-2, 2-3, 1-3"}
+
+
+def _same_column(answer):
+    answer["queens"][1][1] = answer["queens"][0][1]
+
+
+def _swap_first_two_cells(answer):
+    row = answer["grid"][0]
+    row[0], row[1] = row[1], row[0]
+
+
+def _neighbours_share_a_color(answer):
+    answer["coloring"][1] = answer["coloring"][0]
+
+
+# One SAT instance per problem with its own check(), and an edit that breaks
+# the problem's main rule while keeping the answer's size, so check() must
+# find the broken rule rather than a wrong count.
+WRONG_ANSWERS = {
+    "sudoku": ({"size": 4, "grid": [[0] * 4 for _ in range(4)]}, _swap_first_two_cells),
+    "n_queens": ({"size": 6}, _same_column),
+    "graph_coloring": ({**TRIANGLE, "colors": 3}, _neighbours_share_a_color),
+    "hamiltonian_path": (
+        {"graph_mode": "manual", "nodes": 4, "edges": "1-2, 2-3, 3-4"},
+        lambda answer: answer.update(path=[1, 3, 2, 4]),
+    ),
+    "independent_set": ({**PATH_1_2_3, "target": 2}, lambda answer: answer.update(selected=[1, 2])),
+    "clique": ({**PATH_1_2_3, "target": 2}, lambda answer: answer.update(selected=[1, 3])),
+}
+
+
+class ProblemCheckTests(unittest.TestCase):
+    def test_check_accepts_the_solver_answer_and_rejects_a_broken_one(self):
+        for key, (params, break_rule) in WRONG_ANSWERS.items():
+            with self.subTest(problem=key):
+                spec, instance, result, decoded = solve_and_decode(key, params)
+                self.assertEqual(result.status, "SAT")
+                self.assertEqual(spec.check(instance, decoded), [])
+
+                wrong = copy.deepcopy(decoded)
+                break_rule(wrong)
+                self.assertNotEqual(wrong, decoded)
+                self.assertNotEqual(spec.check(instance, wrong), [])
+
+    def test_every_problem_with_a_check_has_a_wrong_answer(self):
+        with_check = {spec.key for spec in all_problems() if type(spec).check is not ProblemSpec.check}
+
+        self.assertEqual(with_check, set(WRONG_ANSWERS))
 
 
 class PuzzleTests(unittest.TestCase):

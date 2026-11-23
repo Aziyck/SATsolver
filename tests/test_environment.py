@@ -290,16 +290,17 @@ class FindPypyTests(unittest.TestCase):
         finally:
             os.chdir(previous)
 
-    def test_pypy_and_pypy3_that_are_one_interpreter_are_probed_once(self):
-        same = str(Path(self.folder.name, "pypy3"))
-        with (
-            mock.patch.dict("os.environ", {"WIZSAT_SOLVER_PYTHON": ""}),
-            mock.patch.object(environment, "_on_path", return_value=same),
-            mock.patch.object(environment, "interpreter_facts", return_value=dict(environment.UNKNOWN_INTERPRETER)) as probe,
-        ):
-            self.assertIsNone(environment.find_pypy())
+    def test_a_pypy3_that_is_not_usable_is_not_passed_over_for_pypy(self):
+        # A job runs on pypy_path() without probing; the server must judge that same interpreter (INTERP-2).
+        on_path = Path(self.folder.name, "bin")
+        on_path.mkdir()
+        write_fake_python(str(on_path), "PyPy", "3.9.18", name="pypy3")
+        write_fake_python(str(on_path), "PyPy", "3.11.0", name="pypy")
 
-        self.assertEqual(probe.call_count, 1)
+        self.assertIsNone(self.find(path_folder=str(on_path)))
+        with mock.patch.dict("os.environ", {"PATH": str(on_path)}):
+            os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
+            self.assertEqual(Path(environment.pypy_path()).stem, "pypy3")
 
     def test_a_blank_setting_counts_as_unset(self):
         on_path = Path(self.folder.name, "bin")

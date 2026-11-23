@@ -208,6 +208,9 @@ With every run in its own child, a per-run limit becomes possible:
     Measured (`ChildMemoryTests`): a small case, then 300,000 clauses, then
     the small case again; the second small peak is within 5 MiB of the
     first, and the large one over 20 MiB above. macOS was not checked (F9).
+    Since INTERP-2 a job uses the child when its request names `pypy`;
+    `solve_job` still decides from `WIZSAT_SOLVER_PYTHON`, which
+    `choose_solver_python` sets or clears before the job runs.
 
 - [ ] **MEM-4. Benchmark option "Measure memory"**
   - **Difficulty:** medium

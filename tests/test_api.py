@@ -70,6 +70,10 @@ class ApiTestCase(unittest.TestCase):
         self.client.__exit__(None, None, None)
         self.folder.cleanup()
 
+    def pretend_pypy_is_available(self):
+        """The server's catalog (built once at start-up, with no PyPy: see setUp) now says PyPy is available."""
+        self.client.app.state.catalog["interpreters"]["pypy"] = {"available": True, "version": "3.10.14"}
+
     def submit(self, kind, request, status=201):
         response = self.client.post("/api/jobs", json={"kind": kind, "request": request})
         self.assertEqual(response.status_code, status, response.text)
@@ -443,6 +447,8 @@ class SolverChildTests(ApiTestCase):
     """Jobs and benchmarks with WIZSAT_SOLVER_PYTHON set (RUNNER-5, docs/plans/pypy-solver-runner.md)."""
 
     SOLVE = {"problem": "random_3sat", "params": {"variables": 30, "ratio": 4.26, "mode": "random", "seed": 2}, "solver": "cdcl"}
+    # What a job sends to run on the setting's interpreter.
+    PYPY = {"interpreter": "pypy"}
     BENCHMARK = {
         "problems": ["random_3sat"],
         "segments": [{"variables": 20, "ratio": "3, 5", "seed": 1}],
@@ -460,18 +466,20 @@ class SolverChildTests(ApiTestCase):
     }
 
     def set_solver_python(self, python):
-        """Jobs started from now on (and their pool workers) run the solvers in a child of `python`."""
+        """PyPy is `python` for this server (the setting); jobs that name "pypy" run the solvers in a child of it."""
         patcher = mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": python})
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.pretend_pypy_is_available()
 
-    def outcomes(self):
+    def outcomes(self, interpreter=None):
         """(status, work) of the solve job, then (index, solver, status, work) of each benchmark row, sequential and with workers 2."""
-        detail = self.wait(self.submit("solve", self.SOLVE)["id"])
+        choice = {"interpreter": interpreter} if interpreter else {}
+        detail = self.wait(self.submit("solve", {**self.SOLVE, **choice})["id"])
         self.assertEqual(detail["status"], "done", detail["error"])
         found = {"solve": [(detail["result"]["status"], work(detail["result"]["stats"]))]}
         for workers in (1, 2):
-            detail = self.wait(self.submit("benchmark", {**self.BENCHMARK, "workers": workers})["id"])
+            detail = self.wait(self.submit("benchmark", {**self.BENCHMARK, **choice, "workers": workers})["id"])
             self.assertEqual(detail["status"], "done", detail["error"])
             rows = self.client.get(f"/api/jobs/{detail['id']}/rows").json()["rows"]
             found[f"workers {workers}"] = sorted((row["index"], row["solver"], row["status"], work(row["stats"])) for row in rows)
@@ -487,7 +495,7 @@ class SolverChildTests(ApiTestCase):
         expected = self.outcomes()
         self.set_solver_python(os.environ.get("WIZSAT_TEST_SOLVER_PYTHON") or sys.executable)
 
-        found = self.outcomes()
+        found = self.outcomes("pypy")
 
         self.assertEqual(len(expected["workers 1"]), 6)
         self.assertNotIn("ERROR", {row[2] for row in expected["workers 2"]})
@@ -498,7 +506,7 @@ class SolverChildTests(ApiTestCase):
         # wherever the setting is read, so it is read in every one of them.
         self.set_solver_python(str(Path(self.folder.name, "no-such-python")))
 
-        found = self.outcomes()
+        found = self.outcomes("pypy")
 
         for name, runs in found.items():
             with self.subTest(name):
@@ -510,8 +518,8 @@ class SolverChildTests(ApiTestCase):
         # the name lands (RUNNER-6).
         self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
 
-        solve = self.wait(self.submit("solve", self.SOLVE)["id"])
-        benchmark = self.wait(self.submit("benchmark", {**self.BENCHMARK, "workers": 2})["id"])
+        solve = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
+        benchmark = self.wait(self.submit("benchmark", {**self.BENCHMARK, **self.PYPY, "workers": 2})["id"])
 
         for detail in (solve, benchmark):
             with self.subTest(detail["kind"]):
@@ -522,10 +530,90 @@ class SolverChildTests(ApiTestCase):
         self.assertEqual({row["python"] for row in table}, {"PyPy 3.10.14"})
         self.assertEqual({row["status"] for row in table}, {"ERROR"})
 
+    def test_a_job_runs_on_the_interpreter_its_request_names(self):
+        # INTERP-2: the setting says where PyPy is; each request chooses. The fake runs no solver, so
+        # its runs end as ERROR, and a job that ran in process is told apart by solving for real.
+        self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
+        own = (platform.python_implementation(), platform.python_version())
+
+        for choice, expected_python, ran_in_the_fake in (
+            (self.PYPY, ("PyPy", "3.10.14"), True),
+            ({"interpreter": "python"}, own, False),
+            ({}, own, False),
+        ):
+            for kind, request in (("solve", self.SOLVE), ("benchmark", {**self.BENCHMARK, "workers": 2})):
+                with self.subTest(choice=choice, kind=kind):
+                    detail = self.wait(self.submit(kind, {**request, **choice})["id"])
+
+                    found = (detail["environment"]["python_implementation"], detail["environment"]["python_version"])
+                    self.assertEqual(found, expected_python)
+                    self.assertEqual(detail["request"]["interpreter"], choice.get("interpreter", "python"))
+                    if kind == "solve":
+                        statuses = {detail["result"]["status"]}
+                    else:
+                        rows = self.client.get(f"/api/jobs/{detail['id']}/rows").json()["rows"]
+                        statuses = {row["status"] for row in rows}
+                    # Only the fake fails to solve: a job that ran in process has no ERROR.
+                    self.assertEqual("ERROR" in statuses, ran_in_the_fake, statuses)
+                    if kind == "benchmark":
+                        table = list(csv.DictReader(io.StringIO(self.client.get(f"/api/jobs/{detail['id']}/export.csv").text)))
+                        self.assertEqual({row["python"] for row in table}, {" ".join(expected_python)})
+
+    def test_rerun_keeps_the_interpreter(self):
+        self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
+        first = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
+
+        again = self.client.post(f"/api/jobs/{first['id']}/rerun")
+        self.assertEqual(again.status_code, 201, again.text)
+        detail = self.wait(again.json()["id"])
+
+        self.assertEqual(detail["request"]["interpreter"], "pypy")
+        self.assertEqual(detail["environment"]["python_implementation"], "PyPy")
+
+    def test_rerun_of_a_job_saved_before_the_field_existed_keeps_the_interpreter_it_ran_on(self):
+        # Before INTERP-2 the setting alone sent every job to PyPy, and the saved request does not say so.
+        self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
+        manager = self.client.app.state.manager
+        on_pypy = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
+        on_python = self.wait(self.submit("solve", self.SOLVE)["id"])
+        for detail in (on_pypy, on_python):
+            with manager.lock:
+                manager.get(detail["id"]).request.pop("interpreter")
+
+        for detail, expected in ((on_pypy, "pypy"), (on_python, "python")):
+            with self.subTest(expected):
+                again = self.client.post(f"/api/jobs/{detail['id']}/rerun")
+                self.assertEqual(again.status_code, 201, again.text)
+                self.assertEqual(self.client.get(f"/api/jobs/{again.json()['id']}").json()["request"]["interpreter"], expected)
+
+    def test_a_job_that_asks_for_pypy_where_there_is_none_is_refused_when_it_is_submitted(self):
+        # The server's catalog says no PyPy (setUp), so this never becomes a job that fails later.
+        for kind, request in (("solve", self.SOLVE), ("benchmark", self.BENCHMARK)):
+            with self.subTest(kind):
+                response = self.client.post("/api/jobs", json={"kind": kind, "request": {**request, **self.PYPY}})
+
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertIn("interpreter", response.json()["errors"])
+        self.assertEqual(self.client.get("/api/jobs").json()["jobs"], [])
+
+    def test_an_interpreter_that_is_neither_python_nor_pypy_is_refused(self):
+        self.pretend_pypy_is_available()
+        for kind, request in (("solve", self.SOLVE), ("benchmark", self.BENCHMARK)):
+            with self.subTest(kind):
+                response = self.client.post("/api/jobs", json={"kind": kind, "request": {**request, "interpreter": "jython"}})
+
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertIn("interpreter", response.json()["errors"])
+
+    def test_python_is_accepted_whether_or_not_pypy_is_available(self):
+        for choice in ({}, {"interpreter": "python"}):
+            with self.subTest(choice):
+                self.submit("solve", {**self.SOLVE, **choice})
+
     def start_endless_benchmark(self, workers):
         """Start ENDLESS on `workers` processes; return (job id, job process, the solver children it runs)."""
         self.set_solver_python(sys.executable)
-        job_id = self.submit("benchmark", {**self.ENDLESS, "workers": workers})["id"]
+        job_id = self.submit("benchmark", {**self.ENDLESS, **self.PYPY, "workers": workers})["id"]
         manager = self.client.app.state.manager
         deadline = time.monotonic() + 30
         while (manager.get(job_id).process is None or not manager.get(job_id).process.is_alive()) and time.monotonic() < deadline:

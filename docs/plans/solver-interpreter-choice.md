@@ -1,6 +1,6 @@
 # Plan: choose Python or PyPy per job, in the UI
 
-- **Status:** in progress (INTERP-1 done 2026-11-23)
+- **Status:** in progress (INTERP-1 to INTERP-3 done 2026-11-23; INTERP-4 open)
 - **Written:** 2026-11-23
 - **Related:** [solver runner](pypy-solver-runner.md) (the child process and
   `WIZSAT_SOLVER_PYTHON`), [Solver performance](../guide/performance.md#running-the-solvers-under-pypy),
@@ -49,7 +49,7 @@ the long runs, means restarting the server with a different environment.
   owner's disk.
 - **Request:** solve and benchmark jobs take `"interpreter": "python" | "pypy"`
   (missing means `"python"`). An unknown value, or `"pypy"` when none was
-  found, is a `ParamError` at submit (HTTP 400), so it never becomes a job
+  found, is a `ParamError` at submit (HTTP 422, like every field error), so it never becomes a job
   that fails later. Stored with the request, so Rerun keeps it.
 - **Applying it:** every job already runs in a fresh job process
   (`sat_web/manager.py`). At the start of `execute_job` (`sat_core/jobs.py`)
@@ -82,8 +82,16 @@ the long runs, means restarting the server with a different environment.
     `CPython`, or PyPy older than 3.10, or does not answer, is not
     available; `GET /api/catalog` carries `interpreters.pypy` and no path.
 
-- [ ] **INTERP-2. A job runs on the interpreter its request names**
+- [x] **INTERP-2. A job runs on the interpreter its request names** - Done 2026-11-23.
   - **Difficulty:** medium
+  - **Built as:** `parse_interpreter()` (`sat_core/solver_registry.py`) is used by
+    the solve and benchmark parsers, so the normalized request always carries
+    `interpreter`; `validate_job` (`sat_web/api.py`) refuses `pypy` when the
+    catalog says none was found; `choose_solver_python()` (`sat_core/jobs.py`)
+    sets or clears the variable in the job process from `pypy_path()`,
+    without probing again; `find_pypy()` judges only that first candidate,
+    so the server and the job agree. Rerun of a job saved without the field
+    takes the interpreter from its environment record. Until INTERP-3, only an API request can choose PyPy.
   - **Not hard:** the job process sets an environment variable in itself
     before any run starts; `sat_web/manager.py`, `sat_core/parallel.py` and
     `sat_core/solver_process.py` are not changed, and the pool workers get
@@ -94,11 +102,12 @@ the long runs, means restarting the server with a different environment.
     record the stand-in interpreter in the job detail and the CSV; the same
     requests without the field, or with `"python"`, record the server's
     interpreter even while `WIZSAT_SOLVER_PYTHON` is set; `"pypy"` with none
-    found, and an unknown value, get 400; Rerun keeps the choice.
+    found, and an unknown value, get 422, as every field error does (the plan first said 400); Rerun keeps
+    the choice.
     `docs/guide/api.md`, `README.md` (the setting's new meaning) and
     `docs/guide/how-it-works.md` updated.
 
-- [ ] **INTERP-3. The switch on the Solve form and the benchmark builder**
+- [x] **INTERP-3. The switch on the Solve form and the benchmark builder** - Done 2026-11-23.
   - **Difficulty:** medium
   - **Blocked by:** INTERP-2
   - **How:** a SegmentedControl "Run with" (Python | PyPy, with the version)
@@ -106,11 +115,34 @@ the long runs, means restarting the server with a different environment.
     Install it from pypy.org, then add its folder to PATH or set
     WIZSAT_SOLVER_PYTHON, and restart the server.")
     when the catalog says it is unavailable; a "PyPy" badge in the job list.
+  - **Built as:** `InterpreterSwitch` (`components/InterpreterSwitch.tsx`) on
+    the Solve page (inside `SolverPanel`) and in the benchmark builder's run
+    settings; `lib/interpreter.ts` (`effectiveInterpreter`, `interpreterOf`).
+    The choice lives in page state, not in the stored settings or the draft,
+    so every visit starts on Python (the rejected "last choice remembered");
+    Edit and "copy as new" bring back the interpreter of that job. The
+    Setup tab of a benchmark shows "Run with". The hint is visible text under
+    the switch, not a tooltip (a tooltip does not reach touch or keyboard
+    users). **The job-list badge moved to INTERP-4:** the job summary has no
+    interpreter, and adding it is a change in `sat_web/manager.py`, a hard
+    trigger.
   - **Done when:** component tests show the request carries the choice, the
     switch starts on Python, and PyPy is disabled when unavailable; an e2e
     test (server started with the stand-in as `WIZSAT_SOLVER_PYTHON`) runs a
     solve with PyPy chosen and sees the stand-in interpreter on the job
     detail. `docs/guide/user-guide.md` updated.
+
+- [ ] **INTERP-4. A "PyPy" badge in the job list**
+  - **Difficulty:** hard (`sat_web/manager.py`: `Job.summary`)
+  - **Blocked by:** INTERP-3
+  - **How:** the job summary gains `interpreter` (`"python"` or `"pypy"`: the
+    request's choice, and for a job saved before INTERP-2 the one its
+    environment record names); the jobs drawer and the Jobs page show a small
+    "PyPy" badge on PyPy jobs. `docs/guide/api.md` (job summary) and the wire
+    samples updated.
+  - **Done when:** an API test shows the summary of a PyPy job and of a Python
+    job, and of a job saved without the field that ran on PyPy; a component
+    test shows the badge on the first and not on the others.
 
 ## Considered and rejected
 

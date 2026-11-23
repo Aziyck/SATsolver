@@ -1,4 +1,4 @@
-import type { BenchmarkRequest, BenchmarkRow, Catalog, Field, Rule } from "../api/types";
+import type { BenchmarkRequest, BenchmarkRow, Catalog, Field, Interpreter, Rule } from "../api/types";
 import { cloneValue, defaultValues, isNumericKind, type Values } from "./params";
 
 export interface SolverDraft {
@@ -119,7 +119,8 @@ export function draftFromRequest(catalog: Catalog, request: BenchmarkRequest): B
   };
 }
 
-export function requestFromDraft(catalog: Catalog, draft: BenchmarkDraft): BenchmarkRequest {
+/** The request a draft makes. The interpreter is not part of the draft: the form keeps it for one visit (InterpreterSwitch). */
+export function requestFromDraft(catalog: Catalog, draft: BenchmarkDraft, interpreter: Interpreter = "python"): BenchmarkRequest {
   const fields = unionFields(catalog, draft.problems);
   return {
     title: draft.title || undefined,
@@ -139,6 +140,7 @@ export function requestFromDraft(catalog: Catalog, draft: BenchmarkDraft): Bench
     seed: draft.seed === "" ? null : draft.seed,
     // Drafts saved before this setting existed have no workers value.
     workers: Number(draft.workers ?? 1) || 1,
+    interpreter,
   };
 }
 

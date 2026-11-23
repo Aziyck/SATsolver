@@ -11,6 +11,14 @@ const python = process.env.WIZSAT_PYTHON ?? "python";
 // A fresh, throwaway job database for every run. Set once so test workers reuse it.
 const dataDir = (process.env.WIZSAT_E2E_DATA ??= fs.mkdtempSync(path.join(os.tmpdir(), "wizsat-e2e-")));
 
+// A stand-in for PyPy (INTERP-3): it answers the server's probe with ["PyPy", "3.10.14"] and runs no
+// solver, so a job that chooses PyPy shows that interpreter and its runs end as ERROR. Like
+// tests/fake_python.py; the file ends in .cmd on Windows, where Popen cannot start a bare script.
+const fakePypy = path.join(dataDir, process.platform === "win32" ? "fake-pypy.cmd" : "fake-pypy");
+const fakePypyScript =
+  process.platform === "win32" ? `@echo ["PyPy", "3.10.14"]${os.EOL}` : `#!/bin/sh${os.EOL}echo '["PyPy", "3.10.14"]'${os.EOL}`;
+fs.writeFileSync(fakePypy, fakePypyScript, { mode: 0o755 });
+
 export default defineConfig({
   testDir: "e2e",
   timeout: 60_000,
@@ -29,7 +37,7 @@ export default defineConfig({
     command: `"${python}" -m sat_web --skip-build --no-browser --strict-port --port ${port}`,
     cwd: "..",
     url: `http://127.0.0.1:${port}/api/health`,
-    env: { WIZSAT_DATA_DIR: dataDir },
+    env: { WIZSAT_DATA_DIR: dataDir, WIZSAT_SOLVER_PYTHON: fakePypy },
     reuseExistingServer: false,
     timeout: 60_000,
     stdout: "pipe",

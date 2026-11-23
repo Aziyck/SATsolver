@@ -95,9 +95,38 @@ def without_removed_options(kind: str, request: dict[str, Any]) -> dict[str, Any
     return request
 
 
-def validate_job(kind: str, request: dict[str, Any], title: str | None) -> tuple[dict[str, Any], str]:
-    """Check a job request and return (normalized request, title)."""
+def with_recorded_interpreter(job: Job, request: dict[str, Any]) -> dict[str, Any]:
+    """A saved request that names no interpreter, with the one its job recorded.
 
+    Jobs saved before INTERP-2 ran on PyPy whenever the server had
+    WIZSAT_SOLVER_PYTHON set, and their requests do not say so. Rerun takes
+    the interpreter from the job's environment record instead of defaulting
+    to Python, so the new times compare with the old ones.
+    """
+
+    if job.kind not in ("solve", "benchmark") or "interpreter" in request:
+        return request
+    recorded = (job.environment or {}).get("python_implementation")
+    return {**request, "interpreter": "pypy"} if recorded == "PyPy" else request
+
+
+def validate_job(
+    kind: str, request: dict[str, Any], title: str | None, pypy_available: bool = False
+) -> tuple[dict[str, Any], str]:
+    """Check a job request and return (normalized request, title).
+
+    A solve or benchmark request that names "pypy" is refused here, with the
+    other field errors, when the server found no PyPy (`pypy_available`, from
+    the catalog): a job that could only fail never gets queued (INTERP-2).
+    """
+
+    normalized, default_title = _validate_job(kind, request, title)
+    if normalized.get("interpreter") == "pypy" and not pypy_available:
+        raise ParamError({"interpreter": "PyPy was not found on this server: install it, then add its folder to PATH or set WIZSAT_SOLVER_PYTHON, and restart"})
+    return normalized, default_title
+
+
+def _validate_job(kind: str, request: dict[str, Any], title: str | None) -> tuple[dict[str, Any], str]:
     if kind == "generate":
         spec, params, normalized = parse_problem_request(request)
         return normalized, title or f"Encode {spec.title}: {spec.case_label(params)}".strip()
@@ -297,9 +326,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(LocalOnlyGuard, allowed_hosts=settings.allowed_hosts)
     cnf_index = CnfLineIndex()
     catalog_cache: dict[str, Any] = {}
+    app.state.catalog = catalog_cache  # job validation reads which interpreters the server found
 
     def manager_of(request: Request | WebSocket) -> JobManager:
         return request.app.state.manager
+
+    def pypy_available() -> bool:
+        # Empty before the lifespan has built the catalog: no PyPy then.
+        return bool(catalog_cache.get("interpreters", {}).get("pypy", {}).get("available"))
 
     def job_or_404(request: Request, job_id: int) -> Job:
         try:
@@ -351,7 +385,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/jobs", status_code=201)
     async def create_job(request: Request, body: JobBody) -> dict[str, Any]:
-        normalized, title = await run_in_threadpool(validate_job, body.kind, body.request, body.title)
+        normalized, title = await run_in_threadpool(validate_job, body.kind, body.request, body.title, pypy_available())
         manager = manager_of(request)
         return manager.summary(manager.submit(body.kind, normalized, title))
 
@@ -387,8 +421,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs/{job_id}/rerun", status_code=201)
     async def rerun_job(request: Request, job_id: int) -> dict[str, Any]:
         job = job_or_404(request, job_id)
-        saved = without_removed_options(job.kind, job.request)
-        normalized, title = await run_in_threadpool(validate_job, job.kind, saved, job.title)
+        saved = with_recorded_interpreter(job, without_removed_options(job.kind, job.request))
+        normalized, title = await run_in_threadpool(validate_job, job.kind, saved, job.title, pypy_available())
         manager = manager_of(request)
         return manager.summary(manager.submit(job.kind, normalized, title))
 

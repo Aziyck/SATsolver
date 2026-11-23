@@ -21,7 +21,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { api, ApiError } from "../api/client";
 import { sortedJobs, useLive } from "../api/live";
 import { useCatalog, useCreateJob, useJob } from "../api/queries";
-import type { JobDetail, ProblemSpec, SolverSpec } from "../api/types";
+import type { Interpreter, JobDetail, ProblemSpec, SolverSpec } from "../api/types";
 import { EstimateBadge } from "../components/Display";
 import { CompactHelp, ParamForm } from "../components/fields/ParamForm";
 import { JobCard } from "../components/JobsDrawer";
@@ -31,6 +31,7 @@ import { SolverPanel, type SolverSettings } from "../components/SolverPanel";
 import { AnswerView } from "../components/views/ProblemViews";
 import { GraphView } from "../components/views/GraphView";
 import { edgesAsText, formatEdges, parseEdges, toggleEdge } from "../lib/edges";
+import { effectiveInterpreter, interpreterOf } from "../lib/interpreter";
 import { defaultValues, visibleValues, type Values } from "../lib/params";
 import { usePersistentState } from "../lib/storage";
 
@@ -53,6 +54,8 @@ export default function SolvePage() {
   const problem = catalog.problems.find((item) => item.key === problemKey);
   const jobParam = Number(search.get("job")) || null;
 
+  // Not stored with the other settings: a new visit starts on Python, the interpreter of reported results (INTERP-3).
+  const [interpreter, setInterpreter] = useState<Interpreter>("python");
   const [allValues, setAllValues] = usePersistentState<Record<string, Values>>("wizsat.solve.values", () => ({}));
   const [settings, setSettings] = usePersistentState<SolverSettings>("wizsat.solve.solver", () =>
     initialSolverSettings(catalog.solvers, catalog.defaults.solve_timeout),
@@ -105,6 +108,7 @@ export default function SolvePage() {
             options: visibleValues(catalog.solvers.find((solver) => solver.key === settings.solver)?.fields ?? [], settings.options[settings.solver] ?? {}),
             timeout: settings.timeout === "" ? null : settings.timeout,
             log_level: settings.logLevel,
+            interpreter: effectiveInterpreter(interpreter, catalog.interpreters.pypy.available),
           }
         : { problem: problem.key, params: payload };
     createJob.mutate(
@@ -128,6 +132,7 @@ export default function SolvePage() {
     const key = job.problems[0];
     if (!key) return;
     setAllValues((current) => ({ ...current, [key]: { ...(current[key] ?? {}), ...job.request.params } }));
+    setInterpreter(interpreterOf(job.request, job.environment));
     if (job.request.solver) {
       setSettings((current) => ({
         ...current,
@@ -241,7 +246,18 @@ export default function SolvePage() {
                 <Text fw={650} mb="sm">
                   Solver
                 </Text>
-                <SolverPanel solvers={catalog.solvers} settings={settings} onChange={setSettings} errors={submitErrors} />
+                <SolverPanel
+                  solvers={catalog.solvers}
+                  settings={settings}
+                  onChange={setSettings}
+                  errors={submitErrors}
+                  interpreter={interpreter}
+                  onInterpreterChange={(choice) => {
+                    setSubmitErrors({});
+                    setInterpreter(choice);
+                  }}
+                  pypy={catalog.interpreters.pypy}
+                />
               </Card>
             </Stack>
           </CompactHelp.Provider>

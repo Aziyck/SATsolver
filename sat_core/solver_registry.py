@@ -25,7 +25,7 @@ from sat_core.models import (
     STATUS_UNSAT,
     SolveResult,
 )
-from sat_core.params import Choice, ParamField, check_field_order, parse_params
+from sat_core.params import Choice, ParamError, ParamField, check_field_order, parse_params
 from sat_core.runtime import EVENT_LOG, RunToken, cancellation_status, emit, stop_requested
 from solvers.cdcl import cdcl
 from solvers.dpll import dpll
@@ -37,6 +37,9 @@ LOG_LEVELS = ("normal", "periodic", "debug")
 # The interpreter that runs every solver, in a child process
 # (sat_core/solver_process.py). Unset or empty: solvers run in this process.
 SOLVER_PYTHON_ENV = "WIZSAT_SOLVER_PYTHON"
+# The request field that picks the interpreter of one job (INTERP-2): the setting above only
+# says where PyPy is; a job runs on PyPy when its request says "pypy".
+INTERPRETERS = ("python", "pypy")
 
 Runner = Callable[[list[list[int]], dict[str, Any], dict[str, Any], Any, Any], tuple[Any, dict[str, Any]]]
 
@@ -587,8 +590,8 @@ STAT_SPECS: tuple[StatSpec, ...] = (
         "Peak memory",
         "",
         "The most memory the process that ran the solver used: the solve job's own process, or the "
-        "solver child of this run when a solver interpreter is set. Formula and interpreter "
-        "included, so even a trivial run shows a few MiB.",
+        "solver child of this run for a job run on PyPy. Formula and interpreter included, so even "
+        "a trivial run shows a few MiB.",
         unit="MiB",
     ),
     StatSpec(
@@ -698,6 +701,17 @@ def compact_numbering(clauses: list[list[int]], numbers: set[int]) -> tuple[list
     compact_of = {var: index + 1 for index, var in enumerate(original)}
     compact_of[0] = 0  # a stray 0 is left for the solver, as before
     return [[compact_of[lit] if lit > 0 else -compact_of[-lit] for lit in clause] for clause in clauses], original
+
+
+def parse_interpreter(raw: dict[str, Any]) -> str:
+    """The request's "interpreter": "python" when the field is missing, else one of INTERPRETERS or a ParamError."""
+
+    if "interpreter" not in raw:
+        return "python"
+    value = raw["interpreter"]
+    if not isinstance(value, str) or value not in INTERPRETERS:
+        raise ParamError({"interpreter": f"must be one of {', '.join(INTERPRETERS)}"})
+    return value
 
 
 def run_solver(

@@ -230,7 +230,7 @@ Every benchmark exports the same format, whatever the problem:
 | `decisions`, `conflicts`, `propagations`, `learned_clauses`, `restarts` | CDCL/DPLL statistics (`learned_clauses` and `restarts` are CDCL only) |
 | `tries`, `flips`, `best_unsatisfied` | WalkSAT/ProbSAT statistics |
 | `error` | the error message for ERROR rows |
-| `python` | the interpreter that ran the solvers, such as `CPython 3.11.15`: the job's own, or the `WIZSAT_SOLVER_PYTHON` one when that is set |
+| `python` | the interpreter that ran the solvers, such as `CPython 3.11.15`: the job's own, or the PyPy one when the benchmark's `interpreter` is `"pypy"` |
 | `cpu`, `cores` | the processor model and its logical core count |
 | `ram_gb` | RAM the run could use (the container's limit when that is smaller) |
 | `os` | operating system, release and architecture |
@@ -319,8 +319,8 @@ gets a fresh seed on every call.
    `wizsat_commit` ending in `-dirty` means the code had uncommitted changes,
    so the commit alone does not reproduce the run; commit first, then run.
 9. Keep CPython as the interpreter of the results you report. With
-   `WIZSAT_SOLVER_PYTHON` set (PyPy), every solver of the benchmark runs on
-   that interpreter, so never put a PyPy run of one solver next to a CPython
+   `"interpreter": "pypy"` in the request, every solver of the benchmark runs
+   on PyPy (one interpreter per benchmark), so never put a PyPy run of one solver next to a CPython
    run of another: that compares runtimes, not algorithms. If you report PyPy
    results, say so, name the version (the `python` column carries it), and
    note the warm-up: PyPy is slower on runs under about half a second, which

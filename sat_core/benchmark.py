@@ -58,7 +58,7 @@ from sat_core.runtime import (
     skip_requested,
 )
 from sat_core.seeds import fresh_seed, repeat_seed
-from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, run_solver
+from sat_core.solver_registry import LOG_LEVELS, get_solver, options_summary, parse_interpreter, run_solver
 
 
 MAX_BENCHMARK_RUNS = 200_000
@@ -407,6 +407,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
     solvers = _parse_solvers(raw.get("solvers"))
     rules = _parse_rules(raw.get("rules"))
     timeout = parse_timeout(raw.get("timeout", DEFAULT_TIMEOUT))
+    interpreter = parse_interpreter(raw)
 
     expansion = _expand_cases(raw, len(solvers))
 
@@ -421,6 +422,7 @@ def parse_request(raw: dict[str, Any]) -> BenchmarkPlan:
         "seed": expansion.seed,
         "title": str(raw.get("title") or ""),
         "workers": workers,
+        "interpreter": interpreter,
     }
     return BenchmarkPlan(
         problems=[spec.key for spec in expansion.specs],

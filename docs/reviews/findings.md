@@ -607,3 +607,37 @@ gets a dated file of its own in this folder instead, like
     with `WIZSAT_SOLVER_PYTHON` set and a slow PyPy start.
   - **Done when:** a test with an old job whose environment says `unknown`
     shows the chosen behaviour in the summary and in Rerun.
+
+- [ ] **F11. Ctrl+C stops the server only on the second press, with a traceback**
+  (added 2026-11-23, reported by the owner, reproduced)
+  - **Difficulty:** hard (a second waiting task in the WebSocket handler: concurrency; and how the server stops)
+  - **Problem:** with a browser tab of the app open, the first Ctrl+C on
+    `python -m sat_web` seems to do nothing; the second one stops the server
+    and prints a `KeyboardInterrupt` traceback. Reproduced: server on a temp
+    data dir, one WebSocket on `/api/ws`, Ctrl+Break to its process group:
+    still running after 8 s; without the WebSocket it exits in 0.2 s.
+    Causes:
+    - uvicorn's graceful shutdown asks every connection to close and waits
+      for them. The handler of `/api/ws` (`events` in `sat_web/api.py`) only
+      awaits `subscriber.get()` and never reads the socket, so it never sees
+      the close and never ends. uvicorn's "Waiting for connections to close.
+      (CTRL+C to force quit)" is hidden by `log_level="warning"` in
+      `sat_web/__main__.py`.
+    - The second Ctrl+C forces the exit, which skips the lifespan shutdown:
+      `manager.shutdown()` never runs (running jobs are marked interrupted
+      only at the next start; their workers exit through the parent
+      watchdog).
+    - After `uvicorn.run` returns, uvicorn re-raises the captured SIGINT
+      (`capture_signals`), and nothing in `__main__.py` catches the
+      `KeyboardInterrupt`.
+  - **Fix:** in `events`, wait for either the next event or a message from
+    the socket (`websocket.receive()`), and return on a disconnect, so the
+    handler ends when the browser leaves or the server closes it. In
+    `__main__.py`, catch `KeyboardInterrupt` around `uvicorn.run` and print
+    one line (`[wizsat] Stopped.`). Set `timeout_graceful_shutdown` (a few
+    seconds) as a safety net for any other stuck connection.
+  - **Done when:** a test (the reproduction above as a script or an API
+    test) shows one Ctrl+C stops a server with an open WebSocket within a
+    few seconds, the lifespan shutdown runs (`manager.shutdown()`), and the
+    output has no traceback.
+

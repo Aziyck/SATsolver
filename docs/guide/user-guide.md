@@ -99,6 +99,15 @@ limit). **Log detail** controls how much the solver writes to the log:
 *Normal* (start and finish), *Progress* (periodic updates) or *Debug*
 (every decision; slow on big formulas).
 
+**Run with** chooses where the solver runs: *Python* (the default) or *PyPy*,
+a faster Python that helps on runs of several seconds and hurts under about a
+second. PyPy is offered, with its version, only when the server found it
+(`PyPy` on `PATH`, or `WIZSAT_SOLVER_PYTHON`; see the
+[README](../../README.md#running-the-solvers-under-pypy)); otherwise the
+option is off and the text under it says how to install it. The choice is not
+remembered: every visit starts on Python, and *Edit* on a past job brings back
+the interpreter that job used.
+
 ### Solve or encode
 
 - **Solve** builds the CNF and runs the solver.
@@ -233,6 +242,10 @@ The [benchmarking guide](benchmarking.md) describes each preset exactly.
    - **Time limit (s)**: per run; blank means none.
    - **Seed**: used for cases whose grid has no seed.
    - **Log detail**: as on the Solve page.
+   - **Run with**: *Python* or *PyPy*, as on the Solve page, for the whole
+     benchmark: one interpreter for every solver, so the comparison stays about
+     the algorithms. The Setup tab of the results shows which one ran. A copy
+     of a past benchmark keeps its interpreter; a new one starts on Python.
    - **Parallel cases**: how many cases to solve at the same time (1 to the
      number of CPU cores). 1 gives the cleanest timings; more finishes sooner
      but makes individual times noisier. See

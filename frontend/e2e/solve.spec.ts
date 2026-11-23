@@ -93,7 +93,8 @@ test("solver options reset to their defaults and show up in the job's settings",
   // The Machine block: the page opened while the job was queued and still shows what the
   // worker reported (A38).
   await expect(page.getByText("Machine", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^(CPython|PyPy) \d+\.\d+/)).toBeVisible();
+  // A paragraph, not the "Run with" switch, whose PyPy option also carries a version.
+  await expect(page.locator("p").filter({ hasText: /^(CPython|PyPy) \d+\.\d+/ })).toBeVisible();
 });
 
 test("Ctrl+Enter solves from inside a field, and the Solve button stays in view", async ({ page }) => {

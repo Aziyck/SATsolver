@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { BenchmarkRow, Catalog } from "../api/types";
+import type { BenchmarkRow, Catalog, RunEnvironment } from "../api/types";
 import { statSpec } from "../test/catalog";
 import { field } from "../test/fields";
 import { draftFromRequest, isGraphSuite, isVisibleSweep, mergeRuns, requestFromDraft, sweepValue } from "./benchmark";
 import { formatEdges, parseEdges, toggleEdge } from "./edges";
 import { formatSeconds } from "./format";
+import { effectiveInterpreter, interpreterOf } from "./interpreter";
 import { changedFields, defaultValues, displayValue, isDefaultValue, isVisible, parseNumberList, visibleValues } from "./params";
 import {
   aggregate,
@@ -258,6 +259,50 @@ describe("benchmark drafts", () => {
     expect(request.workers).toBe(3);
     // Drafts stored before the setting existed run one case at a time.
     expect(requestFromDraft(catalog, { ...draft, workers: undefined as unknown as number }).workers).toBe(1);
+  });
+
+  it("carries the interpreter the form chose, and runs on Python when none is given", () => {
+    const draft = draftFromRequest(catalog, { problems: ["graph_coloring"], segments: [{}], solvers: [{ solver: "cdcl" }], repeats: 1, timeout: 5, rules: [] });
+
+    expect(requestFromDraft(catalog, draft).interpreter).toBe("python");
+    expect(requestFromDraft(catalog, draft, "pypy").interpreter).toBe("pypy");
+  });
+});
+
+const ENVIRONMENT_STUB: RunEnvironment = {
+  python_implementation: "CPython",
+  python_version: "3.12.0",
+  os: null,
+  cpu_model: null,
+  cpu_logical_cores: null,
+  cpu_physical_cores: null,
+  ram_total_gb: null,
+  wizsat_version: "2.0.0",
+  git_commit: null,
+  git_dirty: null,
+};
+
+describe("effectiveInterpreter", () => {
+  it("is PyPy only when it was chosen and the server has it", () => {
+    expect(effectiveInterpreter("pypy", true)).toBe("pypy");
+    expect(effectiveInterpreter("pypy", false)).toBe("python");
+    expect(effectiveInterpreter("python", true)).toBe("python");
+    expect(effectiveInterpreter("python", false)).toBe("python");
+  });
+
+  it("reads the choice of a stored request, Python when it names none", () => {
+    expect(interpreterOf({ interpreter: "pypy" })).toBe("pypy");
+    expect(interpreterOf({ interpreter: "python" })).toBe("python");
+    expect(interpreterOf({})).toBe("python");
+  });
+
+  it("takes a job saved before the field from its environment record, as the server's Rerun does", () => {
+    const ran = (python_implementation: string) => ({ ...ENVIRONMENT_STUB, python_implementation });
+    expect(interpreterOf({}, ran("PyPy"))).toBe("pypy");
+    expect(interpreterOf({}, ran("CPython"))).toBe("python");
+    expect(interpreterOf({}, null)).toBe("python");
+    // The request wins when it has the field.
+    expect(interpreterOf({ interpreter: "python" }, ran("PyPy"))).toBe("python");
   });
 });
 

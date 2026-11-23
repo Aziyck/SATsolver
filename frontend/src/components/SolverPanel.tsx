@@ -1,7 +1,8 @@
 import { Group, NumberInput, SegmentedControl, Select, Stack, Text } from "@mantine/core";
 import { defaultValues, type Values } from "../lib/params";
-import type { SolverSpec } from "../api/types";
+import type { Catalog, Interpreter, SolverSpec } from "../api/types";
 import { FieldLabel, ParamForm, ResetToDefaults, useHelpLine } from "./fields/ParamForm";
+import { InterpreterSwitch } from "./InterpreterSwitch";
 
 export interface SolverSettings {
   solver: string;
@@ -21,11 +22,18 @@ export function SolverPanel({
   settings,
   onChange,
   errors,
+  interpreter,
+  onInterpreterChange,
+  pypy,
 }: {
   solvers: SolverSpec[];
   settings: SolverSettings;
   onChange: (settings: SolverSettings) => void;
   errors: Record<string, string>;
+  /** Where this solve runs; kept by the page for one visit, not stored with the settings. */
+  interpreter: Interpreter;
+  onInterpreterChange: (choice: Interpreter) => void;
+  pypy: Catalog["interpreters"]["pypy"];
 }) {
   const spec = solvers.find((solver) => solver.key === settings.solver) ?? solvers[0];
   const helpLine = useHelpLine();
@@ -45,6 +53,12 @@ export function SolverPanel({
         data={solvers.map((solver) => ({ value: solver.key, label: solver.title }))}
         aria-label="Solver"
       />
+      <InterpreterSwitch value={interpreter} onChange={onInterpreterChange} pypy={pypy} />
+      {errors.interpreter ? (
+        <Text size="sm" c="red">
+          {errors.interpreter}
+        </Text>
+      ) : null}
       <Group grow align="flex-start">
         <NumberInput
           label={<FieldLabel text="Time limit (s)" help="The run stops with TIMEOUT after this long. Blank means no limit." />}

@@ -214,6 +214,13 @@ WIZSAT_REQUIRE_API_TESTS=1 python -m unittest discover -s tests     # Linux, mac
 $env:WIZSAT_REQUIRE_API_TESTS = "1"; python -m unittest discover -s tests   # Windows PowerShell
 ```
 
+On Linux and macOS the run ends with a warning such as `resource_tracker:
+There appear to be 11 leaked semaphore objects to clean up at shutdown`. It
+is expected: one test kills a job process on purpose, as the server's force
+stop does, and Python deletes what that process left behind when the run
+ends (`test_a_job_process_that_is_killed_leaves_no_child_behind` in
+`tests/test_api.py`).
+
 CI also checks the solvers under PyPy. To run the same two checks locally
 (Linux, macOS), with the path of your PyPy:
 

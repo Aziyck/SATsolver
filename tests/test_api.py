@@ -502,6 +502,11 @@ class SolverChildTests(ApiTestCase):
     def test_a_job_process_that_is_killed_leaves_no_child_behind(self):
         # The manager's force stop and shutdown() terminate a job process that
         # did not stop in time; run_in_child's own clean-up then never runs.
+        # Expected side effect (F8): the killed job cannot delete the
+        # semaphores of its queues and its pool, so the run ends with
+        # "resource_tracker: There appear to be N leaked semaphore objects";
+        # the tracker deletes them then. Left visible on purpose: silencing it
+        # would hide a real leak elsewhere.
         for workers in (1, 2):
             with self.subTest(workers=workers):
                 job_id, process, children = self.start_endless_benchmark(workers)

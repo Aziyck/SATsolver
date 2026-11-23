@@ -550,7 +550,14 @@ gets a dated file of its own in this folder instead, like
     killed by its time limit through the child reports an `elapsed` no
     shorter than its timeout.
 
-- [ ] **F8. The test suite ends with a warning about leaked semaphores**
+- [x] **F8. The test suite ends with a warning about leaked semaphores** - Dropped 2026-11-23: accepted. All 11 come from
+  `test_a_job_process_that_is_killed_leaves_no_child_behind`
+  (`tests/test_api.py`), which kills a job process on purpose; every other
+  test leaves none (each test file, then each test of `SolverChildTests`,
+  run alone). The killed job cannot delete its pool's and queues'
+  semaphores; the resource tracker deletes them at exit, so in the server
+  they last only until it stops, after a force stop. Explained next to that
+  test and in `README.md`; not silenced, so a real leak still shows.
   (added 2026-11-23, found while RUNNER-9; seen in the output, cause not traced)
   - **Difficulty:** hard (the fix is in how processes, queues or events are
     closed)

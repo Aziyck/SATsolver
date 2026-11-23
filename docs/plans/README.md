@@ -25,6 +25,7 @@ plans move to [`done/`](done/).
 
 1. **Features, in this order:**
    [pypy-solver-runner.md](pypy-solver-runner.md), then
+   [solver-interpreter-choice.md](solver-interpreter-choice.md), then
    [memory-measurement.md](memory-measurement.md) (its memory limit, MEM-8,
    last).
 
@@ -43,6 +44,7 @@ touched anyway:
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings, solver simplification | nothing |
 | [../reviews/findings.md](../reviews/findings.md) | findings made while working | nothing |
 | [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | nothing |
+| [solver-interpreter-choice.md](solver-interpreter-choice.md) | choose Python or PyPy per job, in the UI | nothing (builds on the solver runner) |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | the audit's CDCL clean-up |
 

@@ -83,9 +83,20 @@ POLL_SECONDS = 0.05
 # not reach a stop check in time (either way the run is over its limit).
 KILL_MARGIN_SECONDS = 1.0
 # The child's clock starts after its interpreter has started and it has parsed
-# the request, and its first log line comes right then. The parent measures
-# the limit from that line; until it arrives, it allows this much for the
-# start-up (seconds near the clause limit) before it counts a child as hung.
+# the request; its first log line comes once run_solver has counted the
+# variables, a little later (2.5 s at the clause limit), which only widens the
+# parent's margin. For a run with a timeout, the parent measures the limit
+# from that line; until it arrives, it adds this much for the start-up before
+# it counts a child as hung. A run without a timeout is never killed for time.
+# Measured (docs/guide/performance.md, "The solver child process"): 0.3 s for
+# a small formula, 4.5 s at worst for 2,000,000 clauses of three literals,
+# and up to 0.83 s per million literals. The clause limit does not bound the
+# literals (a DIMACS file with long clauses), so 60 s, over ten times the
+# worst at the limit, covers about 70 million literals at that rate. Not
+# measured: slower machines, busy cores (workers > 1) and PyPy (RUNNER-10).
+# Set too low, it ends a healthy run as TIMEOUT; set high, it only keeps a
+# child that hangs before its first line (and that nobody cancels) up to this
+# much longer.
 START_UP_SECONDS = 60.0
 # Why the parent killed the child ("killed" in the result line it makes).
 KILLED_BY_TOKEN = "token"  # the caller's cancel token: cancel, skip or its own timeout

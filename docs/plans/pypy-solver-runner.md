@@ -1,7 +1,8 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22)
+  and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
+  RUNNER-7 done 2026-11-23)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -64,7 +65,9 @@ honest per-run memory number possible (see the memory plan).
   them before starting the child (`get_solver`, `parse_options`,
   `log_options_for`) and raises `ValueError`, as `run_solver` does in-process.
 - **Data size:** at the 2,000,000-clause limit the JSON input is a few tens of
-  MB. Acceptable, but measured in RUNNER-7.
+  MB (53.6 MB for three literals per clause). Measured in RUNNER-7: about 5 s
+  more per run there, see
+  [Solver performance](../guide/performance.md#the-solver-child-process).
 
 ## Tasks
 
@@ -154,7 +157,7 @@ installed.
     `tests/test_api.py`, with a stand-in interpreter from
     `tests/fake_python.py`).
 
-- [ ] **RUNNER-7. Measure what the child costs**
+- [x] **RUNNER-7. Measure what the child costs** - Done 2026-11-23.
   - **Difficulty:** hard (re-rated 2026-11-21: may change `START_UP_SECONDS`,
     which decides when the parent kills a child: the stopping trigger)
   - **Blocked by:** RUNNER-2
@@ -177,6 +180,14 @@ installed.
     Shared memory was considered and is not worth it: the child still has
     to build the solvers' lists from the buffer, and that is most of the
     parse cost, and a killed child can leak the segment on POSIX.
+  - **Built as:** `scripts/child_cost.py` measures both, and the numbers are
+    in [Solver performance](../guide/performance.md#the-solver-child-process):
+    0.3 s per run (almost all interpreter start), 5 s more per run at the
+    clause limit, a start-up window of 4.5 s at worst there. PyPy was not
+    installed. `START_UP_SECONDS` stays at 60 s, with the reason next to it:
+    the limit counts clauses, not literals, and 60 s covers about 70 million
+    literals. Sending the formula costs seconds, so RUNNER-12 is filed; so
+    is F6 (the variables are counted in the parent and again in the child).
 
 - [ ] **RUNNER-8. Documentation**
   - **Difficulty:** easy
@@ -223,6 +234,20 @@ installed.
     parser directly, without a child process; one broken-line test through a
     real child remains; the other tests in `tests/test_solver_process.py`
     pass unchanged.
+
+- [ ] **RUNNER-12. A binary request format instead of JSON**
+  - **Difficulty:** hard (`sat_core/solver_process.py`)
+  - **Blocked by:** RUNNER-11
+  - **What:** at the clause limit, encoding the request (`json.dumps`,
+    0.9 s) and parsing it in the child (`json.loads`, 1.4 s) are about half
+    of what the child adds to a run (RUNNER-7).
+  - **How:** as in RUNNER-7's note: the literals as 4-byte integers and the
+    clause lengths, read with the `array` module; the other request fields
+    stay JSON. The change stays inside the protocol (`solver_protocol.py`
+    after RUNNER-11) and `solver_process.py`.
+  - **Done when:** the tests of `tests/test_solver_process.py` pass
+    unchanged, and `scripts/child_cost.py` shows a shorter window at the
+    clause limit, with the new numbers in `docs/guide/performance.md`.
 
 ## Measurements (2026-10-19)
 

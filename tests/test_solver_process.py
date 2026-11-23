@@ -120,11 +120,14 @@ class ChildMatchesInProcessTests(unittest.TestCase):
                         self.assertIsNone(model)
                     else:
                         self.assertEqual({int(var): value for var, value in model.items()}, expected.solution)
-                    # Everything but the wall-clock time is the same work.
+                    # Everything but the wall-clock time and the memory is the same work; only the
+                    # child measures memory, because it is a process of its own (MEM-3).
+                    measured = ("elapsed", "baseline_memory_mb", "peak_memory_mb")
                     self.assertEqual(
-                        {key: value for key, value in result["stats"].items() if key != "elapsed"},
-                        {key: value for key, value in expected.stats.items() if key != "elapsed"},
+                        {key: value for key, value in result["stats"].items() if key not in measured},
+                        {key: value for key, value in expected.stats.items() if key not in measured},
                     )
+                    self.assertIn("peak_memory_mb", result["stats"])
                     self.assertIn("elapsed", result)
 
     def test_sat_and_unsat_statuses_are_as_expected(self):
@@ -156,6 +159,32 @@ class ChildMatchesInProcessTests(unittest.TestCase):
         # elapsed is the solver's own clock, which starts a moment after the timeout's clock.
         self.assertGreater(result["elapsed"], 0.2)
         self.assertLess(result["elapsed"], 5)
+
+
+class ChildMemoryTests(unittest.TestCase):
+    """Each run measures its own memory in its own child (MEM-3, docs/plans/memory-measurement.md)."""
+
+    SMALL = [[1, 2], [-1, 2]]
+    # 300,000 clauses: tens of MiB more in the child; a tiny WalkSAT budget keeps it at about a second.
+    LARGE = [[i, i + 1, -(i + 2)] for i in range(1, 300_001)]
+    OPTIONS = {"random_seed": 1, "max_tries": 1, "max_flips": 10}
+
+    def run_in_a_child(self, clauses):
+        with mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}):
+            stats = run_solver(clauses, "walksat", self.OPTIONS).stats
+        self.assertGreater(stats["baseline_memory_mb"], 0)
+        self.assertGreaterEqual(stats["peak_memory_mb"], stats["baseline_memory_mb"])
+        return stats["peak_memory_mb"]
+
+    def test_a_small_run_after_a_large_one_reports_its_own_peak(self):
+        # A peak read in a process that ran the large case would stay at the large case's (the
+        # bug this design avoids); this parent's own peak does rise with the large formula.
+        first = self.run_in_a_child(self.SMALL)
+        large = self.run_in_a_child(self.LARGE)
+        again = self.run_in_a_child(self.SMALL)
+
+        self.assertGreater(large, first + 20)
+        self.assertLess(abs(again - first), 5, (first, large, again))
 
 
 class ChildProtocolTests(unittest.TestCase):

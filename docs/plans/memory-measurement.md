@@ -1,6 +1,6 @@
 # Plan: memory use in the results
 
-- **Status:** in progress (MEM-1 and MEM-2 done 2026-11-23)
+- **Status:** in progress (MEM-1 to MEM-3 done 2026-11-23)
 - **Written:** 2026-10-19; tasks rewritten 2026-11-13
 - **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
   RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](done/run-metadata.md)).
@@ -185,7 +185,7 @@ With every run in its own child, a per-run limit becomes possible:
     timings as values the golden tests (`tests/fixtures/solve_payloads.golden.json`,
     `frontend/src/api/wireSamples.ts`) set to 0.0.
 
-- [ ] **MEM-3. The solver runner reports memory per run**
+- [x] **MEM-3. The solver runner reports memory per run** - Done 2026-11-23.
   - **Difficulty:** easy
   - **Not hard:** `sat_core/solver_process.py` is a hard trigger, but this
     adds two measurements to the child and two fields to the result line.
@@ -197,6 +197,20 @@ With every run in its own child, a per-run limit becomes possible:
   - **Done when:** with the runner on, running the same small case twice in
     one benchmark gives similar peaks, including after a much larger case ran
     in between (the bug this design avoids).
+  - **Built as:** `serve()` in `sat_core/solver_process.py` reads
+    `peak_memory_mb()` once the request is parsed and again after
+    `run_solver`, and adds `baseline_memory_mb` and `peak_memory_mb` to the
+    result line's `stats`, so the protocol, its parser and the read loop are
+    unchanged. A run the parent kills has no stats, so no memory. A solve job
+    with the child now shows the child's numbers (MEM-2 reads none in the
+    job process then); the two `StatSpec` labels became "Peak memory" and
+    "Memory before the solver", since a child is one run, not a job.
+    Measured (`ChildMemoryTests`): a small case, then 300,000 clauses, then
+    the small case again; the second small peak is within 5 MiB of the
+    first, and the large one over 20 MiB above. macOS was not checked (F9).
+    Since INTERP-2 a job uses the child when its request names `pypy`;
+    `solve_job` still decides from `WIZSAT_SOLVER_PYTHON`, which
+    `choose_solver_python` sets or clears before the job runs.
 
 - [ ] **MEM-4. Benchmark option "Measure memory"**
   - **Difficulty:** medium

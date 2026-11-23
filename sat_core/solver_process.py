@@ -25,8 +25,10 @@ guards Python-level writes only; the solvers are pure Python, so nothing
 writes to file descriptor 1 behind it. The parent must read stderr too (on
 its own thread), or a chatty run could fill the pipe and block. The model's
 variable numbers become strings in JSON (the parent turns them back into
-ints). Input is read as UTF-8, whatever the platform default is; output is
-plain ASCII (json escapes the rest).
+ints). The stats carry the child's own memory, baseline_memory_mb and
+peak_memory_mb (MEM-3), when the platform can report it. Input is read as
+UTF-8, whatever the platform default is; output is plain ASCII (json escapes
+the rest).
 
 The module imports only sat_core and solvers (no web framework), so the
 interpreter that runs it needs nothing installed beyond itself. A request that
@@ -69,6 +71,7 @@ import threading
 import time
 from typing import Any, Callable, TextIO
 
+from sat_core.memory import peak_memory_mb
 from sat_core.models import STATUS_SAT, STATUS_TIMEOUT, STATUSES
 from sat_core.runtime import EVENT_LOG, RunEvent, RunToken, cancellation_status, emit, stop_requested
 from sat_core.solver_registry import SOLVER_PYTHON_ENV, run_solver
@@ -426,6 +429,9 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
         if event.type == EVENT_LOG:
             write({"type": "log", "message": event.message})
 
+    # This process runs one solve, so its peak is the run's own (MEM-3): the
+    # baseline once the request is read, the peak after the solver.
+    baseline_mb = peak_memory_mb()
     result = run_solver(
         request["clauses"],
         request["solver"],
@@ -436,6 +442,10 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
         event_callback=on_event,
         label=request.get("label"),
     )
+    peak_mb = peak_memory_mb()
+    if baseline_mb is not None and peak_mb is not None:  # not measured: absent, never 0
+        result.stats["baseline_memory_mb"] = round(baseline_mb, 1)
+        result.stats["peak_memory_mb"] = round(peak_mb, 1)
     write(
         {
             "type": "result",

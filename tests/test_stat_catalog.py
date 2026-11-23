@@ -41,9 +41,10 @@ class CatalogTests(unittest.TestCase):
                 self.assertTrue(spec.help)
 
     def test_the_job_memory_statistics_are_declared_and_say_what_they_measure(self):
-        # Reported by solve_job (MEM-2), not by a solver; the CSV and chart flags come with MEM-6.
+        # Measured by solve_job (MEM-2) or by the solver child (MEM-3), not by a solver; the CSV and
+        # chart flags come with MEM-6. The help names both places, since a child is one run, not a job.
         specs = {spec.key: spec for spec in STAT_SPECS}
-        for key, words in (("peak_memory_mb", "job"), ("baseline_memory_mb", "encoding")):
+        for key, words in (("peak_memory_mb", "solver child"), ("baseline_memory_mb", "solver had not started")):
             with self.subTest(key=key):
                 self.assertIn(key, specs)
                 self.assertEqual(specs[key].unit, "MiB")

@@ -583,19 +583,23 @@ STAT_SPECS: tuple[StatSpec, ...] = (
         "Time spent inside the solver, without encoding and checking.",
         unit="s",
     ),
-    # Not reported by a solver: solve_job adds these two (MEM-2). MEM-6 turns on csv and chart.
+    # Not reported by a solver: solve_job (MEM-2) or the solver child (MEM-3) adds these two.
+    # MEM-6 turns on csv and chart.
     StatSpec(
         "peak_memory_mb",
-        "Peak memory of the job",
+        "Peak memory",
         "",
-        "The most memory the job process used, encoded formula and interpreter included, so even a trivial run shows a few MiB.",
+        "The most memory the process that ran the solver used: the solve job's own process, or the "
+        "solver child of this run for a job run on PyPy. Formula and interpreter included, so even "
+        "a trivial run shows a few MiB.",
         unit="MiB",
     ),
     StatSpec(
         "baseline_memory_mb",
-        "Memory after encoding",
+        "Memory before the solver",
         "",
-        "The job process's peak when the formula was encoded and the solver had not started: subtract it from the peak for the solver's own share.",
+        "The same process's peak once the formula was ready and the solver had not started: "
+        "subtract it from the peak for the solver's own share.",
         unit="MiB",
     ),
 )

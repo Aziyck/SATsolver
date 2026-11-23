@@ -574,3 +574,20 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** the full suite ends without the resource tracker warning,
     and a test that runs one job through `JobManager` and shuts it down sees
     no leaked semaphore.
+
+- [ ] **F9. On macOS, the solver child's peak memory may be its parent's**
+  (added 2026-11-23, found while MEM-3; not measured, no Mac here)
+  - **Difficulty:** easy (a measurement first; the fix depends on it)
+  - **Problem:** on Linux, `ru_maxrss` in a child started by `subprocess`
+    carries the parent's peak (measured in MEM-1), so `peak_memory_mb()`
+    reads `VmHWM` there. macOS has no `VmHWM` and uses `ru_maxrss`; whether
+    it inherits the same way is unknown. If it does, every run through the
+    solver child on a Mac reports the job process's peak (MEM-3), and MEM-4's
+    benchmark numbers would be wrong there. CI has no macOS job.
+  - **Fix:** on a Mac, run `tests/test_memory.py` (its growth test holds 150
+    MB in the parent except on macOS: take that exception out for the
+    check) and `ChildMemoryTests` in `tests/test_solver_process.py`. If the
+    child inherits, read the peak another way on macOS (`task_info` through
+    `ctypes`) or report `None` there.
+  - **Done when:** the growth test passes on macOS with the 150 MB parent,
+    and its `darwin` exception is removed.

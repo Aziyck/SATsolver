@@ -220,7 +220,7 @@ The summary plus:
 |---|---|
 | `request` | the normalized request |
 | `instance` | the encoded instance (solve and generate jobs): `name`, `problem`, `params`, `variables`, `clauses`, `size_variables`, `facts`, `visual`, `expected`, `encode_seconds`, `cnf_file` |
-| `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats`, `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
+| `result` | the solver result (solve jobs): `solver`, `solver_label`, `options`, `status`, `elapsed`, `stats` (besides the solver's own statistics, `baseline_memory_mb` and `peak_memory_mb` in MiB, the job process's peak after encoding and after solving; absent when the solver runs in a child through `WIZSAT_SOLVER_PYTHON` or the platform cannot report memory), `decoded`, `verified`, `check_errors`, `expected`, `timeout`, `error`, `model_file` |
 | `errors` | field errors if the job failed validation inside the worker |
 | `environment` | the machine and software the worker ran on, from `sat_core/environment.py`: `python_implementation`, `python_version`, `os`, `cpu_model`, `cpu_logical_cores`, `cpu_physical_cores`, `ram_total_gb`, `wizsat_version`, `git_commit`, `git_dirty`. The first two and `wizsat_version` are always set (the first two are `"unknown"` and `""` when the `WIZSAT_SOLVER_PYTHON` interpreter does not answer); any other fact that could not be read is `null`. The whole value is `null` before the worker starts and for jobs stored before it was recorded. Not in the summary; it arrives as its own `environment` live event when the worker reports it. See [The `environment` value](#the-environment-value) |
 | `logs` | the last 400 log lines as `[time, text]` pairs |

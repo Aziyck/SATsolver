@@ -41,6 +41,7 @@ from sat_core.runtime import (
     RunEvent,
     RunToken,
 )
+from sat_core.memory import peak_memory_mb
 from sat_core.solver_registry import LOG_LEVELS, SOLVER_PYTHON_ENV, SolverSpec, get_solver, options_summary, run_solver
 
 
@@ -193,6 +194,11 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
         return False
     emit_event(RunEvent(EVENT_PROGRESS, f"Solving with {solver.title}", current=1, total=2))
 
+    # The job process runs this one solve, so its peak is the run's, encoded formula included.
+    # With the solver child (WIZSAT_SOLVER_PYTHON) the solver is not in this process: no numbers here.
+    in_process = not os.environ.get(SOLVER_PYTHON_ENV, "").strip()
+    baseline_mb = peak_memory_mb() if in_process else None
+
     result = run_solver(
         instance.clauses,
         solver.key,
@@ -202,6 +208,11 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
         event_callback=emit_event,
         cancel_token=token,
     )
+
+    peak_mb = peak_memory_mb() if in_process else None
+    if baseline_mb is not None and peak_mb is not None:  # not measured: absent, never 0
+        result.stats["baseline_memory_mb"] = round(baseline_mb, 1)
+        result.stats["peak_memory_mb"] = round(peak_mb, 1)
 
     verdict = judge_answer(spec, instance, result)
     model_file = None

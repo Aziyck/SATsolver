@@ -70,11 +70,14 @@ def payload_of(events: list, event_type: str) -> dict[str, Any]:
 
 
 def zero_timings(payload: dict[str, Any]) -> None:
+    """Zero the values that differ between runs: timings, and the job's memory (MEM-2)."""
+
     for key in ("encode_seconds", "elapsed"):
         if key in payload:
             payload[key] = 0.0
-    if "stats" in payload and "elapsed" in payload["stats"]:
-        payload["stats"]["elapsed"] = 0.0
+    for key in ("elapsed", "baseline_memory_mb", "peak_memory_mb"):
+        if key in payload.get("stats", {}):
+            payload["stats"][key] = 0.0
 
 
 def build_samples() -> dict[str, tuple[str, Any]]:

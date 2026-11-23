@@ -130,6 +130,7 @@ describe("StatsTable", () => {
       statSpec({ key: "decisions", label: "Decisions", help: "Times the solver guessed a value." }),
       statSpec({ key: "elapsed", label: "Solver time", unit: "s" }),
       statSpec({ key: "glue_bonus_count", label: "Glue bonus", help: "Made-up statistic only the catalog knows." }),
+      statSpec({ key: "peak_memory_mb", label: "Peak memory of the job", unit: "MiB", help: "The most memory the job process used." }),
     ],
   });
 
@@ -142,6 +143,12 @@ describe("StatsTable", () => {
   it("shows elapsed as a time", () => {
     renderWithApp(<StatsTable stats={{ elapsed: 0.0123 }} />, { queryData: [[["catalog"], STATS]] });
     expect(within(row("Solver time")).getByText("12.3 ms")).toBeTruthy();
+  });
+
+  it("puts the catalog's unit after a number, so a peak reads as MiB and not as a bare 21.3", () => {
+    renderWithApp(<StatsTable stats={{ peak_memory_mb: 21.3, decisions: 12 }} />, { queryData: [[["catalog"], STATS]] });
+    expect(within(row("Peak memory of the job")).getByText("21.30 MiB")).toBeTruthy();
+    expect(within(row("Decisions")).getByText("12")).toBeTruthy(); // no unit in the catalog, none shown
   });
 
   it("gives a key the catalog lacks a readable label", () => {

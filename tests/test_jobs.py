@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,6 +54,37 @@ class JobTests(unittest.TestCase):
             self.assertEqual(cnf.app_header, {"problem": "n_queens", "params": {"size": 6}})
             self.assertEqual(len(cnf.clauses), instance["clauses"])
             self.assertTrue((Path(workdir) / result["model_file"]).read_text().startswith("s SATISFIABLE"))
+
+    SOLVE_REQUEST = {"problem": "n_queens", "params": {"size": 6}, "solver": "cdcl"}
+
+    def test_a_solve_job_reports_its_peak_memory_and_the_baseline_after_encoding(self):
+        stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
+
+        self.assertGreater(stats["baseline_memory_mb"], 0)
+        self.assertGreaterEqual(stats["peak_memory_mb"], stats["baseline_memory_mb"])
+
+    def test_the_baseline_is_read_before_the_solver_and_the_peak_after_it(self):
+        # Two readings in this order; reading both at one moment, or swapped, would not give 10 and 25.
+        with mock.patch("sat_core.jobs.peak_memory_mb", side_effect=[10.04, 25.0]):
+            stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
+
+        self.assertEqual((stats["baseline_memory_mb"], stats["peak_memory_mb"]), (10.0, 25.0))
+
+    def test_a_platform_that_cannot_say_leaves_the_memory_stats_out_never_zero(self):
+        with mock.patch("sat_core.jobs.peak_memory_mb", return_value=None):
+            stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
+
+        self.assertNotIn("peak_memory_mb", stats)
+        self.assertNotIn("baseline_memory_mb", stats)
+
+    def test_with_the_solver_child_the_job_peak_is_not_reported_as_the_solvers(self):
+        # The solver runs in another process then, so this process's peak says nothing about it (MEM-3 measures that).
+        with mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}):
+            stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
+
+        self.assertIn("decisions", stats)  # the run itself worked, in the child
+        self.assertNotIn("peak_memory_mb", stats)
+        self.assertNotIn("baseline_memory_mb", stats)
 
     def test_every_job_first_reports_the_environment_it_runs_in(self):
         # Sent before the request is checked, so a job that fails still says where it ran (META-2).
@@ -219,8 +251,10 @@ class PayloadShapeTests(unittest.TestCase):
         events = run("solve", {"problem": "sudoku", "params": {"size": 9}, "solver": "cdcl"})
         payloads = {event.type: event.payload for event in events if event.type in (EVENT_INSTANCE, EVENT_RESULT)}
 
-        # Timings are the only values that differ between runs; they must still be there.
-        for container, key in ((payloads["instance"], "encode_seconds"), (payloads["result"], "elapsed"), (payloads["result"]["stats"], "elapsed")):
+        # Timings and memory are the only values that differ between runs; they must still be there.
+        stats = payloads["result"]["stats"]
+        measured = ((payloads["instance"], "encode_seconds"), (payloads["result"], "elapsed"), (stats, "elapsed"))
+        for container, key in measured + ((stats, "baseline_memory_mb"), (stats, "peak_memory_mb")):
             self.assertIsInstance(container[key], float)
             container[key] = 0.0
 

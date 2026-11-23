@@ -434,7 +434,9 @@ export const jobDetail = {
       "avg_lbd": 0.0,
       "restarts": 0,
       "reductions": 0,
-      "elapsed": 0.0
+      "elapsed": 0.0,
+      "baseline_memory_mb": 0.0,
+      "peak_memory_mb": 0.0
     },
     "decoded": {
       "grid": [

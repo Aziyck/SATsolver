@@ -1,6 +1,6 @@
 # Plan: memory use in the results
 
-- **Status:** in progress (MEM-1 done 2026-11-23)
+- **Status:** in progress (MEM-1 and MEM-2 done 2026-11-23)
 - **Written:** 2026-10-19; tasks rewritten 2026-11-13
 - **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
   RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](done/run-metadata.md)).
@@ -164,7 +164,7 @@ With every run in its own child, a per-run limit becomes possible:
     interpreter: the peak never falls, so in the test process an earlier
     test's higher peak would hide the growth.
 
-- [ ] **MEM-2. Solve jobs report peak memory**
+- [x] **MEM-2. Solve jobs report peak memory** - Done 2026-11-23.
   - **Difficulty:** easy
   - **Blocked by:** MEM-1
   - **How:** in `solve_job` (`sat_core/jobs.py`), read the baseline after
@@ -174,6 +174,16 @@ With every run in its own child, a per-run limit becomes possible:
   - **Done when:** an API test finds both stats on a finished solve job with
     peak >= baseline > 0, and the Statistics tab shows them with a label and
     an explanation (the `StatSpec` entries in `STAT_SPECS`).
+  - **Built as:** `solve_job` reads `peak_memory_mb()` before and after
+    `run_solver` and adds `baseline_memory_mb` and `peak_memory_mb` (one
+    decimal, MiB) to the result's stats; a reading that is `None` leaves
+    both out. Declared in `STAT_SPECS` with unit `MiB` and without `csv` and
+    `chart` (MEM-6 turns them on). `StatsTable` puts the catalog's unit after
+    a number. With `WIZSAT_SOLVER_PYTHON` set, `solve_job` reports neither:
+    the solver is then not in the job process, so the job's peak would say
+    nothing about it; MEM-3 measures inside the child. The numbers join the
+    timings as values the golden tests (`tests/fixtures/solve_payloads.golden.json`,
+    `frontend/src/api/wireSamples.ts`) set to 0.0.
 
 - [ ] **MEM-3. The solver runner reports memory per run**
   - **Difficulty:** easy

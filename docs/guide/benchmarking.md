@@ -318,3 +318,11 @@ gets a fresh seed on every call.
    Compare times only between rows with the same machine columns. A
    `wizsat_commit` ending in `-dirty` means the code had uncommitted changes,
    so the commit alone does not reproduce the run; commit first, then run.
+9. Keep CPython as the interpreter of the results you report. With
+   `WIZSAT_SOLVER_PYTHON` set (PyPy), every solver of the benchmark runs on
+   that interpreter, so never put a PyPy run of one solver next to a CPython
+   run of another: that compares runtimes, not algorithms. If you report PyPy
+   results, say so, name the version (the `python` column carries it), and
+   note the warm-up: PyPy is slower on runs under about half a second, which
+   can change the ranking on small instances
+   ([numbers](performance.md#running-the-solvers-under-pypy)).

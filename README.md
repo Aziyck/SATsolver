@@ -51,6 +51,7 @@ results are kept in a small SQLite database under `output/`.
 |---|---|---|
 | Python | 3.10 or newer | server, encoders and solvers |
 | Node.js | 20 or newer (includes `npm`) | builds the web interface once |
+| PyPy | 3.10 or newer, optional | runs the solvers faster on long runs ([below](#running-the-solvers-under-pypy)) |
 
 The solvers and encoders are pure Python; the only Python dependencies are
 FastAPI and Uvicorn (`requirements.txt`).
@@ -109,6 +110,7 @@ Environment variables:
 | `WIZSAT_MAX_CLAUSES` | `2000000` | instances larger than this are refused before encoding |
 | `WIZSAT_FRONTEND_DIST` | `frontend/dist/` | the built web UI to serve |
 | `WIZSAT_ALLOWED_HOSTS` | empty | extra host names, comma-separated, that the server answers for |
+| `WIZSAT_SOLVER_PYTHON` | empty | path of another Python (PyPy) to run the solvers in ([below](#running-the-solvers-under-pypy)) |
 
 The server has no login. It answers only requests addressed to `localhost`,
 `127.0.0.1` or `[::1]` (any port), the `--host` value and the names in
@@ -119,6 +121,37 @@ addresses other machines will type, without the port, for example
 
 If Node.js is missing, the server still starts and the page explains how to
 build the interface.
+
+### Running the solvers under PyPy
+
+The solvers are plain Python loops, and PyPy runs them about 3 times faster
+on runs that take seconds (up to 8 times for DPLL). It is slower on runs
+under about half a second, because it needs time to warm up. The server
+itself stays on CPython; only the solvers move.
+
+1. Install PyPy 3.10 or newer from <https://pypy.org/download.html>: unpack
+   the archive anywhere outside the project, there is no installer. Conda:
+   `conda install -c conda-forge pypy3.10`. The solvers use only the standard
+   library, so nothing else needs installing in PyPy.
+2. Check it: `pypy3 --version` (on Windows, `pypy.exe --version` in the
+   unpacked folder).
+3. Set `WIZSAT_SOLVER_PYTHON` to its path before starting the app:
+
+```powershell
+$env:WIZSAT_SOLVER_PYTHON = "C:\pypy\pypy.exe"; python -m sat_web      # Windows PowerShell
+```
+
+```bash
+WIZSAT_SOLVER_PYTHON=/opt/pypy3/bin/pypy3 python -m sat_web             # Linux, macOS
+```
+
+Every solve and benchmark run then starts in a child process of that
+interpreter. Each run pays about 0.3 s to start it, so a benchmark of many
+tiny cases gets slower, not faster. The job detail and the CSV name the
+interpreter that ran the solvers (`PyPy 7.3.x`), so a result always says what
+produced it. Unset the variable to go back. Numbers, the warm-up effect and
+what to report: [Solver performance](docs/guide/performance.md#running-the-solvers-under-pypy)
+and [Benchmarking](docs/guide/benchmarking.md#checklist-for-report-quality-experiments).
 
 ## Using the app
 

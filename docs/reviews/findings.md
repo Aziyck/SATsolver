@@ -509,3 +509,43 @@ gets a dated file of its own in this folder instead, like
     above it the same way.
   - **Done when:** "Order of work" names no finding ID that can go stale,
     and following it still leads to every open finding.
+
+- [ ] **F6. With the solver child, the variables of a formula are counted twice**
+  (added 2026-11-23, found while RUNNER-7)
+  - **Difficulty:** hard (the fix changes the child's result line, in
+    `sat_core/solver_process.py`)
+  - **Problem:** `run_solver` (`sat_core/solver_registry.py`) builds the set
+    of variable numbers before it decides where the solver runs. With
+    `WIZSAT_SOLVER_PYTHON` set, the child's own `run_solver` builds it
+    again. At the clause limit (2,000,000 clauses of three literals) each
+    count takes 2.5 s, half of the 5 s the child adds to such a run
+    (`scripts/child_cost.py`, "The solver child process" in
+    `docs/guide/performance.md`).
+  - **Fix:** count once. The child already counts, so its result line can
+    carry the number of variables. The parent counts only when no child
+    result has the number: the in-process path, and the results the parent
+    makes itself (stopped before starting, an `ERROR` from
+    `SolverProcessError`, a run killed by the token or the time limit).
+  - **Done when:** with the setting on, `variables` matches the in-process
+    run for a finished run and for a killed or cancelled one, and a finished
+    run no longer counts in the parent (a test that patches the count, or
+    the "first line" of `scripts/child_cost.py` at the limit drops by the
+    counting time).
+
+- [ ] **F7. A run the parent kills reports an `elapsed` short by the variable count**
+  (added 2026-11-23, found by the review of RUNNER-7)
+  - **Difficulty:** hard (`sat_core/solver_process.py`, a killed run: the
+    stopping trigger)
+  - **Problem:** when `run_in_child` kills the child (cancel, skip, or past
+    its time limit), it reports `elapsed` from the child's first log line.
+    The child's clock starts earlier: `run_solver` makes its `RunToken`
+    before it counts the variables, and logs only after the count (2.5 s at
+    the clause limit, `docs/guide/performance.md`, "The solver child
+    process"). A run killed at its limit therefore shows an `elapsed`
+    seconds below the limit, unlike the same run in-process.
+  - **Fix:** take the first line closer to the child's clock: the child's
+    `run_solver` logs before it counts, or the token is made after the
+    count, the same on both paths.
+  - **Done when:** at a formula whose count takes a measurable time, a run
+    killed by its time limit through the child reports an `elapsed` no
+    shorter than its timeout.

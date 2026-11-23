@@ -183,6 +183,64 @@ noisier (and turbo clock speeds drop when every core is busy). See
 [Benchmarking](benchmarking.md#parallel-runs) and
 [How it works](how-it-works.md#parallel-benchmark-runs).
 
+## The solver child process
+
+With `WIZSAT_SOLVER_PYTHON` set, every run starts a child interpreter and
+sends it the formula as one line of JSON (`sat_core/solver_process.py`). That
+costs time on every run, before the solver starts:
+
+```bash
+python scripts/child_cost.py                    # this interpreter as the child
+python scripts/child_cost.py /path/to/pypy3     # other interpreters as the child
+```
+
+The script times a 4x4 Sudoku solved with CDCL 20 times (the solve itself
+takes about a millisecond, so the difference is the child's start-up), and a
+random formula of 2,000,000 clauses, the clause limit, cancelled at its first
+log line (so the solver does no work and only the cost of getting the formula
+to it is left). "Window" is the time from starting the child to its first log
+line. For a run with a time limit, the parent counts the limit from that
+line, and until it arrives it allows `START_UP_SECONDS` on top of the limit
+before it kills a silent child as hung; the window is what that allowance
+must cover.
+
+Measured on 2026-11-23: Windows 11, AMD Ryzen 7 4800H (8 cores, 16 logical
+CPUs), 16 GB, CPython 3.13.14 as the parent and the child. PyPy was not
+installed; [RUNNER-10](../plans/pypy-solver-runner.md) adds its numbers.
+
+| Run | Without the setting | With the setting (CPython child) | Window |
+|---|---:|---:|---:|
+| 4x4 Sudoku, median of 20 (max) | 0.03 s (0.06 s) | 0.32 s (0.45 s) | 0.29 s (0.40 s) |
+| 2,000,000 clauses of 3 literals (53.6 MB of JSON), median of 3 (max) | 2.6 s (2.8 s) | 7.6 s (7.8 s) | 4.2 s (4.5 s) |
+| 2,000,000 clauses of 5 literals (86.6 MB), median of 2 (max) | 4.6 s (5.3 s) | 13.5 s (14.6 s) | 7.4 s (8.3 s) |
+
+What the numbers say:
+
+- **About 0.3 s per run**, almost all of it starting the interpreter:
+  `python -c pass` alone takes 0.3 s on this machine. A benchmark of many
+  small cases pays it on every run, so on runs under a second the setting
+  makes the total slower, before PyPy's own warm-up is counted.
+- **About 5 s more per run at the clause limit.** Without the setting,
+  `run_solver` spends its 2.6 s counting the variables. With it, the parent
+  counts them too, then encodes the request (`json.dumps`, 0.9 s), and the
+  child parses it (`json.loads`, 1.4 s) and counts the variables again
+  (2.5 s); the 54 MB through the pipe and the interpreter start add little
+  on top. Each of these grows with the number of literals: 0.7 to 0.83 s of
+  window per million literals.
+- **`START_UP_SECONDS` stays at 60 s.** It is more than ten times the worst
+  window at the clause limit, and the limit counts clauses, not literals: a
+  DIMACS file with long clauses can carry many more. At the worst measured
+  rate, 60 s covers about 70 million literals, 35 per clause at the limit. A
+  value too low would end a healthy run as `TIMEOUT`; a high one only keeps
+  a child that hangs before its first line, and that nobody cancels, that
+  much longer. Slower machines, busy cores (`workers` above 1) and PyPy were
+  not measured; RUNNER-10 repeats the measurement on the thesis machine.
+
+Two follow-ups would remove most of the cost at the limit: a binary request
+format instead of JSON ([RUNNER-12](../plans/pypy-solver-runner.md)), and
+counting the variables once instead of twice
+([F6](../reviews/findings.md)).
+
 ## Ideas for later
 
 - Run the solvers under PyPy, which typically speeds up this kind of

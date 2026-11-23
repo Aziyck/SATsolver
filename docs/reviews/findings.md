@@ -591,3 +591,19 @@ gets a dated file of its own in this folder instead, like
     `ctypes`) or report `None` there.
   - **Done when:** the growth test passes on macOS with the 150 MB parent,
     and its `darwin` exception is removed.
+
+- [ ] **F10. An old PyPy job whose interpreter probe timed out counts as Python**
+  (added 2026-11-23, found while INTERP-4, in the review; the rule is INTERP-2's)
+  - **Difficulty:** easy
+  - **Problem:** a job saved before requests carried `interpreter` is taken
+    as PyPy only when its environment record says `PyPy`
+    (`recorded_interpreter()` in `sat_core/jobs.py`). A PyPy that did not
+    answer the probe within 15 s was recorded as `unknown`, so such a job
+    shows no PyPy badge, and Rerun runs it on Python: its new times are then
+    compared with PyPy times without a warning.
+  - **Fix:** decide what `unknown` means for an old job: leave it Python and
+    say so in `docs/guide/api.md`, or refuse to guess (Rerun asks, the
+    summary says `unknown`). Rare: only jobs from before INTERP-2 on a server
+    with `WIZSAT_SOLVER_PYTHON` set and a slow PyPy start.
+  - **Done when:** a test with an old job whose environment says `unknown`
+    shows the chosen behaviour in the summary and in Rerun.

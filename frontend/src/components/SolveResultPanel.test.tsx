@@ -42,6 +42,7 @@ function job(partial: Partial<JobDetail>): JobDetail {
     row_count: 0,
     problems: ["sudoku"],
     solver: "cdcl",
+    interpreter: "python",
     error: null,
     request: { problem: "sudoku", params: {}, solver: "cdcl", options: {} } as JobDetail["request"],
     instance: null,

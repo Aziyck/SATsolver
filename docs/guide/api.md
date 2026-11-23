@@ -217,11 +217,17 @@ The response is the job summary.
   "started_at": "...", "finished_at": "...",
   "progress": {"current": null, "total": null, "message": ""},
   "row_count": 0,
-  "problems": ["graph_coloring"], "solver": "cdcl",
+  "problems": ["graph_coloring"], "solver": "cdcl", "interpreter": "python",
   "result_status": "SAT", "verified": true, "elapsed": 0.0012,
   "error": null
 }
 ```
+
+`interpreter` is the interpreter the job chose for its solvers: `"python"` or
+`"pypy"`, from the request, or for a job saved before requests carried it, `"pypy"` when its
+`environment` names PyPy; `null` for a generate job, which runs no solver. What really ran is in the
+detail's `environment`; the two differ only for a job that failed before its
+runs (PyPy gone since the server started).
 
 `rev` grows by one every time the server publishes a new version of the
 summary. When you combine polling and the WebSocket, keep the copy with the

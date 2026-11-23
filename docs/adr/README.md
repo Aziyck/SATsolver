@@ -55,3 +55,4 @@ What becomes easier, what becomes harder, what to watch.
 | [0004](0004-where-the-run-environment-is-read.md) | The server reads the machine once; each job reads its interpreter and git |
 | [0005](0005-one-item-skill-model-by-difficulty.md) | One item skill, `/do-item`; the difficulty picks the model, and hard is set by triggers |
 | [0006](0006-the-solver-child-ends-with-its-stdin.md) | The solver child ends when its stdin reaches its end; the parent keeps it open for the run |
+| [0007](0007-each-job-chooses-its-interpreter.md) | Each solve or benchmark job chooses Python or PyPy; the server finds PyPy, the browser never names a path |

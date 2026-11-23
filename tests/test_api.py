@@ -586,6 +586,32 @@ class SolverChildTests(ApiTestCase):
                 self.assertEqual(again.status_code, 201, again.text)
                 self.assertEqual(self.client.get(f"/api/jobs/{again.json()['id']}").json()["request"]["interpreter"], expected)
 
+    def test_the_job_summary_says_which_interpreter_ran_the_solvers(self):
+        # INTERP-4: the job list shows a PyPy badge from the summary, so the summary must say it,
+        # also for a job saved before the request field existed (from its environment record).
+        self.set_solver_python(write_fake_python(self.folder.name, "PyPy", "3.10.14"))
+        manager = self.client.app.state.manager
+        on_pypy = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
+        on_python = self.wait(self.submit("solve", self.SOLVE)["id"])
+        old_on_pypy = self.wait(self.submit("benchmark", {**self.BENCHMARK, **self.PYPY})["id"])
+        old_on_python = self.wait(self.submit("benchmark", self.BENCHMARK)["id"])
+        encoded = self.wait(self.submit("generate", {"problem": "n_queens", "params": {"size": 4}})["id"])
+        for detail in (old_on_pypy, old_on_python):
+            with manager.lock:
+                manager.get(detail["id"]).request.pop("interpreter")
+
+        listed = {job["id"]: job for job in self.client.get("/api/jobs").json()["jobs"]}
+        for detail, expected in (
+            (on_pypy, "pypy"),
+            (on_python, "python"),
+            (old_on_pypy, "pypy"),
+            (old_on_python, "python"),
+            (encoded, None),  # a generate job runs no solver
+        ):
+            with self.subTest(job=detail["kind"], expected=expected):
+                self.assertEqual(listed[detail["id"]]["interpreter"], expected)
+                self.assertEqual(self.client.get(f"/api/jobs/{detail['id']}").json()["interpreter"], expected)
+
     def test_a_job_that_asks_for_pypy_where_there_is_none_is_refused_when_it_is_submitted(self):
         # The server's catalog says no PyPy (setUp), so this never becomes a job that fails later.
         for kind, request in (("solve", self.SOLVE), ("benchmark", self.BENCHMARK)):

@@ -11,7 +11,7 @@ from fake_python import write_fake_python
 from sat_core.benchmark import parse_request
 from sat_core.dimacs import parse_dimacs
 from sat_core.environment import run_environment
-from sat_core.jobs import execute_job, parse_solve_request, solve_job
+from sat_core.jobs import execute_job, parse_solve_request, recorded_interpreter, solve_job
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -172,6 +172,20 @@ class JobTests(unittest.TestCase):
                 with self.assertRaises(ParamError) as caught:
                     parse_request({**bench, "interpreter": bad})
                 self.assertIn("interpreter", caught.exception.errors)
+
+    def test_the_interpreter_a_job_ran_on_comes_from_its_request_or_else_its_environment(self):
+        # One rule for the job summary (INTERP-4) and for Rerun (INTERP-2).
+        pypy, cpython = {"python_implementation": "PyPy"}, {"python_implementation": "CPython"}
+        for kind, request, environment, expected in (
+            ("solve", {"interpreter": "pypy"}, cpython, "pypy"),  # the request wins
+            ("solve", {"interpreter": "python"}, pypy, "python"),
+            ("benchmark", {}, pypy, "pypy"),  # saved before the field: from the record
+            ("benchmark", {}, cpython, "python"),
+            ("solve", {}, None, "python"),  # not started yet, or no record
+            ("generate", {}, pypy, None),  # runs no solver
+        ):
+            with self.subTest(kind=kind, request=request, environment=environment):
+                self.assertEqual(recorded_interpreter(kind, request, environment), expected)
 
     def test_generate_job_only_encodes(self):
         events = run("generate", {"problem": "graph_coloring", "params": {"seed": None}})

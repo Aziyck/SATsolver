@@ -1,5 +1,5 @@
 import { Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import type { BenchmarkRequest, Catalog, Rule, RunEnvironment, SolverEntry } from "../api/types";
+import type { BenchmarkRequest, Catalog, Interpreter, Rule, RunEnvironment, SolverEntry } from "../api/types";
 import { formatSeconds } from "../lib/format";
 import { interpreterOf } from "../lib/interpreter";
 import { FactsList } from "./Display";
@@ -18,7 +18,18 @@ export function entryForRow(request: BenchmarkRequest, rowIndex: number): Solver
 }
 
 /** Everything a benchmark ran with: run-wide settings, limit rules, the machine and each solver's options. */
-export function BenchmarkSetup({ request, catalog, environment }: { request: BenchmarkRequest; catalog: Catalog; environment: RunEnvironment | null }) {
+export function BenchmarkSetup({
+  request,
+  catalog,
+  environment,
+  interpreter = null,
+}: {
+  request: BenchmarkRequest;
+  catalog: Catalog;
+  environment: RunEnvironment | null;
+  /** The job summary's `interpreter`; absent or null shows Python. */
+  interpreter?: Interpreter | null;
+}) {
   const problems = (request.problems ?? []).map((key) => catalog.problems.find((item) => item.key === key)?.title ?? key);
   const rules = request.rules ?? [];
 
@@ -31,7 +42,7 @@ export function BenchmarkSetup({ request, catalog, environment }: { request: Ben
           { label: "Repeats", value: request.repeats ?? 1 },
           { label: "Time limit per run", value: request.timeout === null || request.timeout === undefined ? "none" : formatSeconds(request.timeout) },
           { label: "Parallel workers", value: request.workers ?? 1 },
-          { label: "Run with", value: interpreterOf(request, environment) === "pypy" ? "PyPy" : "Python" },
+          { label: "Run with", value: interpreterOf({ interpreter }) === "pypy" ? "PyPy" : "Python" },
           { label: "Benchmark seed", value: request.seed === null || request.seed === undefined || request.seed === "" ? "none" : String(request.seed) },
           { label: "Log level", value: request.log_level ?? "normal" },
         ]}

@@ -23,6 +23,7 @@ export const jobSummary = {
     "sudoku"
   ],
   "solver": "cdcl",
+  "interpreter": "python",
   "result_status": "SAT",
   "verified": true,
   "elapsed": 0.0,
@@ -49,6 +50,7 @@ export const jobDetail = {
     "sudoku"
   ],
   "solver": "cdcl",
+  "interpreter": "python",
   "result_status": "SAT",
   "verified": true,
   "elapsed": 0.0,

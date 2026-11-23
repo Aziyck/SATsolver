@@ -279,6 +279,22 @@ JOB_FUNCTIONS = {"solve": solve_job, "generate": generate_job, "benchmark": benc
 SOLVER_KINDS = {"solve", "benchmark"}
 
 
+def recorded_interpreter(kind: str, request: dict[str, Any], environment: dict[str, Any] | None) -> str | None:
+    """The interpreter a job's solvers run on, "python" or "pypy"; None for a job that runs no solver.
+
+    The request's choice when it has one (every job submitted since INTERP-2).
+    A job saved before the field existed ran on PyPy exactly when the server
+    had WIZSAT_SOLVER_PYTHON set, and its environment record then names PyPy.
+    One rule for the job summary (INTERP-4) and for Rerun (sat_web/api.py).
+    """
+
+    if kind not in SOLVER_KINDS:
+        return None
+    if "interpreter" in request:
+        return "pypy" if request["interpreter"] == "pypy" else "python"
+    return "pypy" if (environment or {}).get("python_implementation") == "PyPy" else "python"
+
+
 def choose_solver_python(kind: str, request: dict[str, Any]) -> str | None:
     """Make this job process run its solvers where the request says; return the interpreter path, or None for this process.
 

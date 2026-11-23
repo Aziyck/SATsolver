@@ -27,6 +27,10 @@ test("the Solve page starts on Python and a solve on PyPy runs there", async ({ 
   const detail = await (await page.request.get(`/api/jobs/${id}`)).json();
   expect(detail.request.interpreter).toBe("pypy");
   expect(detail.environment.python_version).toBe("3.10.14");
+
+  // The job list marks it (INTERP-4).
+  await page.goto("/jobs");
+  await expect(page.getByRole("row", { name: new RegExp(`\\bJ${id}\\b`) }).getByText("PyPy", { exact: true })).toBeVisible();
 });
 
 test("the benchmark builder starts on Python and sends the choice", async ({ page }) => {

@@ -132,7 +132,7 @@ export default function SolvePage() {
     const key = job.problems[0];
     if (!key) return;
     setAllValues((current) => ({ ...current, [key]: { ...(current[key] ?? {}), ...job.request.params } }));
-    setInterpreter(interpreterOf(job.request, job.environment));
+    setInterpreter(interpreterOf(job));
     if (job.request.solver) {
       setSettings((current) => ({
         ...current,

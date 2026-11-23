@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest import mock
 
 from fake_python import write_fake_python
+from sat_core.benchmark import parse_request
 from sat_core.dimacs import parse_dimacs
 from sat_core.environment import run_environment
-from sat_core.jobs import execute_job, solve_job
+from sat_core.jobs import execute_job, parse_solve_request, solve_job
 from sat_core.params import ParamError
 from sat_core.runtime import (
     EVENT_CANCELLED,
@@ -80,7 +81,7 @@ class JobTests(unittest.TestCase):
     def test_with_the_solver_child_the_job_peak_is_not_reported_as_the_solvers(self):
         # The solver runs in another process then, so this process's peak says nothing about it (MEM-3 measures that).
         with mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}):
-            stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
+            stats = of_type(run("solve", {**self.SOLVE_REQUEST, "interpreter": "pypy"}), EVENT_RESULT)[0].payload["stats"]
 
         self.assertIn("decisions", stats)  # the run itself worked, in the child
         self.assertNotIn("peak_memory_mb", stats)
@@ -107,13 +108,65 @@ class JobTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             fake = write_fake_python(folder, "PyPy", "3.10.14")
             for kind, request, expected in (
-                ("solve", {"problem": "n_queens", "params": {"size": 4}, "solver": "cdcl"}, ("PyPy", "3.10.14")),
-                ("benchmark", {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"]}, ("PyPy", "3.10.14")),
+                ("solve", {"problem": "n_queens", "params": {"size": 4}, "solver": "cdcl", "interpreter": "pypy"}, ("PyPy", "3.10.14")),
+                (
+                    "benchmark",
+                    {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"], "interpreter": "pypy"},
+                    ("PyPy", "3.10.14"),
+                ),
                 ("generate", {"problem": "n_queens", "params": {"size": 4}}, (platform.python_implementation(), platform.python_version())),
             ):
                 with self.subTest(kind=kind), mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": fake}):
                     environment = of_type(run(kind, request), EVENT_ENVIRONMENT)[0].payload
                     self.assertEqual((environment["python_implementation"], environment["python_version"]), expected)
+
+    def test_a_job_that_names_python_runs_in_process_even_when_the_setting_is_set(self):
+        # INTERP-2: the setting makes PyPy available; the request chooses. No field means python.
+        with tempfile.TemporaryDirectory() as folder:
+            fake = write_fake_python(folder, "PyPy", "3.10.14")
+            for interpreter in ({"interpreter": "python"}, {}):
+                with self.subTest(interpreter), mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": fake}):
+                    events = run("solve", {**self.SOLVE_REQUEST, **interpreter})
+
+                    environment = of_type(events, EVENT_ENVIRONMENT)[0].payload
+                    self.assertEqual(environment["python_implementation"], platform.python_implementation())
+                    self.assertEqual(of_type(events, EVENT_RESULT)[0].payload["status"], "SAT")  # solved here, not by the fake
+
+    def test_a_job_that_names_pypy_finds_it_itself_on_path(self):
+        # The setting is unset: the job process looks pypy3 up on PATH, as the server did (find_pypy).
+        with tempfile.TemporaryDirectory() as folder:
+            write_fake_python(folder, "PyPy", "3.10.14", name="pypy3")
+            with mock.patch.dict(os.environ, {"PATH": folder}):
+                os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
+                events = run("solve", {**self.SOLVE_REQUEST, "interpreter": "pypy"})
+
+        environment = of_type(events, EVENT_ENVIRONMENT)[0].payload
+        self.assertEqual((environment["python_implementation"], environment["python_version"]), ("PyPy", "3.10.14"))
+
+    def test_a_job_that_names_pypy_when_there_is_none_ends_in_an_error_that_says_so(self):
+        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {"PATH": empty}):
+            os.environ.pop("WIZSAT_SOLVER_PYTHON", None)
+            events = run("solve", {**self.SOLVE_REQUEST, "interpreter": "pypy"})
+
+        self.assertEqual(events[0].type, EVENT_ENVIRONMENT)  # a failed job still says where it ran
+        self.assertEqual(events[-1].type, EVENT_ERROR)
+        self.assertIn("interpreter", events[-1].payload["errors"])
+        self.assertEqual(of_type(events, EVENT_RESULT), [])
+
+    def test_the_interpreter_is_python_or_pypy_and_nothing_else(self):
+        self.assertEqual(parse_solve_request(self.SOLVE_REQUEST)["interpreter"], "python")
+        self.assertEqual(parse_solve_request({**self.SOLVE_REQUEST, "interpreter": "pypy"})["interpreter"], "pypy")
+        bench = {"problems": ["n_queens"], "segments": [{"size": 4}], "solvers": ["cdcl"]}
+        self.assertEqual(parse_request(bench).normalized["interpreter"], "python")
+        self.assertEqual(parse_request({**bench, "interpreter": "pypy"}).normalized["interpreter"], "pypy")
+        for bad in ("jython", "PyPy", "", None, 3, ["pypy"]):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ParamError) as caught:
+                    parse_solve_request({**self.SOLVE_REQUEST, "interpreter": bad})
+                self.assertIn("interpreter", caught.exception.errors)
+                with self.assertRaises(ParamError) as caught:
+                    parse_request({**bench, "interpreter": bad})
+                self.assertIn("interpreter", caught.exception.errors)
 
     def test_generate_job_only_encodes(self):
         events = run("generate", {"problem": "graph_coloring", "params": {"seed": None}})
@@ -166,7 +219,7 @@ class SolveRequestTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            set(normalized), {"problem", "params", "solver", "options", "timeout", "log_level"}
+            set(normalized), {"problem", "params", "solver", "options", "timeout", "log_level", "interpreter"}
         )
         self.assertEqual(normalized["problem"], "random_3sat")
         self.assertEqual(normalized["solver"], "walksat")

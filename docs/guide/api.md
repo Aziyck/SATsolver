@@ -161,7 +161,8 @@ A **SolveRequest**:
   "solver": "cdcl",
   "options": {"branching": "vsids", "restarts": true},
   "timeout": 60,
-  "log_level": "normal"
+  "log_level": "normal",
+  "interpreter": "python"
 }
 ```
 
@@ -182,7 +183,8 @@ A **BenchmarkRequest**:
   "seed": 1,
   "log_level": "normal",
   "title": "optional",
-  "workers": 1
+  "workers": 1,
+  "interpreter": "python"
 }
 ```
 
@@ -192,6 +194,15 @@ ranges (see [Benchmarking](benchmarking.md#writing-parameter-values)).
 `seconds`) or `skip`. `workers` (default 1, at most `limits.max_workers`,
 the number of CPU cores) is how many cases are solved at the same time; see
 [Benchmarking](benchmarking.md#parallel-runs).
+
+`interpreter` (solve and benchmark requests; `"python"` when missing) is where
+the job's solvers run: `"python"`, in the job's own process, or `"pypy"`, each
+run in a child process of the PyPy the server found (`interpreters.pypy` in
+the [catalog](#get-apicatalog)). The choice covers every run of the job, pool
+workers included, and Rerun keeps it; a job saved before the field existed
+reruns on PyPy when its `environment` says it ran on PyPy. Any other value, and `"pypy"` when the
+catalog says PyPy is not available, is refused with 422 and
+`{"errors": {"interpreter": "..."}}` before a job is created.
 
 The response is the job summary.
 
@@ -237,9 +248,9 @@ The summary plus:
 ### The `environment` value
 
 Read inside the process that runs the job, so it names the interpreter that
-ran the solver. With `WIZSAT_SOLVER_PYTHON` set, the solvers run in a child
-of that interpreter instead, and a solve or benchmark job asks it once for
-its name and version: those two facts are then the solver interpreter's (a
+ran the solver. For a job whose request says `"interpreter": "pypy"`, the
+solvers run in a child of the PyPy the server found instead, and the job asks
+it once for its name and version: those two facts are then the solver interpreter's (a
 generate job runs no solver and keeps the worker's). The server reads the operating system, processor and RAM once
 and hands them to each job; git is asked again for every job, so code edited
 while the server runs shows up as `git_dirty`.
@@ -261,7 +272,7 @@ while the server runs shows up as `git_dirty`.
 
 | Key | Meaning |
 |---|---|
-| `python_implementation`, `python_version` | `platform.python_implementation()` and `platform.python_version()` of the worker, or of the `WIZSAT_SOLVER_PYTHON` interpreter when that is set (solve and benchmark jobs); `"unknown"` and `""` when that interpreter cannot be started, does not answer within 15 seconds or gives no readable answer |
+| `python_implementation`, `python_version` | `platform.python_implementation()` and `platform.python_version()` of the worker, or of the PyPy of a job that asked for `"pypy"` (solve and benchmark jobs); `"unknown"` and `""` when that interpreter cannot be started, does not answer within 15 seconds or gives no readable answer |
 | `os` | system, release and machine, as `Windows 11 (AMD64)` |
 | `cpu_model` | the processor's name |
 | `cpu_logical_cores` | `os.cpu_count()` |

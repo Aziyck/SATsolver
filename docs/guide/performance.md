@@ -186,10 +186,10 @@ noisier (and turbo clock speeds drop when every core is busy). See
 ## Running the solvers under PyPy
 
 PyPy is an alternative Python with a just-in-time compiler. The solvers are
-pure Python, so it runs them unchanged. Set `WIZSAT_SOLVER_PYTHON` to its
-path ([README](../../README.md#running-the-solvers-under-pypy)) and every
-solve and benchmark run happens in a child process of that interpreter; the
-server stays on CPython. The work counts (conflicts, flips) are identical
+pure Python, so it runs them unchanged. Make it available to the server
+([README](../../README.md#running-the-solvers-under-pypy)) and a job whose
+request says `"interpreter": "pypy"` runs every solve and benchmark run in a
+child process of it; the server stays on CPython. The work counts (conflicts, flips) are identical
 under both, so the comparison is like for like.
 
 ```bash

@@ -195,7 +195,8 @@ def solve_job(request: dict[str, Any], workdir: str | None, emit_event: Emit, to
     emit_event(RunEvent(EVENT_PROGRESS, f"Solving with {solver.title}", current=1, total=2))
 
     # The job process runs this one solve, so its peak is the run's, encoded formula included.
-    # With the solver child (WIZSAT_SOLVER_PYTHON) the solver is not in this process: no numbers here.
+    # With the solver child (WIZSAT_SOLVER_PYTHON) the solver is not in this process: the child
+    # measures its own and sends them with its stats (MEM-3).
     in_process = not os.environ.get(SOLVER_PYTHON_ENV, "").strip()
     baseline_mb = peak_memory_mb() if in_process else None
 

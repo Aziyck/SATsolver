@@ -77,14 +77,19 @@ class JobTests(unittest.TestCase):
         self.assertNotIn("peak_memory_mb", stats)
         self.assertNotIn("baseline_memory_mb", stats)
 
-    def test_with_the_solver_child_the_job_peak_is_not_reported_as_the_solvers(self):
-        # The solver runs in another process then, so this process's peak says nothing about it (MEM-3 measures that).
-        with mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}):
+    def test_with_the_solver_child_the_numbers_are_the_childs_not_the_job_processs(self):
+        # The solver runs in another process then, so this process's peak says nothing about it;
+        # the child measures its own (MEM-3). 999 is what this process would report.
+        with (
+            mock.patch.dict(os.environ, {"WIZSAT_SOLVER_PYTHON": sys.executable}),
+            mock.patch("sat_core.jobs.peak_memory_mb", return_value=999.0),
+        ):
             stats = of_type(run("solve", self.SOLVE_REQUEST), EVENT_RESULT)[0].payload["stats"]
 
         self.assertIn("decisions", stats)  # the run itself worked, in the child
-        self.assertNotIn("peak_memory_mb", stats)
-        self.assertNotIn("baseline_memory_mb", stats)
+        self.assertGreater(stats["baseline_memory_mb"], 0)
+        self.assertGreaterEqual(stats["peak_memory_mb"], stats["baseline_memory_mb"])
+        self.assertNotEqual(stats["peak_memory_mb"], 999.0)
 
     def test_every_job_first_reports_the_environment_it_runs_in(self):
         # Sent before the request is checked, so a job that fails still says where it ran (META-2).

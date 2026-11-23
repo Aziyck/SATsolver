@@ -157,14 +157,16 @@ The **Result** tab shows:
   - **Statistics**: decisions, conflicts, propagations, learned clauses,
     restarts (CDCL/DPLL) or tries, flips, free/random/greedy flips, best
     number of unsatisfied clauses (WalkSAT/ProbSAT). Hover a name for a
-    one-line explanation. A solve job also shows **Peak memory of the job**
-    and **Memory after encoding**, in MiB (1 MiB = 1,048,576 bytes): the most
-    memory the job's process used, the encoded formula and the interpreter
-    included (a few MiB even for a trivial run), and the same peak when the
-    formula was encoded and the solver had not started. Their difference is
-    the solver's own share. A job that runs its solver in another
-    interpreter (`WIZSAT_SOLVER_PYTHON`) and a computer that cannot report
-    memory show neither; the rows are absent, never 0.
+    one-line explanation. A solve job also shows **Peak memory** and
+    **Memory before the solver**, in MiB (1 MiB = 1,048,576 bytes): the most
+    memory the process that ran the solver used, the formula and the
+    interpreter included (a few MiB even for a trivial run), and the same
+    peak once the formula was ready and the solver had not started. Their
+    difference is the solver's own share. That process is the job's own, or,
+    with a solver interpreter set (`WIZSAT_SOLVER_PYTHON`), the solver child
+    of the run; benchmark runs through the child show both in the run drawer
+    too. A computer that cannot report memory shows neither; the rows are
+    absent, never 0.
   - **Log**: the solver log.
 
 Buttons on the result: **Edit** loads the job's parameters back into the

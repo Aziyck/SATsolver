@@ -64,6 +64,9 @@ export interface SolverEntry {
   label?: string;
 }
 
+/** Where a job's solvers run (INTERP-2): its own process, or a child of the PyPy the catalog reports. */
+export type Interpreter = "python" | "pypy";
+
 export interface BenchmarkRequest {
   problems: string[];
   segments: Record<string, unknown>[];
@@ -75,6 +78,7 @@ export interface BenchmarkRequest {
   seed?: number | string | null;
   title?: string;
   workers?: number;
+  interpreter?: Interpreter;
 }
 
 export interface Preset {
@@ -195,6 +199,7 @@ export interface SolveRequest {
   options?: Record<string, unknown>;
   timeout?: number | null;
   log_level?: string;
+  interpreter?: Interpreter;
 }
 
 /** The machine and software a job ran on (sat_core/environment.py). The nullable facts are null when they could not be read. */

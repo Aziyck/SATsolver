@@ -110,7 +110,7 @@ Environment variables:
 | `WIZSAT_MAX_CLAUSES` | `2000000` | instances larger than this are refused before encoding |
 | `WIZSAT_FRONTEND_DIST` | `frontend/dist/` | the built web UI to serve |
 | `WIZSAT_ALLOWED_HOSTS` | empty | extra host names, comma-separated, that the server answers for |
-| `WIZSAT_SOLVER_PYTHON` | empty | path of another Python (PyPy) to run the solvers in ([below](#running-the-solvers-under-pypy)) |
+| `WIZSAT_SOLVER_PYTHON` | empty | path of a PyPy the app may run solvers in; without it the server looks for `pypy3` or `pypy` on `PATH` ([below](#running-the-solvers-under-pypy)) |
 
 The server has no login. It answers only requests addressed to `localhost`,
 `127.0.0.1` or `[::1]` (any port), the `--host` value and the names in
@@ -135,7 +135,9 @@ itself stays on CPython; only the solvers move.
    library, so nothing else needs installing in PyPy.
 2. Check it: `pypy3 --version` (on Windows, `pypy.exe --version` in the
    unpacked folder).
-3. Set `WIZSAT_SOLVER_PYTHON` to its path before starting the app:
+3. Make the server find it: put its folder on `PATH` (the server then finds
+   `pypy3` or `pypy` by itself), or set `WIZSAT_SOLVER_PYTHON` to its path
+   before starting the app:
 
 ```powershell
 $env:WIZSAT_SOLVER_PYTHON = "C:\pypy\pypy.exe"; python -m sat_web      # Windows PowerShell
@@ -145,11 +147,14 @@ $env:WIZSAT_SOLVER_PYTHON = "C:\pypy\pypy.exe"; python -m sat_web      # Windows
 WIZSAT_SOLVER_PYTHON=/opt/pypy3/bin/pypy3 python -m sat_web             # Linux, macOS
 ```
 
-Every solve and benchmark run then starts in a child process of that
-interpreter. Each run pays about 0.3 s to start it, so a benchmark of many
+The setting only says where PyPy is; each job chooses. A job whose request
+says `"interpreter": "pypy"` (the default is `"python"`, see the
+[API](docs/guide/api.md)) starts every solve and benchmark run in a
+child process of PyPy; `GET /api/catalog` says whether the server found it.
+Each run pays about 0.3 s to start it, so a benchmark of many
 tiny cases gets slower, not faster. The job detail and the CSV name the
 interpreter that ran the solvers (`PyPy 7.3.x`), so a result always says what
-produced it. Unset the variable to go back. Numbers, the warm-up effect and
+produced it. Numbers, the warm-up effect and
 what to report: [Solver performance](docs/guide/performance.md#running-the-solvers-under-pypy)
 and [Benchmarking](docs/guide/benchmarking.md#checklist-for-report-quality-experiments).
 

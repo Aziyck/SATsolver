@@ -105,8 +105,8 @@ Three things the diagram leaves out:
 - **The job folder**, `output/jobs/<id>/`, where the job process writes
   `instance.cnf` and `model.txt`.
 - **The solver child**, a process inside the job process (or inside a pool
-  worker) that exists only when `WIZSAT_SOLVER_PYTHON` is set: each run then
-  starts a child of that interpreter (PyPy), sends it the formula as JSON and
+  worker) that exists only in a job whose request says `"interpreter": "pypy"`:
+  each run then starts a child of PyPy, sends it the formula as JSON and
   reads back log lines and a result
   (`sat_core/solver_process.py`, [How it works](how-it-works.md#daemons-and-the-watchdog)).
   The events and the cancel flag work as drawn: the job process forwards the
@@ -215,7 +215,12 @@ flowchart LR
 
 `run_solver` reads `WIZSAT_SOLVER_PYTHON`: unset, the solver runs in the
 calling process; set, `run_in_child` (`sat_core/solver_process.py`) runs it in
-a child of that interpreter. No other code asks which. The child's protocol is
+a child of that interpreter. No other code asks which. The server's own
+start-up setting does not reach `run_solver`: it only says where PyPy is
+(`find_pypy()`, `sat_core/environment.py`). Each job process sets or clears
+the variable in itself at its start from the request's `interpreter`
+(`choose_solver_python()` in `sat_core/jobs.py`), and its pool workers inherit
+it, so one job never runs on two interpreters. The child's protocol is
 in the docstring of `solver_process.py`, its lifetime in
 [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md), and the
 interpreter a result records comes from one probe per job

@@ -160,6 +160,7 @@ export const jobDetail = {
         ]
       ]
     },
+    "interpreter": "python",
     "solver": "cdcl",
     "options": {
       "branching": "vsids",

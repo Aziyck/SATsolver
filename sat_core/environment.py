@@ -272,31 +272,33 @@ def interpreter_facts(python: str | None = None) -> dict:
 def find_pypy() -> dict | None:
     """The PyPy the app can run solvers in, as {"path", "version"}, or None (INTERP-1).
 
-    WIZSAT_SOLVER_PYTHON when set, otherwise the first of pypy3 and pypy on
-    PATH. A candidate counts only when it answers PyPy with Python 3.10 or
-    newer. A setting that is set but not usable gives None, not a PyPy found
-    on PATH: the setting is the owner's choice, and a wrong one must show.
-    The path stays on the server; callers that talk to the browser report
-    only availability and version.
+    The interpreter at pypy_path(), when it answers PyPy with Python 3.10 or
+    newer. Only that one is probed: a job process (INTERP-2) runs its solvers
+    in pypy_path() without probing again, so a later candidate that passed
+    here would not be the one the job runs. A setting that is set but not
+    usable gives None, not a PyPy found on PATH: the setting is the owner's
+    choice, and a wrong one must show. The path stays on the server; callers
+    that talk to the browser report only availability and version.
     """
+
+    path = pypy_path()
+    if path is None:
+        return None
+    facts = interpreter_facts(path)
+    version = _version_tuple(facts["python_version"])
+    if facts["python_implementation"] == "PyPy" and version is not None and version >= MIN_PYPY_VERSION:
+        return {"path": path, "version": facts["python_version"]}
+    return None
+
+
+def pypy_path() -> str | None:
+    """Where PyPy would be, without starting it: the setting when it is set, else the first of pypy3 and pypy on PATH."""
 
     # The setting's name, written out: solver_registry is a layer above this module.
     setting = os.environ.get("WIZSAT_SOLVER_PYTHON", "").strip()
     if setting:
-        candidates = [setting]
-    else:
-        candidates, seen = [], set()
-        for path in filter(None, (_on_path(command) for command in PYPY_COMMANDS)):
-            # pypy is often a link to pypy3: probe one interpreter once.
-            if os.path.realpath(path) not in seen:
-                seen.add(os.path.realpath(path))
-                candidates.append(path)
-    for path in candidates:
-        facts = interpreter_facts(path)
-        version = _version_tuple(facts["python_version"])
-        if facts["python_implementation"] == "PyPy" and version is not None and version >= MIN_PYPY_VERSION:
-            return {"path": path, "version": facts["python_version"]}
-    return None
+        return setting
+    return next(filter(None, (_on_path(command) for command in PYPY_COMMANDS)), None)
 
 
 def _on_path(command: str) -> str | None:

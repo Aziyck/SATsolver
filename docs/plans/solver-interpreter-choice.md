@@ -1,6 +1,6 @@
 # Plan: choose Python or PyPy per job, in the UI
 
-- **Status:** in progress (INTERP-1 done 2026-11-23)
+- **Status:** in progress (INTERP-1 and INTERP-2 done 2026-11-23)
 - **Written:** 2026-11-23
 - **Related:** [solver runner](pypy-solver-runner.md) (the child process and
   `WIZSAT_SOLVER_PYTHON`), [Solver performance](../guide/performance.md#running-the-solvers-under-pypy),
@@ -49,7 +49,7 @@ the long runs, means restarting the server with a different environment.
   owner's disk.
 - **Request:** solve and benchmark jobs take `"interpreter": "python" | "pypy"`
   (missing means `"python"`). An unknown value, or `"pypy"` when none was
-  found, is a `ParamError` at submit (HTTP 400), so it never becomes a job
+  found, is a `ParamError` at submit (HTTP 422, like every field error), so it never becomes a job
   that fails later. Stored with the request, so Rerun keeps it.
 - **Applying it:** every job already runs in a fresh job process
   (`sat_web/manager.py`). At the start of `execute_job` (`sat_core/jobs.py`)
@@ -82,8 +82,16 @@ the long runs, means restarting the server with a different environment.
     `CPython`, or PyPy older than 3.10, or does not answer, is not
     available; `GET /api/catalog` carries `interpreters.pypy` and no path.
 
-- [ ] **INTERP-2. A job runs on the interpreter its request names**
+- [x] **INTERP-2. A job runs on the interpreter its request names** - Done 2026-11-23.
   - **Difficulty:** medium
+  - **Built as:** `parse_interpreter()` (`sat_core/solver_registry.py`) is used by
+    the solve and benchmark parsers, so the normalized request always carries
+    `interpreter`; `validate_job` (`sat_web/api.py`) refuses `pypy` when the
+    catalog says none was found; `choose_solver_python()` (`sat_core/jobs.py`)
+    sets or clears the variable in the job process from `pypy_path()`,
+    without probing again; `find_pypy()` judges only that first candidate,
+    so the server and the job agree. Rerun of a job saved without the field
+    takes the interpreter from its environment record. Until INTERP-3, only an API request can choose PyPy.
   - **Not hard:** the job process sets an environment variable in itself
     before any run starts; `sat_web/manager.py`, `sat_core/parallel.py` and
     `sat_core/solver_process.py` are not changed, and the pool workers get
@@ -94,7 +102,8 @@ the long runs, means restarting the server with a different environment.
     record the stand-in interpreter in the job detail and the CSV; the same
     requests without the field, or with `"python"`, record the server's
     interpreter even while `WIZSAT_SOLVER_PYTHON` is set; `"pypy"` with none
-    found, and an unknown value, get 400; Rerun keeps the choice.
+    found, and an unknown value, get 422, as every field error does (the plan first said 400); Rerun keeps
+    the choice.
     `docs/guide/api.md`, `README.md` (the setting's new meaning) and
     `docs/guide/how-it-works.md` updated.
 

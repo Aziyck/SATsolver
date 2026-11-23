@@ -163,7 +163,7 @@ The **Result** tab shows:
     included (a few MiB even for a trivial run), and the same peak when the
     formula was encoded and the solver had not started. Their difference is
     the solver's own share. A job that runs its solver in another
-    interpreter (`WIZSAT_SOLVER_PYTHON`) and a computer that cannot report
+    interpreter (PyPy) and a computer that cannot report
     memory show neither; the rows are absent, never 0.
   - **Log**: the solver log.
 

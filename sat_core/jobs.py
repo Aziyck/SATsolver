@@ -26,7 +26,7 @@ from problems.base import ProblemSpec
 from sat_core.answers import judge_answer
 from sat_core.benchmark import display_params, parse_request, parse_timeout, run_benchmark
 from sat_core.dimacs import app_header_comment, save_dimacs
-from sat_core.environment import run_environment
+from sat_core.environment import pypy_path, run_environment
 from sat_core.models import STATUS_CANCELLED, InstanceSummary, ProblemInstance, SolveOutcome
 from sat_core.params import ParamError
 from sat_core.runtime import (
@@ -42,7 +42,15 @@ from sat_core.runtime import (
     RunToken,
 )
 from sat_core.memory import peak_memory_mb
-from sat_core.solver_registry import LOG_LEVELS, SOLVER_PYTHON_ENV, SolverSpec, get_solver, options_summary, run_solver
+from sat_core.solver_registry import (
+    LOG_LEVELS,
+    SOLVER_PYTHON_ENV,
+    SolverSpec,
+    get_solver,
+    options_summary,
+    parse_interpreter,
+    run_solver,
+)
 
 
 JOB_KINDS = ("solve", "generate", "benchmark")
@@ -94,7 +102,9 @@ def _parse_solve(raw: dict[str, Any]) -> tuple[ProblemSpec, dict[str, Any], Solv
     log_level = raw.get("log_level") or "normal"
     if log_level not in LOG_LEVELS:
         raise ParamError({"log_level": f"must be one of {', '.join(LOG_LEVELS)}"})
+    interpreter = parse_interpreter(raw)
     normalized.update(
+        interpreter=interpreter,
         solver=solver.key,
         options=options,
         timeout=parse_timeout(raw.get("timeout", DEFAULT_SOLVE_TIMEOUT)),
@@ -106,7 +116,7 @@ def _parse_solve(raw: dict[str, Any]) -> tuple[ProblemSpec, dict[str, Any], Solv
 def parse_solve_request(raw: dict[str, Any]) -> dict[str, Any]:
     """
     Check a solve request and return it normalized: problem, visible
-    parameters, solver, parsed options, timeout and log level.
+    parameters, solver, parsed options, timeout, log level and interpreter.
 
     The API calls this before it stores a job and solve_job parses the stored
     request again when the job runs, so a script that runs a job directly is
@@ -268,6 +278,31 @@ JOB_FUNCTIONS = {"solve": solve_job, "generate": generate_job, "benchmark": benc
 SOLVER_KINDS = {"solve", "benchmark"}
 
 
+def choose_solver_python(kind: str, request: dict[str, Any]) -> str | None:
+    """Make this job process run its solvers where the request says; return the interpreter path, or None for this process.
+
+    Sets or clears WIZSAT_SOLVER_PYTHON in this process's own environment, which
+    run_solver and the pool workers of a benchmark read when they start a run
+    (RUNNER-2, RUNNER-5). A job process lives for one job, so nothing leaks to
+    the next. "python" clears the setting even when the server was started with
+    it: the setting only says where PyPy is (INTERP-2). A generate job runs no
+    solver and is left alone.
+    """
+
+    if kind not in SOLVER_KINDS:
+        return None
+    if parse_interpreter(request) == "python":
+        os.environ.pop(SOLVER_PYTHON_ENV, None)
+        return None
+    # The path the server probed when it started (find_pypy), found the same way, not probed again.
+    path = pypy_path()
+    if path is None:
+        # The server found PyPy when it accepted the job; the environment changed since.
+        raise ParamError({"interpreter": "PyPy is no longer where the server found it at start-up (WIZSAT_SOLVER_PYTHON or pypy3/pypy on PATH)"})
+    os.environ[SOLVER_PYTHON_ENV] = path
+    return path
+
+
 def execute_job(
     kind: str,
     request: dict[str, Any],
@@ -285,11 +320,18 @@ def execute_job(
 
     try:
         # First, before the request is checked: a job that fails still records where it ran.
-        # With the setting on, the solvers run under that interpreter, so it is the one recorded
-        # (RUNNER-6). run_solver reads the same setting, the same way, for every run. A generate
-        # job encodes in this process and runs no solver, so it records this interpreter.
-        solver_python = (os.environ.get(SOLVER_PYTHON_ENV, "").strip() or None) if kind in SOLVER_KINDS else None
+        # A job on PyPy runs its solvers under that interpreter, so it is the one recorded
+        # (RUNNER-6). run_solver reads the setting choose_solver_python made, the same way,
+        # for every run. A generate job encodes in this process and runs no solver, so it
+        # records this interpreter.
+        choice_error = None
+        try:
+            solver_python = choose_solver_python(kind, request)
+        except ParamError as exc:
+            solver_python, choice_error = None, exc
         emit_event(RunEvent(EVENT_ENVIRONMENT, payload=run_environment(machine, solver_python)))
+        if choice_error is not None:
+            raise choice_error
         if kind not in JOB_FUNCTIONS:
             raise ValueError(f"Unknown job kind: {kind}")
         completed = JOB_FUNCTIONS[kind](request, workdir, emit_event, token)

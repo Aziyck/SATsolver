@@ -18,6 +18,7 @@ import functools
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,9 @@ INTERPRETER_TIMEOUT_SECONDS = 15
 # One line from the interpreter that is asked: ["PyPy", "3.10.14"].
 INTERPRETER_PROBE = "import json, platform; print(json.dumps([platform.python_implementation(), platform.python_version()]))"
 UNKNOWN_INTERPRETER = {"python_implementation": "unknown", "python_version": ""}
+# The oldest PyPy the solvers run on (the repo needs Python 3.10), and the names looked up on PATH.
+MIN_PYPY_VERSION = (3, 10)
+PYPY_COMMANDS = ("pypy3", "pypy")
 
 
 def _first(*lookups):
@@ -263,6 +267,62 @@ def interpreter_facts(python: str | None = None) -> dict:
         if isinstance(answer, list) and len(answer) == 2 and all(isinstance(fact, str) for fact in answer) and answer[0]:
             return {"python_implementation": answer[0], "python_version": answer[1]}
     return dict(UNKNOWN_INTERPRETER)
+
+
+def find_pypy() -> dict | None:
+    """The PyPy the app can run solvers in, as {"path", "version"}, or None (INTERP-1).
+
+    WIZSAT_SOLVER_PYTHON when set, otherwise the first of pypy3 and pypy on
+    PATH. A candidate counts only when it answers PyPy with Python 3.10 or
+    newer. A setting that is set but not usable gives None, not a PyPy found
+    on PATH: the setting is the owner's choice, and a wrong one must show.
+    The path stays on the server; callers that talk to the browser report
+    only availability and version.
+    """
+
+    # The setting's name, written out: solver_registry is a layer above this module.
+    setting = os.environ.get("WIZSAT_SOLVER_PYTHON", "").strip()
+    if setting:
+        candidates = [setting]
+    else:
+        candidates, seen = [], set()
+        for path in filter(None, (_on_path(command) for command in PYPY_COMMANDS)):
+            # pypy is often a link to pypy3: probe one interpreter once.
+            if os.path.realpath(path) not in seen:
+                seen.add(os.path.realpath(path))
+                candidates.append(path)
+    for path in candidates:
+        facts = interpreter_facts(path)
+        version = _version_tuple(facts["python_version"])
+        if facts["python_implementation"] == "PyPy" and version is not None and version >= MIN_PYPY_VERSION:
+            return {"path": path, "version": facts["python_version"]}
+    return None
+
+
+def _on_path(command: str) -> str | None:
+    """`command` in the folders of PATH, never in the current folder.
+
+    shutil.which on Windows also searches the current folder first, so a
+    pypy3.cmd left in the folder the server starts from would be run as PyPy.
+    """
+
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        if not folder or not os.path.isabs(folder):
+            continue
+        found = shutil.which(command, path=folder)
+        if found and os.path.dirname(os.path.abspath(found)) == os.path.abspath(folder):
+            return found
+    return None
+
+
+def _version_tuple(text: str) -> tuple[int, int] | None:
+    """(major, minor) of "3.12.15", or None when the text does not start with two numbers."""
+
+    parts = text.split(".")
+    try:
+        return int(parts[0]), int(parts[1])
+    except (ValueError, IndexError):
+        return None
 
 
 def run_environment(machine: dict | None = None, solver_python: str | None = None) -> dict:

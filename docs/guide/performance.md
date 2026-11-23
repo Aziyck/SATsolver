@@ -192,33 +192,49 @@ solve and benchmark run happens in a child process of that interpreter; the
 server stays on CPython. The work counts (conflicts, flips) are identical
 under both, so the comparison is like for like.
 
-Measured on 2026-10-19, in a container, with PyPy 7.3.15 (Python 3.9) and
-CPython 3.11.15, the same instances and seeds, one run at a time, each
-interpreter running the solvers directly (the child-process cost below is not
-in these times):
+```bash
+python scripts/pypy_timings.py /path/to/pypy3 --limit 300 --repeat 3
+```
 
-| Instance | CPython | PyPy | Speed-up |
-|---|---:|---:|---:|
-| CDCL, 3-SAT n=250 r=4.26 seed 2 (UNSAT) | 58.70 s | 20.55 s | 2.9x |
-| CDCL, Sudoku 25x25 40% seed 1 | 31.24 s | 9.17 s | 3.4x |
-| CDCL, 3-SAT n=200 r=4.26 seed 1 | 4.05 s | 2.24 s | 1.8x |
-| DPLL, 25-Queens | 2.76 s | 0.32 s | 8.6x |
-| WalkSAT, 3-SAT n=60 r=6 (UNSAT), 10 x 100,000 flips | 3.60 s | 1.07 s | 3.4x |
-| WalkSAT, planted n=5000 r=4.2 | 0.19 s | 0.44 s | 0.4x |
-| ProbSAT, planted n=5000 r=4.2 | 0.18 s | 0.24 s | 0.75x |
-| CDCL, 3-SAT n=150 r=4.26 seed 3 | 0.02 s | 0.24 s | 0.1x |
-| CDCL, Sudoku 16x16 40% seed 1 | 0.69 s | 0.45 s | 1.5x |
-| CDCL, 40-Queens | 0.37 s | 0.49 s | 0.75x |
-| DPLL, 3-SAT n=100 r=4.26 seed 1 | 0.10 s | 0.16 s | 0.6x |
+The script sends every case through `run_solver`, the path of solve jobs and
+benchmarks: once with the setting unset (CPython runs the solver in its own
+process) and once with it set to PyPy (a child process). "Solver" is the run
+time the result reports, without the child's start-up; "with start-up" is
+the whole `run_solver` call. The conflicts and flips matched on every case.
+
+Measured on 2026-11-23 (RUNNER-10): Windows 11, AMD Ryzen 7 4800H (8 cores,
+16 logical CPUs), 16 GB, CPython 3.13.14 as the server side, PyPy 8.0.1
+(Python 3.12.15) as the child, median of 3 runs, one run at a time with
+nothing else running:
+
+| Instance | CPython | PyPy solver | Speed-up | PyPy with start-up | Speed-up |
+|---|---:|---:|---:|---:|---:|
+| CDCL, 3-SAT n=250 r=4.26 seed 2 (UNSAT) | 78.81 s | 26.34 s | 3.0x | 26.63 s | 3.0x |
+| CDCL, Sudoku 25x25 40% seed 1 | 47.83 s | 11.31 s | 4.2x | 12.53 s | 3.9x |
+| CDCL, 3-SAT n=200 r=4.26 seed 1 | 7.38 s | 3.23 s | 2.3x | 3.65 s | 2.0x |
+| DPLL, 25-Queens | 3.52 s | 0.44 s | 8.0x | 0.90 s | 3.9x |
+| WalkSAT, 3-SAT n=60 r=6 (UNSAT), 10 x 100,000 flips | 5.76 s | 1.91 s | 3.0x | 2.32 s | 2.5x |
+| WalkSAT, planted n=5000 r=4.2 | 0.35 s | 0.55 s | 0.6x | 0.96 s | 0.4x |
+| ProbSAT, planted n=5000 r=4.2 | 0.37 s | 0.34 s | 1.1x | 0.73 s | 0.5x |
+| CDCL, 3-SAT n=150 r=4.26 seed 3 | 0.04 s | 0.16 s | 0.25x | 0.50 s | 0.1x |
+| CDCL, Sudoku 16x16 40% seed 1 | 0.56 s | 0.41 s | 1.4x | 0.86 s | 0.8x |
+| CDCL, 40-Queens | 0.49 s | 0.48 s | 1.0x | 0.88 s | 0.6x |
+| DPLL, 3-SAT n=100 r=4.26 seed 1 | 0.17 s | 0.14 s | 1.2x | 0.45 s | 0.4x |
+
+The CPython column includes the in-process overhead of `run_solver` (under
+0.1 s, more for the larger Sudoku formulas). The first table, measured on
+2026-10-19 in a Linux container with PyPy 7.3.15 (Python 3.9) and CPython
+3.11.15 running the solvers directly, gave the same picture: 2.9x, 3.4x,
+1.8x and 8.6x on the four longest runs, slower on the short ones.
 
 **The warm-up caveat.** Every run is a fresh process, so PyPy pays its JIT
-warm-up (about 0.1 to 0.3 s) on every run. Runs that take seconds gain 2 to 9
-times; runs under about half a second get slower, up to 10 times slower for
-the very short ones. In a benchmark that mixes both, PyPy can change the
-ranking of the solvers on the small instances. Use PyPy for long runs and big
-formulas, and CPython for sweeps of many small cases. The table comes from an
-older container and PyPy 3.9; [RUNNER-10](../plans/pypy-solver-runner.md)
-repeats it with the app itself, and the numbers there will replace these.
+warm-up on every run, and with the setting also about 0.3 to 0.5 s to start
+the child and send it the formula. Runs that take seconds gain 2 to 4 times
+(up to 8 times in the solver for DPLL); runs under about a second get
+slower once the start-up is counted, up to 10 times slower for the very
+short ones. In a benchmark that mixes both, PyPy can change the ranking of
+the solvers on the small instances. Use PyPy for long runs and big formulas,
+and CPython for sweeps of many small cases.
 
 What to report, and why a PyPy result must say so:
 [Benchmarking](benchmarking.md#checklist-for-report-quality-experiments).
@@ -245,14 +261,18 @@ before it kills a silent child as hung; the window is what that allowance
 must cover.
 
 Measured on 2026-11-23: Windows 11, AMD Ryzen 7 4800H (8 cores, 16 logical
-CPUs), 16 GB, CPython 3.13.14 as the parent and the child. PyPy was not
-installed; [RUNNER-10](../plans/pypy-solver-runner.md) adds its numbers.
+CPUs), 16 GB, CPython 3.13.14 as the parent and the child. The PyPy rows
+(PyPy 8.0.1, Python 3.12.15, as the child) come from a second run on the same
+machine and day ([RUNNER-10](../plans/pypy-solver-runner.md)); their "without
+the setting" column is that run's own.
 
-| Run | Without the setting | With the setting (CPython child) | Window |
+| Run | Without the setting | With the setting | Window |
 |---|---:|---:|---:|
-| 4x4 Sudoku, median of 20 (max) | 0.03 s (0.06 s) | 0.32 s (0.45 s) | 0.29 s (0.40 s) |
-| 2,000,000 clauses of 3 literals (53.6 MB of JSON), median of 3 (max) | 2.6 s (2.8 s) | 7.6 s (7.8 s) | 4.2 s (4.5 s) |
-| 2,000,000 clauses of 5 literals (86.6 MB), median of 2 (max) | 4.6 s (5.3 s) | 13.5 s (14.6 s) | 7.4 s (8.3 s) |
+| 4x4 Sudoku, CPython child, median of 20 (max) | 0.03 s (0.06 s) | 0.32 s (0.45 s) | 0.29 s (0.40 s) |
+| 4x4 Sudoku, PyPy child, median of 20 (max) | 0.02 s (0.03 s) | 0.35 s (0.46 s) | 0.33 s (0.43 s) |
+| 2,000,000 clauses of 3 literals (53.6 MB of JSON), CPython child, median of 3 (max) | 2.6 s (2.8 s) | 7.6 s (7.8 s) | 4.2 s (4.5 s) |
+| 2,000,000 clauses of 3 literals, PyPy child, median of 3 (max) | 2.4 s (2.5 s) | 6.7 s (6.9 s) | 3.0 s (3.3 s) |
+| 2,000,000 clauses of 5 literals (86.6 MB), CPython child, median of 2 (max) | 4.6 s (5.3 s) | 13.5 s (14.6 s) | 7.4 s (8.3 s) |
 
 What the numbers say:
 
@@ -273,8 +293,10 @@ What the numbers say:
   rate, 60 s covers about 70 million literals, 35 per clause at the limit. A
   value too low would end a healthy run as `TIMEOUT`; a high one only keeps
   a child that hangs before its first line, and that nobody cancels, that
-  much longer. Slower machines, busy cores (`workers` above 1) and PyPy were
-  not measured; RUNNER-10 repeats the measurement on the thesis machine.
+  much longer. A PyPy child is no slower to reach its first line: its
+  window at the limit is 3.0 s (3.3 s at most), shorter than CPython's,
+  because PyPy parses the JSON and counts the variables faster. Slower
+  machines and busy cores (`workers` above 1) were not measured.
 
 Two follow-ups would remove most of the cost at the limit: a binary request
 format instead of JSON ([RUNNER-12](../plans/pypy-solver-runner.md)), and

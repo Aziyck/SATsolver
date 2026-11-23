@@ -221,7 +221,9 @@ class VertexCoverTests(unittest.TestCase):
 Good tests for any encoder:
 
 - a tiny SAT instance and a tiny UNSAT instance, solved with CDCL;
-- `check()` accepts the solver's answer and rejects a broken one;
+- `check()` accepts the solver's answer and rejects a broken one: add the
+  problem to `WRONG_ANSWERS` in `tests/test_problems.py` (a test fails for a
+  problem with its own `check()` that is missing there);
 - `estimate()` equals the real counts on a manual input;
 - for generators: the same seed gives the same instance.
 

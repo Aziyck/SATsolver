@@ -183,6 +183,46 @@ noisier (and turbo clock speeds drop when every core is busy). See
 [Benchmarking](benchmarking.md#parallel-runs) and
 [How it works](how-it-works.md#parallel-benchmark-runs).
 
+## Running the solvers under PyPy
+
+PyPy is an alternative Python with a just-in-time compiler. The solvers are
+pure Python, so it runs them unchanged. Set `WIZSAT_SOLVER_PYTHON` to its
+path ([README](../../README.md#running-the-solvers-under-pypy)) and every
+solve and benchmark run happens in a child process of that interpreter; the
+server stays on CPython. The work counts (conflicts, flips) are identical
+under both, so the comparison is like for like.
+
+Measured on 2026-10-19, in a container, with PyPy 7.3.15 (Python 3.9) and
+CPython 3.11.15, the same instances and seeds, one run at a time, each
+interpreter running the solvers directly (the child-process cost below is not
+in these times):
+
+| Instance | CPython | PyPy | Speed-up |
+|---|---:|---:|---:|
+| CDCL, 3-SAT n=250 r=4.26 seed 2 (UNSAT) | 58.70 s | 20.55 s | 2.9x |
+| CDCL, Sudoku 25x25 40% seed 1 | 31.24 s | 9.17 s | 3.4x |
+| CDCL, 3-SAT n=200 r=4.26 seed 1 | 4.05 s | 2.24 s | 1.8x |
+| DPLL, 25-Queens | 2.76 s | 0.32 s | 8.6x |
+| WalkSAT, 3-SAT n=60 r=6 (UNSAT), 10 x 100,000 flips | 3.60 s | 1.07 s | 3.4x |
+| WalkSAT, planted n=5000 r=4.2 | 0.19 s | 0.44 s | 0.4x |
+| ProbSAT, planted n=5000 r=4.2 | 0.18 s | 0.24 s | 0.75x |
+| CDCL, 3-SAT n=150 r=4.26 seed 3 | 0.02 s | 0.24 s | 0.1x |
+| CDCL, Sudoku 16x16 40% seed 1 | 0.69 s | 0.45 s | 1.5x |
+| CDCL, 40-Queens | 0.37 s | 0.49 s | 0.75x |
+| DPLL, 3-SAT n=100 r=4.26 seed 1 | 0.10 s | 0.16 s | 0.6x |
+
+**The warm-up caveat.** Every run is a fresh process, so PyPy pays its JIT
+warm-up (about 0.1 to 0.3 s) on every run. Runs that take seconds gain 2 to 9
+times; runs under about half a second get slower, up to 10 times slower for
+the very short ones. In a benchmark that mixes both, PyPy can change the
+ranking of the solvers on the small instances. Use PyPy for long runs and big
+formulas, and CPython for sweeps of many small cases. The table comes from an
+older container and PyPy 3.9; [RUNNER-10](../plans/pypy-solver-runner.md)
+repeats it with the app itself, and the numbers there will replace these.
+
+What to report, and why a PyPy result must say so:
+[Benchmarking](benchmarking.md#checklist-for-report-quality-experiments).
+
 ## The solver child process
 
 With `WIZSAT_SOLVER_PYTHON` set, every run starts a child interpreter and
@@ -243,8 +283,6 @@ counting the variables once instead of twice
 
 ## Ideas for later
 
-- Run the solvers under PyPy, which typically speeds up this kind of
-  pure-Python loop several times.
 - Compact cardinality encodings (sequential counters) to shrink the formulas
   of large Sudoku and N-Queens instances (see
   [encodings](../algorithms/encodings.md#three-reusable-patterns)).

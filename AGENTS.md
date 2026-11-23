@@ -24,6 +24,8 @@ python -m ruff check .                   # lint (settings in pyproject.toml)
 python -m unittest discover -s tests     # Python tests
 python scripts/benchmark_cdcl.py         # smoke-run every solver
 python scripts/solver_timings.py         # time the solvers on a fixed set (docs/guide/performance.md)
+python scripts/child_cost.py [PYTHON]    # what the solver child process costs per run
+WIZSAT_SOLVER_PYTHON=<pypy>              # run every solver in a child of that interpreter (README)
 python scripts/mutation_sample.py <file.py ...>  # do the tests catch small bugs? (minutes; run alone)
 
 cd frontend
@@ -59,6 +61,7 @@ sat_core/
   jobs.py          job bodies run in worker processes (solve, generate, benchmark)
   runtime.py       RunEvent protocol, RunToken (cancel / skip / timeout)
   dimacs.py        DIMACS parser and writer (with line-numbered errors)
+  solver_process.py  one solver run in a child process (JSON over pipes), used when WIZSAT_SOLVER_PYTHON is set
   verify.py        check a model against the clauses
   answers.py       judge_answer: the one rule for "verified" (model, decode, problem check)
   seeds.py         deterministic seeding helpers

@@ -2,7 +2,7 @@
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
   and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
-  RUNNER-7 done 2026-11-23)
+  RUNNER-7 and RUNNER-8 done 2026-11-23)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -189,7 +189,7 @@ installed.
     literals. Sending the formula costs seconds, so RUNNER-12 is filed; so
     is F6 (the variables are counted in the parent and again in the child).
 
-- [ ] **RUNNER-8. Documentation**
+- [x] **RUNNER-8. Documentation** - Done 2026-11-23.
   - **Difficulty:** easy
   - **Blocked by:** RUNNER-5
   - **Done when:** `README.md` says how to install PyPy and set the variable;

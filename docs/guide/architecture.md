@@ -104,6 +104,13 @@ Three things the diagram leaves out:
   benchmarks for Skip case.
 - **The job folder**, `output/jobs/<id>/`, where the job process writes
   `instance.cnf` and `model.txt`.
+- **The solver child**, a process inside the job process (or inside a pool
+  worker) that exists only when `WIZSAT_SOLVER_PYTHON` is set: each run then
+  starts a child of that interpreter (PyPy), sends it the formula as JSON and
+  reads back log lines and a result
+  (`sat_core/solver_process.py`, [How it works](how-it-works.md#daemons-and-the-watchdog)).
+  The events and the cancel flag work as drawn: the job process forwards the
+  log lines and ends the child on Stop. Unset, nothing changes.
 
 Pages read only the cache, whether a value came as a reply (path 1) or as an
 event (path 2). The reader thread is code of the `JobManager` running on
@@ -194,6 +201,25 @@ flowchart LR
 ```
 
 Code asks `get_problem(key)` or `get_solver(name)` and never branches on a name. A new problem is one file under `problems/`, imported in `problems/__init__.py`. Details: [registries](how-it-works.md#registries-instead-of-switch-statements).
+
+### Where a solver runs
+
+```mermaid
+flowchart LR
+    rule["run_solver<br/>sat_core/solver_registry.py"]:::deep
+    c0["solve jobs"] --> rule
+    c1["benchmark cases<br/>(run_case)"] --> rule
+    c2["pool workers"] --> rule
+    classDef deep fill:#d8f0e0,stroke:#1b6e3c,stroke-width:2px,color:#10331f
+```
+
+`run_solver` reads `WIZSAT_SOLVER_PYTHON`: unset, the solver runs in the
+calling process; set, `run_in_child` (`sat_core/solver_process.py`) runs it in
+a child of that interpreter. No other code asks which. The child's protocol is
+in the docstring of `solver_process.py`, its lifetime in
+[ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md), and the
+interpreter a result records comes from one probe per job
+(`interpreter_facts()` in `sat_core/environment.py`).
 
 ### Requests
 

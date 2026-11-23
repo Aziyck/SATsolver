@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from sat_core.environment import machine_facts
-from sat_core.jobs import run_job
+from sat_core.jobs import recorded_interpreter, run_job
 from sat_core.runtime import (
     EVENT_CANCELLED,
     EVENT_DONE,
@@ -111,6 +111,10 @@ class Job:
             "row_count": self.row_count,
             "problems": request.get("problems") or ([request["problem"]] if request.get("problem") else []),
             "solver": request.get("solver"),
+            # From the request, which a job keeps from submit to end; only a job saved before
+            # INTERP-2 needs the environment, and that job finished long ago, so a summary
+            # published before the environment event arrives is never wrong.
+            "interpreter": recorded_interpreter(self.kind, request, self.environment),
             "result_status": result.get("status"),
             "verified": result.get("verified"),
             "elapsed": result.get("elapsed"),

@@ -7,6 +7,7 @@ import { useJobActions } from "../api/queries";
 import type { JobSummary } from "../api/types";
 import { formatSeconds, formatTime } from "../lib/format";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
+import { InterpreterBadge } from "./InterpreterBadge";
 
 /** Where a job opens: benchmarks have their results page, solves and encodings the job page. */
 export function jobPath(job: Pick<JobSummary, "id" | "kind" | "problems">): string {
@@ -66,6 +67,7 @@ export function JobCard({ job, onOpen }: { job: JobSummary; onOpen: () => void }
       <Group gap="xs" mt={6}>
         <JobStatusBadge status={job.status} />
         {job.result_status ? <RunStatusBadge status={job.result_status} /> : null}
+        <InterpreterBadge interpreter={job.interpreter} />
         {job.kind === "benchmark" && job.row_count ? (
           <Badge variant="default" radius="sm">
             {job.row_count} runs

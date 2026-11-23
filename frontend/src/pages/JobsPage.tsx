@@ -9,6 +9,7 @@ import type { JobKind } from "../api/types";
 import { jobPath, jobProgress, KindIcon } from "../components/JobsDrawer";
 import { duration, formatSeconds, formatTime } from "../lib/format";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
+import { InterpreterBadge } from "../components/InterpreterBadge";
 
 export default function JobsPage() {
   const jobs = useLive((state) => state.jobs);
@@ -94,7 +95,10 @@ export default function JobsPage() {
                       {active && progress !== null ? <Progress value={progress} size="xs" mt={4} /> : null}
                     </Table.Td>
                     <Table.Td>
-                      <JobStatusBadge status={job.status} />
+                      <Group gap={6} wrap="nowrap">
+                        <JobStatusBadge status={job.status} />
+                        <InterpreterBadge interpreter={job.interpreter} />
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       {job.kind === "benchmark" ? (

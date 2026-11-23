@@ -18,6 +18,7 @@ function summary(partial: Partial<JobSummary>): JobSummary {
     row_count: 0,
     problems: [],
     solver: null,
+    interpreter: null,
     result_status: null,
     verified: null,
     elapsed: null,

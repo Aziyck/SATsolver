@@ -29,7 +29,7 @@ from sat_core.benchmark import DEFAULT_TIMEOUT, DPLL_FALLBACK_RULE, MAX_BENCHMAR
 from sat_core.dimacs import clauses_to_dimacs, app_header_comment
 from sat_core.environment import VERSION, find_pypy
 from sat_core.export import rows_to_csv
-from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, lookup_problem, parse_problem_request, parse_solve_request, visible_params
+from sat_core.jobs import DEFAULT_SOLVE_TIMEOUT, instance_summary, recorded_interpreter, lookup_problem, parse_problem_request, parse_solve_request, visible_params
 from sat_core.params import ParamError
 from sat_core.presets import all_presets
 from sat_core.solver_registry import LOG_LEVELS, STAT_SPECS, all_solvers, get_solver
@@ -104,10 +104,10 @@ def with_recorded_interpreter(job: Job, request: dict[str, Any]) -> dict[str, An
     to Python, so the new times compare with the old ones.
     """
 
-    if job.kind not in ("solve", "benchmark") or "interpreter" in request:
+    interpreter = recorded_interpreter(job.kind, request, job.environment)
+    if interpreter is None or "interpreter" in request:
         return request
-    recorded = (job.environment or {}).get("python_implementation")
-    return {**request, "interpreter": "pypy"} if recorded == "PyPy" else request
+    return {**request, "interpreter": interpreter}
 
 
 def validate_job(

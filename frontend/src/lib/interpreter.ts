@@ -1,4 +1,4 @@
-import type { Interpreter, RunEnvironment } from "../api/types";
+import type { Interpreter } from "../api/types";
 
 /** The interpreter a request runs on: PyPy only when it was chosen and the server has one (the catalog's `interpreters.pypy`). */
 export function effectiveInterpreter(choice: Interpreter, pypyAvailable: boolean): Interpreter {
@@ -6,11 +6,9 @@ export function effectiveInterpreter(choice: Interpreter, pypyAvailable: boolean
 }
 
 /**
- * The interpreter a past job chose. Jobs saved before the field existed have none in their request:
- * they ran on PyPy when their environment record says so, the same rule as the server's Rerun
- * (with_recorded_interpreter in sat_web/api.py).
+ * The interpreter to preselect for a past job: its summary's `interpreter`, which the server derives
+ * (recorded_interpreter in sat_core/jobs.py, the rule Rerun uses too). Null (no solver) means Python.
  */
-export function interpreterOf(request: { interpreter?: Interpreter }, environment?: RunEnvironment | null): Interpreter {
-  if (request.interpreter) return request.interpreter === "pypy" ? "pypy" : "python";
-  return environment?.python_implementation === "PyPy" ? "pypy" : "python";
+export function interpreterOf(job: { interpreter: Interpreter | null | undefined }): Interpreter {
+  return job.interpreter === "pypy" ? "pypy" : "python";
 }

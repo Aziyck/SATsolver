@@ -1,11 +1,11 @@
 # Plan: choose Python or PyPy per job, in the UI
 
-- **Status:** in progress (INTERP-1 to INTERP-3 done 2026-11-23; INTERP-4 open)
+- **Status:** done (2026-11-23)
 - **Written:** 2026-11-23
-- **Related:** [solver runner](pypy-solver-runner.md) (the child process and
-  `WIZSAT_SOLVER_PYTHON`), [Solver performance](../guide/performance.md#running-the-solvers-under-pypy),
-  [Architecture](../guide/architecture.md)
-- Item format, difficulty and closing rule: [README.md](README.md)
+- **Related:** [solver runner](../pypy-solver-runner.md) (the child process and
+  `WIZSAT_SOLVER_PYTHON`), [Solver performance](../../guide/performance.md#running-the-solvers-under-pypy),
+  [Architecture](../../guide/architecture.md)
+- Item format, difficulty and closing rule: [README.md](../README.md)
 
 ## Goal
 
@@ -132,7 +132,7 @@ the long runs, means restarting the server with a different environment.
     solve with PyPy chosen and sees the stand-in interpreter on the job
     detail. `docs/guide/user-guide.md` updated.
 
-- [ ] **INTERP-4. A "PyPy" badge in the job list**
+- [x] **INTERP-4. A "PyPy" badge in the job list** - Done 2026-11-23.
   - **Difficulty:** hard (`sat_web/manager.py`: `Job.summary`)
   - **Blocked by:** INTERP-3
   - **How:** the job summary gains `interpreter` (`"python"` or `"pypy"`: the
@@ -143,6 +143,12 @@ the long runs, means restarting the server with a different environment.
   - **Done when:** an API test shows the summary of a PyPy job and of a Python
     job, and of a job saved without the field that ran on PyPy; a component
     test shows the badge on the first and not on the others.
+  - **Built as:** `recorded_interpreter()` in `sat_core/jobs.py`, one rule
+    for `Job.summary` (`sat_web/manager.py`) and Rerun (`sat_web/api.py`);
+    `InterpreterBadge` in the jobs drawer and the Jobs page. The summary is
+    built from the request, which does not change while a job runs, so no
+    new event or lock is involved. Decisions of the plan:
+    [ADR 0007](../../adr/0007-each-job-chooses-its-interpreter.md).
 
 ## Considered and rejected
 

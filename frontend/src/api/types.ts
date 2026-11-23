@@ -139,6 +139,8 @@ export interface JobSummary {
   row_count: number;
   problems: string[];
   solver: string | null;
+  /** Where the job's solvers run; null for a job that runs no solver (generate). */
+  interpreter: Interpreter | null;
   result_status: RunStatus | null;
   verified: boolean | null;
   elapsed: number | null;

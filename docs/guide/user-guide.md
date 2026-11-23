@@ -310,7 +310,9 @@ includes the compared benchmarks too), and delete.
 ## Jobs
 
 Every solve, encoding and benchmark, newest first, with status, result,
-duration and start time. Filter by kind or search by title; click a row to
+duration and start time. A job set to run on PyPy carries a *PyPy* badge,
+here and in the Jobs drawer; the *Machine* block of the job says which
+interpreter really ran it. Filter by kind or search by title; click a row to
 open it: benchmarks on their results page, solves and encodings on their job
 page. **Delete finished** removes all finished jobs and their
 files. Running jobs can be cancelled from the Jobs drawer.

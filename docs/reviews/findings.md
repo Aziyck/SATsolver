@@ -592,9 +592,13 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** the growth test passes on macOS with the 150 MB parent,
     and its `darwin` exception is removed.
 
-- [ ] **F10. An old PyPy job whose interpreter probe timed out counts as Python**
+- [x] **F10. An old PyPy job whose interpreter probe timed out counts as Python** - Done 2026-11-23.
   (added 2026-11-23, found while INTERP-4, in the review; the rule is INTERP-2's)
   - **Difficulty:** easy
+  - **Decided (2026-11-23):** count it as PyPy. Before INTERP-2 only the
+    `WIZSAT_SOLVER_PYTHON` interpreter was probed (the job's own is read
+    in-process and always answers), so `unknown` means the solvers ran on
+    the setting's interpreter. Built in `recorded_interpreter()`.
   - **Problem:** a job saved before requests carried `interpreter` is taken
     as PyPy only when its environment record says `PyPy`
     (`recorded_interpreter()` in `sat_core/jobs.py`). A PyPy that did not

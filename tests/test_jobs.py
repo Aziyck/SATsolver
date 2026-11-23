@@ -181,6 +181,10 @@ class JobTests(unittest.TestCase):
             ("solve", {"interpreter": "python"}, pypy, "python"),
             ("benchmark", {}, pypy, "pypy"),  # saved before the field: from the record
             ("benchmark", {}, cpython, "python"),
+            # F10: before INTERP-2 only the setting's interpreter could fail to answer the probe; the
+            # server's own always answers. So "unknown" means the solvers ran on the setting's, PyPy.
+            ("benchmark", {}, {"python_implementation": "unknown"}, "pypy"),
+            ("solve", {"interpreter": "python"}, {"python_implementation": "unknown"}, "python"),  # the request still wins
             ("solve", {}, None, "python"),  # not started yet, or no record
             ("generate", {}, pypy, None),  # runs no solver
         ):

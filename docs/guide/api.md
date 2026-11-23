@@ -200,7 +200,8 @@ the job's solvers run: `"python"`, in the job's own process, or `"pypy"`, each
 run in a child process of the PyPy the server found (`interpreters.pypy` in
 the [catalog](#get-apicatalog)). The choice covers every run of the job, pool
 workers included, and Rerun keeps it; a job saved before the field existed
-reruns on PyPy when its `environment` says it ran on PyPy. Any other value, and `"pypy"` when the
+reruns on PyPy when its `environment` names PyPy or `unknown` (the rule of
+the summary's `interpreter`, below). Any other value, and `"pypy"` when the
 catalog says PyPy is not available, is refused with 422 and
 `{"errors": {"interpreter": "..."}}` before a job is created.
 
@@ -225,7 +226,8 @@ The response is the job summary.
 
 `interpreter` is the interpreter the job chose for its solvers: `"python"` or
 `"pypy"`, from the request, or for a job saved before requests carried it, `"pypy"` when its
-`environment` names PyPy; `null` for a generate job, which runs no solver. What really ran is in the
+`environment` names PyPy or `unknown` (only the setting's interpreter could
+fail to answer the probe, so `unknown` means the solvers ran there); `null` for a generate job, which runs no solver. What really ran is in the
 detail's `environment`; the two differ only for a job that failed before its
 runs (PyPy gone since the server started).
 

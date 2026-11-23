@@ -576,11 +576,21 @@ class SolverChildTests(ApiTestCase):
         manager = self.client.app.state.manager
         on_pypy = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
         on_python = self.wait(self.submit("solve", self.SOLVE)["id"])
-        for detail in (on_pypy, on_python):
+        probe_timed_out = self.wait(self.submit("solve", {**self.SOLVE, **self.PYPY})["id"])
+        for detail in (on_pypy, on_python, probe_timed_out):
             with manager.lock:
                 manager.get(detail["id"]).request.pop("interpreter")
+        # F10: an old job whose PyPy did not answer the probe in time recorded "unknown".
+        with manager.lock:
+            manager.get(probe_timed_out["id"]).environment = {
+                **manager.get(probe_timed_out["id"]).environment,
+                "python_implementation": "unknown",
+                "python_version": "",
+            }
+        summaries = {job["id"]: job for job in self.client.get("/api/jobs").json()["jobs"]}
+        self.assertEqual(summaries[probe_timed_out["id"]]["interpreter"], "pypy")
 
-        for detail, expected in ((on_pypy, "pypy"), (on_python, "python")):
+        for detail, expected in ((on_pypy, "pypy"), (on_python, "python"), (probe_timed_out, "pypy")):
             with self.subTest(expected):
                 again = self.client.post(f"/api/jobs/{detail['id']}/rerun")
                 self.assertEqual(again.status_code, 201, again.text)

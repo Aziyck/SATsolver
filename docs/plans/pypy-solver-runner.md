@@ -2,7 +2,7 @@
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
   and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
-  RUNNER-7 and RUNNER-8 done 2026-11-23)
+  RUNNER-7, RUNNER-8 and RUNNER-9 done 2026-11-23)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -198,13 +198,19 @@ installed.
     `docs/guide/architecture.md` and `AGENTS.md` mention the new module and
     setting.
 
-- [ ] **RUNNER-9. CI runs the solvers under PyPy (optional)**
+- [x] **RUNNER-9. CI runs the solvers under PyPy (optional)** - Done 2026-11-23.
   - **Difficulty:** medium
   - **Blocked by:** RUNNER-5
-  - **Needs decision:** whether the extra CI minutes are worth it.
-    Recommendation: yes, one job (`actions/setup-python` with `pypy3.10`) that
-    runs `tests/test_solver_agreement.py` under PyPy and one API test with the
-    setting on.
+  - **Decided (2026-11-23):** yes, one job on every push and pull request,
+    as recommended: `actions/setup-python` with `pypy3.10` runs
+    `tests/test_solver_agreement.py` under PyPy, and one API test runs with
+    the setting on.
+  - **Built as:** the job "Solvers under PyPy" in `.github/workflows/ci.yml`.
+    The server and the test runner stay on CPython 3.12. The API test is
+    `test_a_solve_job_and_benchmarks_give_the_same_results_through_the_child`:
+    it takes the child's interpreter from `WIZSAT_TEST_SOLVER_PYTHON` (default
+    `sys.executable`), so under PyPy it checks that statuses and work counts
+    match a CPython run.
   - **Done when:** that job is green on a pull request.
 
 - [ ] **RUNNER-10. Real numbers on the target machine**

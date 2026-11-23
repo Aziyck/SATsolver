@@ -214,6 +214,19 @@ WIZSAT_REQUIRE_API_TESTS=1 python -m unittest discover -s tests     # Linux, mac
 $env:WIZSAT_REQUIRE_API_TESTS = "1"; python -m unittest discover -s tests   # Windows PowerShell
 ```
 
+CI also checks the solvers under PyPy. To run the same two checks locally
+(Linux, macOS), with the path of your PyPy:
+
+```bash
+/opt/pypy3/bin/pypy3 -m unittest discover -s tests -p test_solver_agreement.py
+WIZSAT_REQUIRE_API_TESTS=1 WIZSAT_TEST_SOLVER_PYTHON=/opt/pypy3/bin/pypy3 \
+  python -m unittest discover -s tests -p test_api.py -k through_the_child
+```
+
+`WIZSAT_TEST_SOLVER_PYTHON` names the interpreter of the API test that runs
+jobs with the solvers in a child; without it, the test uses the interpreter
+that runs the tests.
+
 A quick command-line check of every solver (no server needed):
 
 ```bash

@@ -1,6 +1,7 @@
 import { Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import type { BenchmarkRequest, Catalog, Rule, RunEnvironment, SolverEntry } from "../api/types";
 import { formatSeconds } from "../lib/format";
+import { interpreterOf } from "../lib/interpreter";
 import { FactsList } from "./Display";
 import { MachineBlock, SolverSettingsTable } from "./SolverSettingsTable";
 
@@ -30,6 +31,7 @@ export function BenchmarkSetup({ request, catalog, environment }: { request: Ben
           { label: "Repeats", value: request.repeats ?? 1 },
           { label: "Time limit per run", value: request.timeout === null || request.timeout === undefined ? "none" : formatSeconds(request.timeout) },
           { label: "Parallel workers", value: request.workers ?? 1 },
+          { label: "Run with", value: interpreterOf(request, environment) === "pypy" ? "PyPy" : "Python" },
           { label: "Benchmark seed", value: request.seed === null || request.seed === undefined || request.seed === "" ? "none" : String(request.seed) },
           { label: "Log level", value: request.log_level ?? "normal" },
         ]}

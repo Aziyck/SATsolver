@@ -23,10 +23,10 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { IconArrowLeft, IconCopy, IconPlayerPlay, IconPlus, IconRestore, IconTrash } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useCatalog, useCreateJob } from "../api/queries";
-import type { Catalog, Rule } from "../api/types";
+import type { Catalog, Interpreter, Rule } from "../api/types";
 import {
   draftFromRequest,
   emptyDraft,
@@ -38,9 +38,11 @@ import {
   type BenchmarkDraft,
 } from "../lib/benchmark";
 import { formatCount } from "../lib/format";
+import { effectiveInterpreter, interpreterOf } from "../lib/interpreter";
 import { defaultValues, errorsUnder } from "../lib/params";
 import { usePersistentState } from "../lib/storage";
 import { ParamForm, ParamInput, ResetToDefaults } from "../components/fields/ParamForm";
+import { InterpreterSwitch } from "../components/InterpreterSwitch";
 
 export const DRAFT_KEY = "wizsat.benchmark.draft";
 
@@ -49,6 +51,16 @@ export default function BenchmarkBuilder() {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const [draft, setDraft] = usePersistentState<BenchmarkDraft>(DRAFT_KEY, () => emptyDraft(catalog));
+  // Not stored with the draft: a new visit starts on Python, the interpreter of reported results. A copy of a
+  // past benchmark brings the interpreter it ran on (INTERP-3).
+  const location = useLocation();
+  const [interpreter, setInterpreter] = useState<Interpreter>(() =>
+    interpreterOf({ interpreter: (location.state as { interpreter?: Interpreter } | null)?.interpreter }),
+  );
+  // History keeps the state across reloads and back/forward: clear it, or a later visit would start on PyPy.
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   // ?preset=key loads a preset into the draft once.
   useEffect(() => {
@@ -59,7 +71,11 @@ export default function BenchmarkBuilder() {
     setSearch({}, { replace: true });
   }, [search, catalog, setDraft, setSearch]);
 
-  const request = useMemo(() => requestFromDraft(catalog, draft), [catalog, draft]);
+  const pypy = catalog.interpreters.pypy;
+  const request = useMemo(
+    () => requestFromDraft(catalog, draft, effectiveInterpreter(interpreter, pypy.available)),
+    [catalog, draft, interpreter, pypy.available],
+  );
   const [debounced] = useDebouncedValue(request, 400);
   const plan = useQuery({
     queryKey: ["plan", JSON.stringify(debounced)],
@@ -113,7 +129,13 @@ export default function BenchmarkBuilder() {
             </Menu.Dropdown>
           </Menu>
           <Tooltip label="Start over with defaults">
-            <ActionIcon variant="default" size="lg" onClick={() => setDraft(emptyDraft(catalog))} aria-label="Reset the form">
+            <ActionIcon variant="default" size="lg" onClick={() => {
+                setSubmitErrors({});
+                setDraft(emptyDraft(catalog));
+                setInterpreter("python");
+              }}
+              aria-label="Reset the form"
+            >
               <IconRestore size={18} />
             </ActionIcon>
           </Tooltip>
@@ -152,7 +174,12 @@ export default function BenchmarkBuilder() {
             </Button>
 
             <SolversCard catalog={catalog} draft={draft} onChange={update} errors={errors} />
-            <SettingsCard catalog={catalog} draft={draft} onChange={update} errors={errors} />
+            <SettingsCard catalog={catalog} draft={draft} onChange={update} errors={errors} interpreter={interpreter}
+              onInterpreterChange={(choice) => {
+                setSubmitErrors({});
+                setInterpreter(choice);
+              }}
+            />
           </Stack>
         </Grid.Col>
 
@@ -455,11 +482,15 @@ function SettingsCard({
   draft,
   onChange,
   errors,
+  interpreter,
+  onInterpreterChange,
 }: {
   catalog: Catalog;
   draft: BenchmarkDraft;
   onChange: (patch: Partial<BenchmarkDraft>) => void;
   errors: Record<string, string>;
+  interpreter: Interpreter;
+  onInterpreterChange: (choice: Interpreter) => void;
 }) {
   const setRule = (index: number, patch: Partial<Rule>) => onChange({ rules: draft.rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)) });
   const solverOptions = [{ value: "*", label: "Any solver" }, ...catalog.solvers.map((solver) => ({ value: solver.key, label: solver.title }))];
@@ -495,6 +526,17 @@ function SettingsCard({
       </Grid>
       <Text size="xs" c="dimmed" mt="xs">
         Repeat 1 uses each case's own seed, so any row can be reproduced on the Solve page; later repeats derive fresh seeds.
+      </Text>
+
+      <Divider my="md" />
+      <InterpreterSwitch value={interpreter} onChange={onInterpreterChange} pypy={catalog.interpreters.pypy} />
+      {errors.interpreter ? (
+        <Text size="sm" c="red" mt={4}>
+          {errors.interpreter}
+        </Text>
+      ) : null}
+      <Text size="xs" c="dimmed" mt="xs">
+        One interpreter for the whole benchmark, so the solvers stay comparable. Keep Python for results you report; if you use PyPy, say so.
       </Text>
 
       <Divider my="md" />

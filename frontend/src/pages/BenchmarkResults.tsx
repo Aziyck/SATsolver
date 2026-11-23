@@ -60,6 +60,7 @@ import { SolverSettingsTable, StatsTable } from "../components/SolverSettingsTab
 import { AnswerView } from "../components/views/ProblemViews";
 import { draftFromRequest, isGraphSuite, mergeRuns } from "../lib/benchmark";
 import { duration, formatCount, formatSeconds, formatStat } from "../lib/format";
+import { interpreterOf } from "../lib/interpreter";
 import { formatValue } from "../lib/params";
 import { CASE_X, defaultAxes, filterRows, sortRows, statusCounts, suspiciousRows, TIME_METRIC, varyingParams, type Aggregate, type SortKey } from "../lib/stats";
 import { isActive, JobStatusBadge, RunStatusBadge } from "../lib/status";
@@ -120,7 +121,7 @@ export default function BenchmarkResults() {
     } catch {
       // ignore storage errors
     }
-    navigate("/benchmarks/new");
+    navigate("/benchmarks/new", { state: { interpreter: interpreterOf(job.request, job.environment) } });
   };
 
   return (

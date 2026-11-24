@@ -702,6 +702,14 @@ gets a dated file of its own in this folder instead, like
     conflict counts before and after, with the times of both runs in
     `docs/guide/performance.md`; and a test shows the formula is frozen
     while the solver runs and unfrozen afterwards.
+  - **Python 3.12:** the interpreter starts with a few hundred objects
+    frozen by itself (375 on 3.12.3, 377 on the Windows CI runner; 3.13
+    none). The first version skipped the freeze whenever the count was not
+    0, to leave a caller's own freeze alone, so on 3.12 it never froze, and
+    its tests failed in CI's Windows job (the only 3.12 one). The check now
+    compares with the count when `sat_core/solver_registry.py` is imported
+    (`_INTERPRETER_FROZEN`); `test_the_child_freezes_its_clauses_as_well`
+    failed under 3.12 before that ("scanned clauses: 2 of 2") and passes now.
 
 - [ ] **F14. The collector still scans the solvers' own copies of the formula**
   (added 2026-11-24, found by the review of F13)

@@ -253,10 +253,6 @@ def tracked_ids():
 class FrozenFormulaTests(unittest.TestCase):
     """The collector does not rescan the formula while a solver runs (F13)."""
 
-    def setUp(self):
-        super().setUp()
-        self.assertEqual(gc.get_freeze_count(), 0)
-
     @contextlib.contextmanager
     def solver_that_looks(self, key, then_raise=False):
         """Replace a solver by one that records whether the clauses it was given are scanned."""

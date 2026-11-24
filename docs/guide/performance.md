@@ -302,22 +302,40 @@ What the numbers say:
 
 Two ways to make the child read its request faster were built and measured
 on 2026-11-24 (same machine, CPython 3.13.14, PyPy 8.0.1 with Python
-3.12.15), and both were dropped. The table above is unchanged by them. All
-rows read the same 2,000,000 clauses of three literals, one run at a time.
-The first four are one parse each, in a process that had just built the
-formula and let it go; the last three are two runs each, in fresh processes
-laid out as the child (its modules imported, the request read from stdin),
-given as the range of the two:
+3.12.15), and both were dropped. The table above measures a different
+thing (the child's whole start-up window) and is unchanged by them. Every
+number below reads the same 2,000,000 clauses of three literals, one run at
+a time, with nothing else running.
 
-| Reading the request | CPython child | PyPy child |
-|---|---:|---:|
-| `json.loads` of the JSON line (what the child does) | 1.21 s | 1.32 s |
-| 4-byte integers in base64 (`array` module), unpacked into clause lists | 3.53 s | 1.51 s |
-| `json.loads` with the garbage collector off | 0.77 s | 1.10 s |
-| 4-byte integers with the garbage collector off | 1.00 s | 1.31 s |
-| parse, count the variables and build 1,000,000 lists, collector on | 3.76-3.96 s | 2.03-2.08 s |
-| the same, collector off during the parse | 3.72-3.86 s | 2.05-2.17 s |
-| the same, collector off during the parse, then `gc.freeze()` | 2.86-2.94 s | (no `gc.freeze`) |
+**The binary format (RUNNER-12).** Time to turn the request line back into
+clause lists, one parse each, in a process that had just built the formula
+and let it go. "Today" is what the child does (`json.loads` of the JSON
+line); "packed" is the clause lengths and the literals as 4-byte integers in
+base64, read with the `array` module:
+
+| Interpreter, garbage collector | Today (JSON) | Packed | Packed against today |
+|---|---:|---:|---:|
+| CPython, collector on (as the child runs) | 1.21 s | 3.53 s | 2.9x slower |
+| CPython, collector off | 0.77 s | 1.00 s | 1.3x slower |
+| PyPy, collector on (as the child runs) | 1.32 s | 1.51 s | 1.1x slower |
+| PyPy, collector off | 1.10 s | 1.31 s | 1.2x slower |
+
+**The collector off while parsing (F12).** First the parse with what comes
+right after it in a child (counting the variables) and a solver-like burst
+of 1,000,000 new lists, in fresh processes laid out as the child (its
+modules imported, the request read from stdin), the range of two runs; then
+the child's whole window from `scripts/child_cost.py --big-runs 7`, median
+of seven runs, the two versions run one right after the other:
+
+| Measure | Today | Collector off during the parse | Difference |
+|---|---:|---:|---:|
+| CPython: parse, count, 1,000,000 lists | 3.76-3.96 s | 3.72-3.86 s | about 0.1 s |
+| PyPy: parse, count, 1,000,000 lists | 2.03-2.08 s | 2.05-2.17 s | none |
+| CPython: the child's window | 2.88 s | 2.84 s | 0.04 s |
+| PyPy: the child's window | 2.36 s | 2.42 s | 0.06 s slower |
+
+The same CPython measure with `gc.freeze()` right after the parse took
+2.86-2.94 s, about 0.9 s less than today; PyPy has no `gc.freeze`.
 
 - **A binary request format** ([RUNNER-12](../plans/done/pypy-solver-runner.md),
   dropped): the request shrinks from 53.6 MB to 42.7 MB, but most of the

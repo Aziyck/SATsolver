@@ -108,7 +108,9 @@ Three things the diagram leaves out:
   worker) that exists only in a job whose request says `"interpreter": "pypy"`:
   each run then starts a child of PyPy, sends it the formula as JSON and
   reads back log lines and a result
-  (`sat_core/solver_process.py`, [How it works](how-it-works.md#daemons-and-the-watchdog)).
+  (`sat_core/solver_process.py`, the message shapes and the rules for a line
+  in `sat_core/solver_protocol.py`,
+  [How it works](how-it-works.md#daemons-and-the-watchdog)).
   The events and the cancel flag work as drawn: the job process forwards the
   log lines and ends the child on Stop. Unset, nothing changes.
 
@@ -143,7 +145,7 @@ Who imports whom:
 flowchart TD
     frontend["frontend/"]
     web["sat_web/<br/>api, manager, store, config"]
-    engine["sat_core engine<br/>answers, jobs, benchmark, export, solver_registry, solver_process, parallel, presets"]
+    engine["sat_core engine<br/>answers, jobs, benchmark, export, solver_registry, solver_process, solver_protocol, parallel, presets"]
     problems["problems/"]
     solvers["solvers/"]
     base["sat_core base<br/>models, params, seeds, dimacs, runtime, verify, environment, memory"]
@@ -221,7 +223,11 @@ start-up setting does not reach `run_solver`: it only says where PyPy is
 the variable in itself at its start from the request's `interpreter`
 (`choose_solver_python()` in `sat_core/jobs.py`), and its pool workers inherit
 it, so one job never runs on two interpreters. The child's protocol is
-in the docstring of `solver_process.py`, its lifetime in
+`sat_core/solver_protocol.py`: pure code that builds the log and result lines
+the child writes and parses the lines the parent reads, with no process,
+thread or pipe in it, so it is tested alone. `solver_process.py` holds the
+processes and calls it from both sides (the module docstring tells how the
+two fit). The child's lifetime is in
 [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md), and the
 interpreter a result records comes from one probe per job
 (`interpreter_facts()` in `sat_core/environment.py`).

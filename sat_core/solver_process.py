@@ -3,11 +3,10 @@ One solver run in its own process, from JSON to JSON.
 
 Started as `python -m sat_core.solver_process` with the repository root as the
 working directory. It reads one request object from stdin, runs the solver
-with run_solver, and writes one JSON object per line to stdout:
-
-    {"type": "log", "message": "..."}                       once per log line, as it happens
-    {"type": "result", "status", "solution", "stats",
-     "error", "elapsed"}                                    last, once
+with run_solver, and writes one JSON object per line to stdout: a log line for each log message, as
+it happens, then one result line, last. The shape of those lines and the rules
+the parent checks them by are in sat_core.solver_protocol (pure code, tested
+without a process); this module is the processes, pipes and threads.
 
 The request is {"clauses", "solver", "options", "log_level",
 "progress_interval", "timeout"}, and optionally "label" (the name the log
@@ -61,7 +60,6 @@ from __future__ import annotations
 from collections import deque
 import contextlib
 import json
-import math
 import os
 from pathlib import Path
 import queue
@@ -72,8 +70,9 @@ import time
 from typing import Any, Callable, TextIO
 
 from sat_core.memory import peak_memory_mb
-from sat_core.models import STATUS_SAT, STATUS_TIMEOUT, STATUSES
+from sat_core.models import STATUS_TIMEOUT
 from sat_core.runtime import EVENT_LOG, RunEvent, RunToken, cancellation_status, emit, stop_requested
+from sat_core.solver_protocol import BrokenLine, log_message, parse_line, result_message, stopped_result
 from sat_core.solver_registry import SOLVER_PYTHON_ENV, run_solver
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,8 +103,6 @@ START_UP_SECONDS = 60.0
 # Why the parent killed the child ("killed" in the result line it makes).
 KILLED_BY_TOKEN = "token"  # the caller's cancel token: cancel, skip or its own timeout
 KILLED_BY_TIME_LIMIT = "time limit"  # still running KILL_MARGIN_SECONDS past the request's timeout
-# The fields every result line carries.
-RESULT_FIELDS = ("status", "solution", "stats", "error", "elapsed")
 # How much of a broken line an error message quotes.
 QUOTED_CHARACTERS = 200
 
@@ -164,7 +161,7 @@ def run_in_child(
         nonlocal first_line_at
         if first_line_at is None:
             first_line_at = time.perf_counter()
-        message = _parse_line(line)
+        message = parse_line(line)
         if message["type"] == "log":
             emit(event_callback, EVENT_LOG, message["message"])
             return None
@@ -232,13 +229,13 @@ def run_in_child(
                     # queued behind log lines not read yet: that result wins.
                     try:
                         result = drain()
-                    except _BrokenLine:
+                    except BrokenLine:
                         # Killed anyway: the stop the user asked for is the answer.
                         result = None
                     if result is None:
                         stop_status, killed_by = stop
                     break
-        except _BrokenLine as exc:
+        except BrokenLine as exc:
             broken = exc.line
         finally:
             # Also reached after the result line: the child is exiting then,
@@ -268,72 +265,10 @@ def run_in_child(
             _with_stderr(f"The solver process ({python}) sent a line that is not part of the protocol: {quoted!r}.", stderr)
         )
     if stop_status is not None:
-        return {
-            "type": "result",
-            "status": stop_status,
-            "solution": None,
-            "stats": {},
-            "error": None,
-            "elapsed": time.perf_counter() - (first_line_at or started),
-            "killed": killed_by,
-        }
+        return stopped_result(stop_status, time.perf_counter() - (first_line_at or started), killed_by)
     if result is None:
         raise SolverProcessError(_with_stderr(f"The solver process ({python}) ended without a result.", stderr))
     return result
-
-
-class _BrokenLine(Exception):
-    def __init__(self, line: str) -> None:
-        super().__init__(line)
-        self.line = line
-
-
-def _parse_line(line: str) -> dict[str, Any]:
-    """One stdout line as a protocol message (the model's variables as ints), or _BrokenLine."""
-
-    try:
-        message = json.loads(line)
-    except (ValueError, RecursionError):
-        # RecursionError: a deeply nested line. It is not a ValueError.
-        raise _BrokenLine(line) from None
-    if not isinstance(message, dict):
-        raise _BrokenLine(line)
-    if message.get("type") == "log" and isinstance(message.get("message"), str):
-        return message
-    if message.get("type") != "result" or any(field not in message for field in RESULT_FIELDS):
-        raise _BrokenLine(line)
-    solution, stats = message["solution"], message["stats"]
-    if (
-        message["status"] not in STATUSES
-        or not _is_finite_number(message["elapsed"])
-        or not (message["error"] is None or isinstance(message["error"], str))
-        or not isinstance(stats, dict)
-        # The child sends public_stats: small scalars only. json accepts NaN,
-        # which the API's JSON responses refuse.
-        or not all(_is_scalar(value) for value in stats.values())
-        # A model goes with SAT only, as run_solver does in-process.
-        or (solution is not None and (message["status"] != STATUS_SAT or not isinstance(solution, dict)))
-    ):
-        raise _BrokenLine(line)
-    # Only the parent marks a run as killed (run_in_child's own result line).
-    message.pop("killed", None)
-    if solution is not None:
-        # JSON object keys are strings; variables are ints.
-        model = {}
-        for var, value in solution.items():
-            if not (var.isdigit() and int(var) > 0 and isinstance(value, bool)):
-                raise _BrokenLine(line)
-            model[int(var)] = value
-        message["solution"] = model
-    return message
-
-
-def _is_finite_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
-
-
-def _is_scalar(value: Any) -> bool:
-    return value is None or isinstance(value, (bool, str)) or _is_finite_number(value)
 
 
 def _start_failure(python: str, exc: OSError) -> str:
@@ -427,7 +362,7 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
     def on_event(event: RunEvent) -> None:
         # Solvers send only log lines; anything else has no meaning to the parent.
         if event.type == EVENT_LOG:
-            write({"type": "log", "message": event.message})
+            write(log_message(event.message))
 
     # This process runs one solve, so its peak is the run's own (MEM-3): the
     # baseline once the request is read, the peak after the solver.
@@ -446,16 +381,7 @@ def serve(request: dict[str, Any], out: TextIO) -> None:
     if baseline_mb is not None and peak_mb is not None:  # not measured: absent, never 0
         result.stats["baseline_memory_mb"] = round(baseline_mb, 1)
         result.stats["peak_memory_mb"] = round(peak_mb, 1)
-    write(
-        {
-            "type": "result",
-            "status": result.status,
-            "solution": result.solution,
-            "stats": result.stats,
-            "error": result.error,
-            "elapsed": result.elapsed,
-        }
-    )
+    write(result_message(result.status, result.solution, result.stats, result.error, result.elapsed))
 
 
 def main(stdin: TextIO | None = None, stdout: TextIO | None = None, lifeline: bool = False) -> int:

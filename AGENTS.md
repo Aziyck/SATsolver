@@ -62,6 +62,7 @@ sat_core/
   runtime.py       RunEvent protocol, RunToken (cancel / skip / timeout)
   dimacs.py        DIMACS parser and writer (with line-numbered errors)
   solver_process.py  one solver run in a child process (JSON over pipes), used by a job that runs on PyPy ("interpreter": "pypy")
+  solver_protocol.py the child protocol as pure code: message shapes, parse_line
   verify.py        check a model against the clauses
   answers.py       judge_answer: the one rule for "verified" (model, decode, problem check)
   seeds.py         deterministic seeding helpers

@@ -2,7 +2,7 @@
 
 - **Status:** in progress (MEM-1 to MEM-3 done 2026-11-23)
 - **Written:** 2026-10-19; tasks rewritten 2026-11-13
-- **Depends on:** the solver runner ([pypy-solver-runner.md](pypy-solver-runner.md),
+- **Depends on:** the solver runner ([pypy-solver-runner.md](done/pypy-solver-runner.md),
   RUNNER-1 to RUNNER-5) and the run metadata ([run-metadata.md](done/run-metadata.md)).
   MEM-1, MEM-2 and MEM-5 can start before the runner exists.
 - **Related:** [Benchmarking](../guide/benchmarking.md),

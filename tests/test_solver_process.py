@@ -1,5 +1,5 @@
 """
-The child process of the solver runner (docs/plans/pypy-solver-runner.md).
+The child process of the solver runner (docs/plans/done/pypy-solver-runner.md).
 
 sat_core.solver_process runs one solver on one JSON request. These tests start
 it with the interpreter that runs the tests, so the protocol is checked

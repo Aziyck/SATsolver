@@ -7,7 +7,7 @@
 
 The solvers can run in a child process of PyPy, about 3 times faster on runs
 of several seconds and slower on runs under a second
-([solver runner plan](../plans/pypy-solver-runner.md)). At first the setting
+([solver runner plan](../plans/done/pypy-solver-runner.md)). At first the setting
 `WIZSAT_SOLVER_PYTHON` sent every run of every job to PyPy for as long as the
 server ran, so comparing the two interpreters, or using PyPy only for long
 runs, meant restarting the server. The owner wanted to choose in the UI, per

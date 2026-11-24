@@ -16,7 +16,7 @@ answer to say aloud, the code that backs it, and how well the owner knows it
 
 - Asked: 2026-11-22
 - Answer: The watchdog needed the parent's process ID passed in by hand (past a Windows launcher), a different mechanism per OS, and still had gaps: a reused PID or a zombie parent looks alive. Job objects exist only on Windows; Linux's PR_SET_PDEATHSIG fires when the starting thread ends, not the process, and macOS has no equivalent. The pipe is one mechanism on every OS, with no PIDs and no OS-specific code.
-- Evidence: `docs/adr/0006-the-solver-child-ends-with-its-stdin.md` ("Alternatives considered"), `docs/plans/pypy-solver-runner.md` ("Considered and rejected")
+- Evidence: `docs/adr/0006-the-solver-child-ends-with-its-stdin.md` ("Alternatives considered"), `docs/plans/done/pypy-solver-runner.md` ("Considered and rejected")
 - Doc gap: none (ADR 0006)
 - Confidence: shaky
 
@@ -24,7 +24,7 @@ answer to say aloud, the code that backs it, and how well the owner knows it
 
 - Asked: 2026-11-22
 - Answer: JSON over the child's three standard pipes. The parent sends the request (clauses, solver, options, log level, timeout) as one line on stdin and keeps stdin open; the child writes one JSON line per log message on stdout, then one result line (status, model, statistics, error, elapsed), and exits by itself. stderr carries error text and is read on its own thread so the child never blocks on a full pipe. On cancel, skip or a hung child, the parent kills the child and closes stdin.
-- Evidence: `sat_core/solver_process.py` (module docstring), `sat_core/solver_process.py:run_in_child`, `sat_core/solver_process.py:serve`, `sat_core/solver_process.py:main`, `sat_core/solver_process.py:_parse_line`
+- Evidence: `sat_core/solver_process.py` (module docstring), `sat_core/solver_process.py:run_in_child`, `sat_core/solver_process.py:serve`, `sat_core/solver_process.py:main`, `sat_core/solver_protocol.py:parse_line` (the line rules, moved there in RUNNER-11)
 - Doc gap: fixed: `docs/guide/how-it-works.md`, "Daemons and the watchdog"
 - Confidence: shaky
 

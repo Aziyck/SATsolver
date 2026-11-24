@@ -2,7 +2,7 @@
 
 - **Status:** done (2026-11-23)
 - **Written:** 2026-11-23
-- **Related:** [solver runner](../pypy-solver-runner.md) (the child process and
+- **Related:** [solver runner](pypy-solver-runner.md) (the child process and
   `WIZSAT_SOLVER_PYTHON`), [Solver performance](../../guide/performance.md#running-the-solvers-under-pypy),
   [Architecture](../../guide/architecture.md)
 - Item format, difficulty and closing rule: [README.md](../README.md)

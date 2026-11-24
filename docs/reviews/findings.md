@@ -645,3 +645,65 @@ gets a dated file of its own in this folder instead, like
     few seconds, the lifespan shutdown runs (`manager.shutdown()`), and the
     output has no traceback.
 
+- [x] **F12. The solver child parses its request with the garbage collector on**
+  (added 2026-11-24, found while RUNNER-12) - Dropped 2026-11-24 (the
+  owner chose to build it in the RUNNER-12 session, then to drop it on these
+  numbers): the time saved in the parse comes back at the next collection. Built and measured
+  (2026-11-24, Windows 11, Ryzen 7 4800H, the 2,000,000-clause formula of
+  `scripts/child_cost.py`): in a process laid out as the child, parse plus
+  counting the variables plus 1,000,000 new lists took 3.76-3.96 s with the
+  collector on and 3.72-3.86 s with it off during the parse (CPython 3.13);
+  2.03-2.08 s and 2.05-2.17 s under PyPy 3.12. With the collector off, the
+  clause lists stay in the youngest generation, and the first collection
+  after `gc.enable` scans them all. The child's window in
+  `scripts/child_cost.py` (7 runs each, alone) agreed: 2.84 s with the change
+  and 2.88 s without on CPython, 2.42 s and 2.36 s on PyPy. `gc.freeze()`
+  after the parse does help CPython: F13.
+  - **Difficulty:** hard (`sat_core/solver_process.py`)
+  - **Problem:** `main` in `sat_core/solver_process.py` reads the request
+    with `json.loads` while CPython's cyclic garbage collector runs. Building
+    the 2,000,000 clause lists of a formula at the clause limit sets off
+    collections that scan every list built so far: `json.loads` takes
+    1.21 s with the collector on and 0.77 s with it off (CPython 3.13);
+    1.32 s and 1.10 s under PyPy 3.12. Lists of ints cannot form cycles, so
+    the collections find nothing.
+  - **Fix:** turn the collector off while the request is parsed and back on
+    before the solver runs (`gc.disable`, `gc.enable` in a `finally`), so
+    the solver runs as it does today.
+  - **Done when:** a test shows the request is parsed with the collector
+    off and the solver runs with it on, also after a request that cannot be
+    parsed; and `scripts/child_cost.py` shows a shorter window at the
+    clause limit, with the numbers in `docs/guide/performance.md`.
+
+- [ ] **F13. CPython's garbage collector rescans the formula during a solve**
+  (added 2026-11-24, found while RUNNER-12)
+  - **Difficulty:** hard (changes the reported solve times of the reference
+    interpreter; touches `sat_core/solver_process.py` if the child does it too)
+  - **Needs decision:** whether to freeze the formula. It does not change
+    any search or result, but it makes CPython solve times on big formulas
+    shorter than the ones measured so far, so tables measured before and
+    after it do not compare. Options: (a) freeze in `run_solver`, in-process
+    and in the child, and re-measure the tables that are reported; (b) freeze
+    only in the child, which helps only a CPython child (tests and
+    measurements; the app's child is PyPy, which has no `gc.freeze`);
+    (c) leave it. Recommendation: (a), measured with
+    `scripts/solver_timings.py` before and after, if the gain holds on real
+    solves.
+  - **Problem:** CPython's collector (3.13 and earlier; 3.14's incremental
+    collector works differently, so re-measure there) runs a full
+    collection whenever the objects that survived since the last one
+    exceed a quarter of the long-lived ones, and each full collection scans every clause list of
+    the formula. At the clause limit (2,000,000 clause lists) a solver that
+    builds lists pays that again and again: in a process that has just
+    parsed the formula, building 1,000,000 small lists took 0.96-1.01 s, and
+    0.33-0.34 s once the formula was frozen with `gc.freeze()` (CPython
+    3.13, Windows 11, Ryzen 7 4800H). Not measured on a real solve yet.
+  - **Fix:** call `gc.freeze()` once the formula is built and before the
+    solver starts, so the collector never scans its lists again (they hold
+    only ints, so they cannot be part of a cycle); `gc.unfreeze()` after the
+    run where the process goes on (a job process, a pool worker).
+  - **Done when:** `scripts/solver_timings.py` on CPython shows the same
+    conflict counts before and after, with the times of both runs in
+    `docs/guide/performance.md`; and a test shows the formula is frozen
+    while the solver runs and unfrozen afterwards.
+

@@ -14,7 +14,7 @@ parts. The facts do not all change at the same rate:
 
 - the OS, the CPU and the RAM stay the same while the server runs;
 - the interpreter is the one that runs the job, which may later differ from
-  the server's (PyPy, see the [solver runner plan](../plans/pypy-solver-runner.md));
+  the server's (PyPy, see the [solver runner plan](../plans/done/pypy-solver-runner.md));
 - the code a job runs is whatever is on disk when its worker starts, because
   a `spawn` worker imports every module again. The server does not reload,
   but its workers do.

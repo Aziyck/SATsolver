@@ -23,10 +23,8 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Finished work is not listed: closed items stay in their files, and finished
 plans move to [`done/`](done/).
 
-1. **Features, in this order:**
-   [pypy-solver-runner.md](pypy-solver-runner.md), then
-   [memory-measurement.md](memory-measurement.md) (its memory limit, MEM-8,
-   last).
+1. **Features:** [memory-measurement.md](memory-measurement.md) (its
+   memory limit, MEM-8, last).
 
 Free to do at any point, when there is time or when the code is being
 touched anyway:
@@ -42,8 +40,7 @@ touched anyway:
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings, solver simplification | nothing |
 | [../reviews/findings.md](../reviews/findings.md) | findings made while working | nothing |
-| [pypy-solver-runner.md](pypy-solver-runner.md) | solvers in a child process, optionally under PyPy | nothing |
-| [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | the solver runner |
+| [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | nothing |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | the audit's CDCL clean-up |
 
 To list every open item, the findings above included: `grep -n "^- \[ \]" docs/reviews/*.md docs/plans/*.md`.

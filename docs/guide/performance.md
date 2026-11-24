@@ -263,7 +263,7 @@ must cover.
 Measured on 2026-11-23: Windows 11, AMD Ryzen 7 4800H (8 cores, 16 logical
 CPUs), 16 GB, CPython 3.13.14 as the parent and the child. The PyPy rows
 (PyPy 8.0.1, Python 3.12.15, as the child) come from a second run on the same
-machine and day ([RUNNER-10](../plans/pypy-solver-runner.md)); their "without
+machine and day ([RUNNER-10](../plans/done/pypy-solver-runner.md)); their "without
 the setting" column is that run's own.
 
 | Run | Without the setting | With the setting | Window |
@@ -298,10 +298,73 @@ What the numbers say:
   because PyPy parses the JSON and counts the variables faster. Slower
   machines and busy cores (`workers` above 1) were not measured.
 
-Two follow-ups would remove most of the cost at the limit: a binary request
-format instead of JSON ([RUNNER-12](../plans/pypy-solver-runner.md)), and
-counting the variables once instead of twice
-([F6](../reviews/findings.md)).
+### What did not make the request faster
+
+Two ways to make the child read its request faster were built and measured
+on 2026-11-24 (same machine, CPython 3.13.14, PyPy 8.0.1 with Python
+3.12.15), and both were dropped. The table above measures a different
+thing (the child's whole start-up window) and is unchanged by them. Every
+number below reads the same 2,000,000 clauses of three literals, one run at
+a time, with nothing else running.
+
+**The binary format (RUNNER-12).** Time to turn the request line back into
+clause lists, one parse each, in a process that had just built the formula
+and let it go. "Today" is what the child does (`json.loads` of the JSON
+line); "packed" is the clause lengths and the literals as 4-byte integers in
+base64, read with the `array` module:
+
+| Interpreter, garbage collector | Today (JSON) | Packed | Packed against today |
+|---|---:|---:|---:|
+| CPython, collector on (as the child runs) | 1.21 s | 3.53 s | 2.9x slower |
+| CPython, collector off | 0.77 s | 1.00 s | 1.3x slower |
+| PyPy, collector on (as the child runs) | 1.32 s | 1.51 s | 1.1x slower |
+| PyPy, collector off | 1.10 s | 1.31 s | 1.2x slower |
+
+**The collector off while parsing (F12).** First the parse with what comes
+right after it in a child (counting the variables) and a solver-like burst
+of 1,000,000 new lists, in fresh processes laid out as the child (its
+modules imported, the request read from stdin), the range of two runs; then
+the child's whole window from `scripts/child_cost.py --big-runs 7`, median
+of seven runs, the two versions run one right after the other:
+
+| Measure | Today | Collector off during the parse | Difference |
+|---|---:|---:|---:|
+| CPython: parse, count, 1,000,000 lists | 3.76-3.96 s | 3.72-3.86 s | about 0.1 s |
+| PyPy: parse, count, 1,000,000 lists | 2.03-2.08 s | 2.05-2.17 s | none |
+| CPython: the child's window | 2.88 s | 2.84 s | 0.04 s |
+| PyPy: the child's window | 2.36 s | 2.42 s | 0.06 s slower |
+
+The same CPython measure with `gc.freeze()` right after the parse took
+2.86-2.94 s, about 0.9 s less than today; PyPy has no `gc.freeze`.
+
+- **A binary request format** ([RUNNER-12](../plans/done/pypy-solver-runner.md),
+  dropped): the request shrinks from 53.6 MB to 42.7 MB, but most of the
+  parse is building the 2,000,000 clause lists the solvers take, and both
+  formats pay that. Reading the numbers with the `array` module is fast;
+  slicing them into lists is not. The packed form was slower than
+  `json.loads` on both interpreters, with the garbage collector on or off,
+  and on CPython with the collector on it was three times slower. Encoding
+  in the parent did not gain either (1.08 s against 0.91 s for
+  `json.dumps`).
+- **The collector off while parsing** ([F12](../reviews/findings.md),
+  dropped): the parse gets 0.2 to 0.4 s faster, but the clause lists stay
+  in the youngest generation and the first collection after the parse scans
+  them all, so the time comes back. The child's window agreed: 2.84 s with
+  the change and 2.88 s without on CPython, 2.42 s and 2.36 s on PyPy
+  (`scripts/child_cost.py --big-runs 7`, alone, one run right after the
+  other). The window moves from day to day on this machine: 4.2 s in the
+  table above (2026-11-23), 3.6 s in a three-run baseline on 2026-11-24 and
+  2.9 s in the seven-run pair later that day, with the same code. Compare
+  windows only within one sitting.
+- **`gc.freeze()` once the formula is built** does help CPython, mostly
+  after the parse: every later full collection skips the formula's lists,
+  so new lists are built three times faster. It would change CPython solve
+  times on big formulas, in-process too, so it waits for a decision
+  ([F13](../reviews/findings.md)).
+
+Of the about 5 s the child adds at the limit, about half is counting the
+variables a second time, in the child ([F6](../reviews/findings.md)); most
+of the rest is encoding and parsing the JSON (0.9 s and 1.4 s).
 
 ## Ideas for later
 

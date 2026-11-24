@@ -675,20 +675,16 @@ gets a dated file of its own in this folder instead, like
     parsed; and `scripts/child_cost.py` shows a shorter window at the
     clause limit, with the numbers in `docs/guide/performance.md`.
 
-- [ ] **F13. CPython's garbage collector rescans the formula during a solve**
-  (added 2026-11-24, found while RUNNER-12)
+- [x] **F13. CPython's garbage collector rescans the formula during a solve**
+  (added 2026-11-24, found while RUNNER-12) - Done 2026-11-24. 100-Queens
+  (1.6 million clauses) runs about 17% faster; the other measured cases
+  stay within noise (`docs/guide/performance.md`).
   - **Difficulty:** hard (changes the reported solve times of the reference
     interpreter; touches `sat_core/solver_process.py` if the child does it too)
-  - **Needs decision:** whether to freeze the formula. It does not change
-    any search or result, but it makes CPython solve times on big formulas
-    shorter than the ones measured so far, so tables measured before and
-    after it do not compare. Options: (a) freeze in `run_solver`, in-process
-    and in the child, and re-measure the tables that are reported; (b) freeze
-    only in the child, which helps only a CPython child (tests and
-    measurements; the app's child is PyPy, which has no `gc.freeze`);
-    (c) leave it. Recommendation: (a), measured with
-    `scripts/solver_timings.py` before and after, if the gain holds on real
-    solves.
+  - **Decided (2026-11-24):** (a), freeze in `run_solver`, in-process and
+    in the child, measured with `scripts/solver_timings.py` before and after.
+    (b) would have helped no app run: a job runs its solvers in-process on
+    CPython unless it asks for PyPy, and only a PyPy job uses the child.
   - **Problem:** CPython's collector (3.13 and earlier; 3.14's incremental
     collector works differently, so re-measure there) runs a full
     collection whenever the objects that survived since the last one
@@ -706,4 +702,28 @@ gets a dated file of its own in this folder instead, like
     conflict counts before and after, with the times of both runs in
     `docs/guide/performance.md`; and a test shows the formula is frozen
     while the solver runs and unfrozen afterwards.
+
+- [ ] **F14. The collector still scans the solvers' own copies of the formula**
+  (added 2026-11-24, found by the review of F13)
+  - **Difficulty:** hard (touches every solver's setup in `solvers/`, and
+    changes CPython solve times)
+  - **Problem:** F13 freezes the objects that exist when `run_solver`
+    calls the solver, the input clause lists among them. Every solver then
+    copies the formula into its own structures (CDCL: `_normalise_formula`
+    makes a new list per clause, then a `Clause` object with its own list
+    and the watch lists), and those are made after the freeze, so each full
+    collection during the search still scans two or more copies of the
+    formula. After F13 only 100-Queens (1.6 million clauses) got clearly
+    faster, about 17%, against the threefold gain measured for building
+    lists next to a frozen formula (`docs/guide/performance.md`, "The
+    garbage collector and big formulas"). Not measured: how much of the
+    rest a later freeze would win.
+  - **Fix:** first measure: freeze once a solver's clause database is
+    built (a hook the solver calls after its setup, or the freeze moved
+    there), on 100-Queens and Sudoku 25x25, freeze off and on in turn. If
+    it gains, build that hook; the unfreeze stays in `run_solver`.
+  - **Done when:** `scripts/solver_timings.py` shows the same conflict
+    counts, and a test shows the clause objects a solver searches with are
+    frozen during the search; or the item is dropped with the measured
+    numbers when the later freeze gains nothing over F13.
 

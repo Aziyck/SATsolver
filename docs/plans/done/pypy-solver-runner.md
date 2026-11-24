@@ -1,17 +1,17 @@
 # Plan: run the solvers in a child process, optionally under PyPy
 
-- **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
-  and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
-  RUNNER-7 to RUNNER-10 done 2026-11-23,
-  RUNNER-11 done 2026-11-24)
+- **Status:** done (2026-11-24). RUNNER-1 and RUNNER-2 done 2026-11-20,
+  RUNNER-3 and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done
+  2026-11-22, RUNNER-7 to RUNNER-10 done 2026-11-23, RUNNER-11 done and
+  RUNNER-12 dropped 2026-11-24
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
-- **Related:** [run metadata](done/run-metadata.md) (how a result says which
-  interpreter ran it), [memory measurement](memory-measurement.md) (reuses the
-  child process), [solver optimisations](solver-optimisations.md),
-  [Solver performance](../guide/performance.md),
-  [Architecture](../guide/architecture.md)
-- Item format, difficulty and closing rule: [README.md](README.md)
+- **Related:** [run metadata](run-metadata.md) (how a result says which
+  interpreter ran it), [memory measurement](../memory-measurement.md) (reuses the
+  child process), [solver optimisations](../solver-optimisations.md),
+  [Solver performance](../../guide/performance.md),
+  [Architecture](../../guide/architecture.md)
+- Item format, difficulty and closing rule: [README.md](../README.md)
 
 ## Goal
 
@@ -45,7 +45,7 @@ honest per-run memory number possible (see the memory plan).
     The request is one line; stdin then stays open for the whole run as the
     child's lifeline: the child ends when stdin reaches its end, so a parent
     that dies takes its child with it
-    ([ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md)).
+    ([ADR 0006](../../adr/0006-the-solver-child-ends-with-its-stdin.md)).
   - Out, one JSON object per line on stdout: `{"type": "log", "message"}` for
     each log line, then one
     `{"type": "result", "status", "solution", "stats", "error", "elapsed"}`
@@ -68,7 +68,7 @@ honest per-run memory number possible (see the memory plan).
 - **Data size:** at the 2,000,000-clause limit the JSON input is a few tens of
   MB (53.6 MB for three literals per clause). Measured in RUNNER-7: about 5 s
   more per run there, see
-  [Solver performance](../guide/performance.md#the-solver-child-process).
+  [Solver performance](../../guide/performance.md#the-solver-child-process).
 
 ## Tasks
 
@@ -182,7 +182,7 @@ installed.
     to build the solvers' lists from the buffer, and that is most of the
     parse cost, and a killed child can leak the segment on POSIX.
   - **Built as:** `scripts/child_cost.py` measures both, and the numbers are
-    in [Solver performance](../guide/performance.md#the-solver-child-process):
+    in [Solver performance](../../guide/performance.md#the-solver-child-process):
     0.3 s per run (almost all interpreter start), 5 s more per run at the
     clause limit, a start-up window of 4.5 s at worst there. PyPy was not
     installed. `START_UP_SECONDS` stays at 60 s, with the reason next to it:
@@ -227,7 +227,7 @@ installed.
     under a second once the child's start-up is counted. `child_cost.py`
     under PyPy: 0.35 s per run, window 3.3 s at most at the clause limit,
     so `START_UP_SECONDS` stays at 60 s. Numbers in
-    [Solver performance](../guide/performance.md#running-the-solvers-under-pypy).
+    [Solver performance](../../guide/performance.md#running-the-solvers-under-pypy).
   - **Done when:** the measurement table is re-run with the app itself on the
     machine used for the thesis, and `docs/guide/performance.md` carries those
     numbers with the machine's metadata.
@@ -259,7 +259,10 @@ installed.
     real child remains; the other tests in `tests/test_solver_process.py`
     pass unchanged.
 
-- [ ] **RUNNER-12. A binary request format instead of JSON**
+- [x] **RUNNER-12. A binary request format instead of JSON** - Dropped
+  2026-11-24: built and measured, no faster than JSON in the child. Most of
+  the parse is building the clause lists, which both formats pay; the
+  `array` module only speeds up reading the numbers.
   - **Difficulty:** hard (`sat_core/solver_process.py`)
   - **Blocked by:** RUNNER-11
   - **What:** at the clause limit, encoding the request (`json.dumps`,
@@ -272,6 +275,15 @@ installed.
   - **Done when:** the tests of `tests/test_solver_process.py` pass
     unchanged, and `scripts/child_cost.py` shows a shorter window at the
     clause limit, with the new numbers in `docs/guide/performance.md`.
+  - **Measured (2026-11-24):** one JSON line with the clause lengths and the
+    literals as 4-byte integers in base64 (42.7 MB instead of 53.6 MB at
+    2,000,000 clauses of three literals). Parsing it took 3.53 s against
+    1.21 s for `json.loads` (CPython 3.13 child) and 1.51 s against 1.32 s
+    (PyPy 3.12); with the garbage collector off during the parse, 1.00 s
+    against 0.77 s and 1.31 s against 1.10 s. Encoding in the parent: 1.08 s
+    against 0.91 s for `json.dumps`. Numbers in
+    [Solver performance](../../guide/performance.md#the-solver-child-process);
+    the garbage collector part became F12 (dropped) and F13.
 
 ## Measurements (2026-10-19)
 
@@ -361,6 +373,12 @@ for case in json.load(open(sys.argv[2])):
 
 ## Rules for results (thesis)
 
+Written while the setting was global. Since
+[ADR 0007](../../adr/0007-each-job-chooses-its-interpreter.md) each job
+chooses its interpreter, so "the same interpreter" below means within one
+job; the rules for reporting are in
+[Benchmarking](../../guide/benchmarking.md#checklist-for-report-quality-experiments).
+
 - Keep CPython as the reference interpreter for reported results.
 - The setting is global, so every solver in a benchmark uses the same
   interpreter. Never compare a PyPy run of one solver with a CPython run of
@@ -389,13 +407,13 @@ for case in json.load(open(sys.argv[2])):
   and the machine on every run costs 70-95 ms. The interpreter cannot change
   within a job, so one probe at job start gives the same answer.
 - **mypyc, Cython, Numba:** see the
-  [solver optimisations plan](solver-optimisations.md#considered-and-rejected).
+  [solver optimisations plan](../solver-optimisations.md#considered-and-rejected).
 - **A watchdog thread in the child that watches its parent's pid
   (RUNNER-5's first fix):** needs a different mechanism per platform, an
   extra variable to name the parent past a launcher, and still misses a
   parent behind a POSIX wrapper that forks. See
-  [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md).
+  [ADR 0006](../../adr/0006-the-solver-child-ends-with-its-stdin.md).
 - **A Windows job object (and `PR_SET_PDEATHSIG` on Linux) set up by the
   parent:** two platform-specific mechanisms, none for macOS, and
   `PR_SET_PDEATHSIG` fires when the starting thread ends, not the process.
-  See [ADR 0006](../adr/0006-the-solver-child-ends-with-its-stdin.md).
+  See [ADR 0006](../../adr/0006-the-solver-child-ends-with-its-stdin.md).

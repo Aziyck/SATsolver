@@ -47,7 +47,7 @@ jobs:
         run: python scripts/benchmark_cdcl.py
 
   pypy:
-    # The server stays on CPython; only the solvers run under PyPy (docs/plans/pypy-solver-runner.md).
+    # The server stays on CPython; only the solvers run under PyPy (docs/plans/done/pypy-solver-runner.md).
     name: Solvers under PyPy
     runs-on: ubuntu-latest
     steps:

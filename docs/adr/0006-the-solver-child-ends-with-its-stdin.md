@@ -7,7 +7,7 @@
 
 With `WIZSAT_SOLVER_PYTHON` set, every solver run happens in a child process
 that `subprocess` starts (`sat_core/solver_process.py`,
-[plan](../plans/pypy-solver-runner.md)). The parent, `run_in_child`, kills
+[plan](../plans/done/pypy-solver-runner.md)). The parent, `run_in_child`, kills
 the child when a run is cancelled, skipped or over its time limit. A parent
 that is itself ended never gets to: the manager's force stop and
 `shutdown()` terminate job processes, and a pool worker whose job died

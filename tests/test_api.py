@@ -444,7 +444,7 @@ def work(stats):
 
 
 class SolverChildTests(ApiTestCase):
-    """Jobs and benchmarks with WIZSAT_SOLVER_PYTHON set (RUNNER-5, docs/plans/pypy-solver-runner.md)."""
+    """Jobs and benchmarks with WIZSAT_SOLVER_PYTHON set (RUNNER-5, docs/plans/done/pypy-solver-runner.md)."""
 
     SOLVE = {"problem": "random_3sat", "params": {"variables": 30, "ratio": 4.26, "mode": "random", "seed": 2}, "solver": "cdcl"}
     # What a job sends to run on the setting's interpreter.

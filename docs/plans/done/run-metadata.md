@@ -5,7 +5,7 @@
   [ADR 0004](../../adr/0004-where-the-run-environment-is-read.md).
 - **Written:** 2026-10-19 (as Part 1 of the PyPy plan); its own plan since
   2026-11-13
-- **Related:** [PyPy solver runner](../pypy-solver-runner.md) (shows the
+- **Related:** [PyPy solver runner](pypy-solver-runner.md) (shows the
   interpreter through this metadata), [memory measurement](../memory-measurement.md),
   [Benchmarking](../../guide/benchmarking.md)
 - Item format, difficulty and closing rule: [README.md](../README.md)

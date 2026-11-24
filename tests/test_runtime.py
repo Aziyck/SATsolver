@@ -31,7 +31,7 @@ def log_messages(events):
     return [event.message for event in events if event.type == EVENT_LOG]
 
 
-# The solver runner (docs/plans/pypy-solver-runner.md): with this setting every
+# The solver runner (docs/plans/done/pypy-solver-runner.md): with this setting every
 # run happens in a child process of that interpreter. The tests use their own
 # interpreter, so no PyPy is needed.
 IN_CHILD = {"WIZSAT_SOLVER_PYTHON": sys.executable}

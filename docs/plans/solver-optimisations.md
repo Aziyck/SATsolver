@@ -2,7 +2,7 @@
 
 - **Status:** proposed, not started
 - **Written:** 2026-10-19, against commit `9e11958`; tasks rewritten 2026-11-13
-- **Related:** [PyPy solver runner](pypy-solver-runner.md),
+- **Related:** [PyPy solver runner](done/pypy-solver-runner.md),
   [memory measurement](memory-measurement.md),
   [2026-10-16 audit](../reviews/2026-10-16-audit.md) (A2, B6-B9),
   [Solver performance](../guide/performance.md)

@@ -611,40 +611,37 @@ class ChildFailuresBecomeErrorTests(unittest.TestCase):
         self.assert_error(result, messages, "ended without a result", "the last words")
 
     def test_a_child_that_prints_a_broken_line(self):
-        # Each child then hangs: the parent must not wait for it to end.
+        # Which lines are broken is tested against the parser alone
+        # (tests/test_solver_protocol.py); here three of them go through a
+        # real child, to show the parent kills it and reports an ERROR. Each
+        # child then hangs: the parent must not wait for it to end. A line is
+        # given as the expression the child prints; the long one is built in
+        # the child (too long for a command line), and the message must quote
+        # only its start.
         broken_lines = {
-            "not JSON": "not json at all",
-            "JSON that is not an object": "[1, 2]",
-            "an unknown type": json.dumps({"type": "progress"}),
-            "a log line without its message": json.dumps({"type": "log"}),
-            "a result without its fields": json.dumps({"type": "result", "status": "SAT"}),
-            "a result with an unknown status": json.dumps(
-                {"type": "result", "status": "MAYBE", "solution": None, "stats": {}, "error": None, "elapsed": 0}
+            "not JSON": ("not json at all", repr("not json at all")),
+            "a result with a model for an UNSAT status": (
+                result_line(status="UNSAT", solution={"1": True}),
+                repr(result_line(status="UNSAT", solution={"1": True})),
             ),
-            "a model with a variable that is not a number": result_line(solution={"x": True}),
-            "a model with a value that is not a boolean": result_line(solution={"1": "yes"}),
-            "a model with an UNSAT status": result_line(status="UNSAT", solution={"1": True}),
-            "an elapsed time that is NaN": result_line(elapsed=float("nan")),
-            "an error that is not a string": result_line(error={"x": 1}),
-            "a statistic that is not a scalar": result_line(stats={"conflicts": [1, 2]}),
+            "a line nested too deeply": ("[[[[[[[[", "'[' * 100000 + ']' * 100000"),
         }
-        # Built in the child: too long for a command line. json raises RecursionError on it, not ValueError.
-        deep = "'[' * 100000 + ']' * 100000"
-        for name, line, expression in [(name, line, repr(line)) for name, line in broken_lines.items()] + [
-            ("a line nested too deeply", "[[[[[[[[", deep)
-        ]:
+        for name, (line, expression) in broken_lines.items():
             with self.subTest(name):
                 script = (
                     "import sys, time\n"
                     "sys.stdin.readline()\n"
-                    f"print({expression}, flush=True)\n"
                     "sys.stderr.write('stderr of the broken child\\n'); sys.stderr.flush()\n"
+                    f"print({expression}, flush=True)\n"
                     "time.sleep(60)\n"
                 )
                 started = time.perf_counter()
                 result, messages, children = self.run_solver_with(script=script)
 
-                self.assert_error(result, messages, "not part of the protocol", line[:20])
+                self.assert_error(result, messages, "not part of the protocol", line[:20], "stderr of the broken child")
+                self.assertLess(len(result.error), 3000)
+                if name == "a line nested too deeply":
+                    self.assertIn("...'", result.error)
                 self.assertLess(time.perf_counter() - started, 10)
                 self.assertIsNotNone(children[-1].poll(), "the child process is still running")
 

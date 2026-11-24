@@ -2,7 +2,8 @@
 
 - **Status:** in progress (RUNNER-1 and RUNNER-2 done 2026-11-20, RUNNER-3
   and RUNNER-4 done 2026-11-21, RUNNER-5 and RUNNER-6 done 2026-11-22,
-  RUNNER-7 to RUNNER-10 done 2026-11-23)
+  RUNNER-7 to RUNNER-10 done 2026-11-23,
+  RUNNER-11 done 2026-11-24)
 - **Written:** 2026-10-19; broken into tasks 2026-11-13, when the metadata
   part moved to its own plan
 - **Related:** [run metadata](done/run-metadata.md) (how a result says which
@@ -231,7 +232,7 @@ installed.
     machine used for the thesis, and `docs/guide/performance.md` carries those
     numbers with the machine's metadata.
 
-- [ ] **RUNNER-11. The child protocol in its own pure module**
+- [x] **RUNNER-11. The child protocol in its own pure module** - Done 2026-11-24.
   - **Difficulty:** medium
   - **Not hard:** it moves pure code only (the message shapes and the
     parent's parser); `run_in_child`'s read loop, threads and kill paths stay
@@ -247,6 +248,12 @@ installed.
     the child writes and the parser the parent uses (after RUNNER-4,
     `_parse_line` and `RESULT_FIELDS`). Both sides in `solver_process.py`
     import it, and `tests/test_layers.py` places it in the engine layer.
+  - **Built as:** `sat_core/solver_protocol.py` has `RESULT_FIELDS`,
+    `BrokenLine`, `parse_line`, `log_message`, `result_message` and
+    `stopped_result` (the line the parent makes when it kills the child);
+    `solver_process.py` imports them on both sides. The broken-line cases are
+    in `tests/test_solver_protocol.py`; `tests/test_solver_process.py` keeps
+    two through a real child (not JSON, a model with an UNSAT status).
   - **Done when:** the broken-line cases of RUNNER-4 are tested against the
     parser directly, without a child process; one broken-line test through a
     real child remains; the other tests in `tests/test_solver_process.py`

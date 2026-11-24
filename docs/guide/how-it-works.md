@@ -442,8 +442,16 @@ parent". Two things replace it:
   as one line on stdin; the child writes one line per log message on stdout,
   then one result line (status, model, statistics, error, elapsed), and
   exits. stderr carries only error text, which the parent reads on its own
-  thread and quotes when a run ends without a result. The full format is in
-  the docstring of `sat_core/solver_process.py`.
+  thread and quotes when a run ends without a result. The lines are built and
+  checked in `sat_core/solver_protocol.py` (`log_message`, `result_message`,
+  `parse_line`), apart from the processes: the parent accepts a line only
+  through `parse_line`, which rejects anything that is not JSON, has an
+  unknown type, lacks a result field, or carries a model with a status other
+  than SAT, and turns the model's string keys back into ints. A rejected line
+  kills the child and the run ends as `ERROR`, unless a stop was already
+  requested: then the run ends with the stop's status. The processes, pipes and
+  threads are in `sat_core/solver_process.py`, whose docstring tells how the
+  two fit.
 
 The watchdog itself is a daemon *thread*, a third use of the word: a thread
 that does not keep its process alive.

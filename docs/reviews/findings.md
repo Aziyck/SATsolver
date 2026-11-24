@@ -575,7 +575,7 @@ gets a dated file of its own in this folder instead, like
     and a test that runs one job through `JobManager` and shuts it down sees
     no leaked semaphore.
 
-- [ ] **F9. On macOS, the solver child's peak memory may be its parent's**
+- [x] **F9. On macOS, the solver child's peak memory may be its parent's** - Done 2026-11-24.
   (added 2026-11-23, found while MEM-3; not measured, no Mac here)
   - **Difficulty:** easy (a measurement first; the fix depends on it)
   - **Problem:** on Linux, `ru_maxrss` in a child started by `subprocess`
@@ -591,6 +591,11 @@ gets a dated file of its own in this folder instead, like
     `ctypes`) or report `None` there.
   - **Done when:** the growth test passes on macOS with the 150 MB parent,
     and its `darwin` exception is removed.
+  - **Measured on macOS:** with a 150 MiB allocation held in the parent, the
+    child's `ru_maxrss` grew from 20.0 to 70.0 MiB. The small, large, and
+    small solver runs peaked at 22.2, 318.0, and 22.3 MiB. Both tests passed
+    with CPython 3.14. The growth test now uses the same parent allocation
+    on every platform.
 
 - [x] **F10. An old PyPy job whose interpreter probe timed out counts as Python** - Done 2026-11-23.
   (added 2026-11-23, found while INTERP-4, in the review; the rule is INTERP-2's)

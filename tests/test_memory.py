@@ -38,10 +38,8 @@ class PeakMemoryTests(unittest.TestCase):
         self.assertTrue(1 < peak < 1000, peak)
 
     def test_the_peak_grows_by_the_size_of_a_50_mb_allocation(self):
-        # Started from a process that has used 150 MB: on Linux, getrusage's ru_maxrss
-        # carries the parent's peak into the child, which would hide the growth (MEM-1).
-        # Not on macOS: whether its ru_maxrss inherits too is unmeasured (memory plan, MEM-1).
-        parent_peak = bytearray(0 if sys.platform == "darwin" else 150 * 1024 * 1024)
+        # A child that inherits the parent's 150 MiB peak would hide its own growth.
+        parent_peak = bytearray(150 * 1024 * 1024)
         for i in range(0, len(parent_peak), 4096):
             parent_peak[i] = 1
         before, after = in_fresh_process(GROWTH)

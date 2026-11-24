@@ -58,8 +58,8 @@ after each run. For the child, run the same code with `subprocess.run([sys.execu
        (table above). `resource.getrusage(...).ru_maxrss`, also kilobytes, is
        only the fallback when `/proc` cannot be read; there a child can still
        report its parent's peak.
-     - macOS: the same call returns **bytes**. Convert by platform; this is an
-       easy bug.
+     - macOS: `resource.getrusage(...).ru_maxrss` returns bytes. In F9 the
+       child reported its own peak with a 150 MiB allocation held in the parent.
      - Windows: `GetProcessMemoryInfo` from `psapi.dll` through `ctypes`,
        field `PeakWorkingSetSize` (bytes).
    - Depends on the interpreter: PyPy uses memory differently from CPython, so
@@ -157,8 +157,8 @@ With every run in its own child, a per-run limit becomes possible:
     with `getrusage` as the fallback, because `ru_maxrss` in a child reports
     its parent's peak (measured, see "Why the obvious ways mislead").
   - **Built as:** `peak_memory_mb()` in `sat_core/memory.py` (base layer).
-    Whether macOS's `ru_maxrss` has the same inheritance was not measured
-    (no macOS here); MEM-3 should check it before relying on it.
+    [F9](../reviews/findings.md) verified the macOS `ru_maxrss` path with a
+    large parent allocation.
     The unit is MiB (1024**2 bytes), like `ram_total_gb` in GiB; the stats
     keep the `_mb` names. The growth test allocates 50 MB in a fresh
     interpreter: the peak never falls, so in the test process an earlier
@@ -207,7 +207,8 @@ With every run in its own child, a per-run limit becomes possible:
     "Memory before the solver", since a child is one run, not a job.
     Measured (`ChildMemoryTests`): a small case, then 300,000 clauses, then
     the small case again; the second small peak is within 5 MiB of the
-    first, and the large one over 20 MiB above. macOS was not checked (F9).
+    first, and the large one over 20 MiB above. The same test passed on macOS
+    in [F9](../reviews/findings.md).
     Since INTERP-2 a job uses the child when its request names `pypy`;
     `solve_job` still decides from `WIZSAT_SOLVER_PYTHON`, which
     `choose_solver_python` sets or clears before the job runs.

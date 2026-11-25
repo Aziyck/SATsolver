@@ -51,9 +51,11 @@ so, and go on only when the owner confirms.
 
 **The fork.** A hard item gets one more read, of the item and for a plan
 task its Design: is a choice left open that would need an ADR (hard to
-reverse, or chosen over a real alternative)? If so, ask with
-`AskUserQuestion` before going red: two or three options, what each costs,
-the recommended one first. For a choice about how processes or messages
+reverse, or chosen over a real alternative)? If so, end your turn with the
+question as plain text before going red: two or three options, what each
+costs, the recommended one first. Go on only after the owner has chosen; a
+follow-up question from the owner is answered, not taken as a choice. For a
+choice about how processes or messages
 flow, also write a mermaid diagram to a throwaway `.md` in the scratchpad
 (`mkdir -p` it first) for the owner to open in the preview, and delete it
 afterwards. A hard item with no open fork goes on without asking.

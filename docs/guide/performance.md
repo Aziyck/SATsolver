@@ -117,6 +117,79 @@ MOMS and DLIS remain slow on large formulas by design: they look at every
 clause at every decision. That cost is part of what comparing them with
 VSIDS shows.
 
+## The garbage collector and big formulas
+
+CPython's cyclic garbage collector (3.13 and earlier) runs a full collection
+whenever the objects that survived since the last one exceed a quarter of
+the long-lived ones, and each full collection scans every object it tracks,
+every clause list of the formula among them. A solver that builds lists on a
+formula of a million clauses pays that scan again and again, and finds
+nothing: lists of ints cannot be part of a cycle. Since
+[F13](../reviews/findings.md), `run_solver` calls `gc.freeze()` just before
+the solver starts, after any renumbering, so the collector leaves alone
+every object that exists at that point, and `gc.unfreeze()` when the solver
+returns or raises, because a job process or a pool worker goes on after the
+run. When something is frozen already, it leaves the freeze alone. The
+search does not change. PyPy has no `gc.freeze`, and a PyPy child runs as
+before. CPython 3.14 collects incrementally, so its gain may differ; it was
+not measured.
+
+Only the input's lists are frozen. Each solver copies the formula into its
+own structures when it starts (CDCL cleans every clause into a new list,
+then wraps it in a `Clause` object with its watches), and those copies are
+made after the freeze, so the collector still scans them
+([F14](../reviews/findings.md)).
+
+Measured on 2026-11-24: Windows 11, AMD Ryzen 7 4800H, CPython 3.13.14,
+one run at a time with nothing else running. First
+`scripts/solver_timings.py` (60 s limit) before and after the change:
+
+| Instance | Before | After | Conflicts |
+|---|---:|---:|---:|
+| 3-SAT n=150 ratio 4.26 | SAT, 0.03 s | SAT, 0.03 s | 169 |
+| 3-SAT n=200 ratio 4.26 | SAT, 7.93 s | SAT, 5.67 s | 13,417 |
+| 3-SAT n=250 ratio 4.26 | timeout (972 per s) | timeout (1,134 per s) | |
+| 3-SAT n=120 ratio 5.5 | UNSAT, 0.03 s | UNSAT, 0.03 s | 172 |
+| Sudoku 16x16, 40% givens | SAT, 0.70 s | SAT, 0.53 s | 16 |
+| Sudoku 25x25, 40% givens | SAT, 52.69 s | SAT, 49.98 s | 40,804 |
+| 40-Queens | SAT, 0.56 s | SAT, 0.55 s | 220 |
+| 60-Queens | SAT, 2.65 s | SAT, 2.30 s | 403 |
+| 3-coloring G(60, d=4.5) | UNSAT, 0.01 s | UNSAT, 0.01 s | 33 |
+| 3-SAT n=100, CDCL DLIS | SAT, 0.03 s | SAT, 0.02 s | 25 |
+| 3-SAT n=100, DPLL | SAT, 0.18 s | SAT, 0.17 s | 2,549 |
+| 25-Queens, DPLL | SAT, 3.31 s | SAT, 3.40 s | 7,255 |
+
+Every run that finished made the same number of conflicts; the n=250 runs
+stop at the limit, so their counts only show the speed. One pair of runs
+is not enough to tell a gain from noise, so the bigger cases were run again
+in fresh processes, the freeze off and on in turn, twice each (the two
+runs of each):
+
+| Instance | Clauses | Freeze off | Freeze on |
+|---|---:|---:|---:|
+| CDCL, 100-Queens | 1,646,800 | 11.26 s, 11.31 s | 9.38 s, 9.46 s |
+| CDCL, Sudoku 25x25 40% seed 1 | 750,875 | 48.66 s, 58.58 s | 50.61 s, 51.36 s |
+| CDCL, 3-SAT n=200 r=4.26 seed 1 | 852 | 8.07 s, 7.20 s | 8.03 s, 6.86 s |
+| CDCL, 3-SAT n=250 r=4.26 seed 2, conflicts per second in 60 s | 1,065 | 1,107, 1,135 | 1,106, 1,163 |
+| DPLL, 25-Queens | 24,825 | 3.19 s, 3.13 s | 3.22 s, 3.13 s |
+| WalkSAT, planted n=100,000 r=4.2, 1,000,000 flips | 420,000 | 32.07 s, 26.82 s | 28.18 s, 32.89 s |
+
+What the numbers say:
+
+- **Only the largest formula gains clearly**: 100-Queens, 1.6 million
+  clauses, runs about 17% faster on both repeats. The threefold gain F13
+  measured came from building a million new lists right after a formula of
+  2,000,000 clauses, with nothing else tracked; in a real solve the
+  solver's own copies of the formula are still scanned, it spends most of
+  its time elsewhere, and on smaller formulas each full collection costs
+  less.
+- **Everything else is within the noise** of this machine, which is wider
+  than the effect: the same Sudoku 25x25 run took 48.7 s and 58.6 s with
+  the same code. The 7.93 s against 5.67 s of the first table did not repeat.
+- **The other tables on this page still hold.** Their instances are the
+  ones above, where the change is lost in the noise, so they were not
+  measured again.
+
 ## Local search: why WalkSAT and ProbSAT used to lose
 
 On satisfiable formulas you would expect local search to beat CDCL. In the
@@ -358,9 +431,9 @@ The same CPython measure with `gc.freeze()` right after the parse took
   windows only within one sitting.
 - **`gc.freeze()` once the formula is built** does help CPython, mostly
   after the parse: every later full collection skips the formula's lists,
-  so new lists are built three times faster. It would change CPython solve
-  times on big formulas, in-process too, so it waits for a decision
-  ([F13](../reviews/findings.md)).
+  so new lists are built three times faster. `run_solver` now does it for
+  every run, in-process and in the child
+  ([the collector and big formulas](#the-garbage-collector-and-big-formulas)).
 
 Of the about 5 s the child adds at the limit, about half is counting the
 variables a second time, in the child ([F6](../reviews/findings.md)); most

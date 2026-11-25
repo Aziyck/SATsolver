@@ -10,10 +10,12 @@ of crashing the whole job, and strips bulky internals from the stats.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import gc
 import os
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from sat_core.models import (
     STATUS_CANCELLED,
@@ -714,6 +716,46 @@ def parse_interpreter(raw: dict[str, Any]) -> str:
     return value
 
 
+# Objects the interpreter itself had frozen when this module was imported (see below).
+_INTERPRETER_FROZEN = gc.get_freeze_count() if hasattr(gc, "get_freeze_count") else 0
+
+
+@contextmanager
+def collector_skips_formula() -> Iterator[None]:
+    """
+    Keep CPython's cyclic garbage collector off the objects that exist now, the input formula among them.
+
+    The collector runs a full collection whenever the objects that survived
+    since the last one exceed a quarter of the long-lived ones, and each full
+    collection scans every tracked object. A solver that builds lists on a
+    big formula pays the scan of the input's clause lists again and again,
+    for nothing: lists of ints cannot be part of a cycle (F13). The copies a
+    solver makes of the formula during its own setup are made after the
+    freeze and are still scanned (F14).
+
+    gc.freeze() moves every tracked object out of the collector's reach,
+    cyclic garbage left by earlier work included: it is kept until the run
+    ends instead of a gc.collect() first, which would cost the very scan
+    this avoids. gc.unfreeze() hands them back, because a job process or a
+    pool worker goes on after the run. The freeze is process-wide and does
+    not nest, so when a caller has frozen objects of its own this leaves them
+    alone. A caller's freeze is a count above _INTERPRETER_FROZEN: Python
+    3.12 starts with a few hundred objects frozen by itself (375 on 3.12.3,
+    3.13 none), and comparing with 0 turned this off on 3.12. Its unfreeze
+    thaws those too; they are then scanned like any other object. PyPy has
+    no gc.freeze, and its collector does not rescan old objects this way.
+    """
+
+    if not hasattr(gc, "freeze") or gc.get_freeze_count() > _INTERPRETER_FROZEN:
+        yield
+        return
+    gc.freeze()
+    try:
+        yield
+    finally:
+        gc.unfreeze()
+
+
 def run_solver(
     clauses: list[list[int]],
     solver: str,
@@ -806,7 +848,8 @@ def run_solver(
                 f"Variables renumbered 1..{len(original)} for solving (the largest number is {largest}); "
                 "solver logs show the new numbers.",
             )
-        solution, raw_stats = spec.runner(solver_clauses, parsed, log_options, event_callback, token)
+        with collector_skips_formula():
+            solution, raw_stats = spec.runner(solver_clauses, parsed, log_options, event_callback, token)
     except Exception as exc:  # noqa: BLE001 - reported as an ERROR status
         elapsed = time.perf_counter() - started
         message = _error_message(spec, exc)

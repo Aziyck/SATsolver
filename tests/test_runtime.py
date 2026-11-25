@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import gc
 import os
 import subprocess
 import sys
@@ -240,6 +241,96 @@ class SparseNumberingTests(unittest.TestCase):
         result = run_solver([[90_909], [-5]], "cdcl", event_callback=events.append)
         self.assertEqual(result.solution, {5: False, 90_909: True})
         self.assertFalse(any("renumbered" in message for message in log_messages(events)))
+
+
+def tracked_ids():
+    """Ids of the objects the cyclic collector scans: gc.get_objects() leaves frozen ones out."""
+
+    return {id(obj) for obj in gc.get_objects()}
+
+
+@unittest.skipUnless(hasattr(gc, "freeze"), "gc.freeze is CPython's")
+class FrozenFormulaTests(unittest.TestCase):
+    """The collector does not rescan the formula while a solver runs (F13)."""
+
+    @contextlib.contextmanager
+    def solver_that_looks(self, key, then_raise=False):
+        """Replace a solver by one that records whether the clauses it was given are scanned."""
+
+        seen = {}
+
+        def look(clauses, *_args):
+            scanned = tracked_ids()
+            seen["scanned"] = [clause for clause in clauses if id(clause) in scanned]
+            seen["clauses"] = len(clauses)
+            if then_raise:
+                raise ValueError("broken")
+            return None, {}
+
+        with setting_unset(), mock.patch.dict(solver_registry._SOLVERS, {key: dataclasses.replace(get_solver(key), runner=look)}):
+            yield seen
+
+    def test_the_clauses_are_frozen_during_the_run_and_unfrozen_after(self):
+        formula = [[1, 2], [-1, 2], [1, -2]]
+        with self.solver_that_looks("cdcl") as seen:
+            run_solver(formula, "cdcl")
+
+        self.assertEqual(seen["clauses"], 3)
+        self.assertEqual(seen["scanned"], [])
+        self.assertEqual(gc.get_freeze_count(), 0)
+        self.assertTrue(all(id(clause) in tracked_ids() for clause in formula))
+
+    def test_renumbered_clauses_are_frozen_too(self):
+        # compact_numbering builds new lists; they are the ones the solver keeps.
+        with self.solver_that_looks("cdcl") as seen:
+            run_solver([[10_000_000], [-5]], "cdcl")
+
+        self.assertEqual(seen["clauses"], 2)
+        self.assertEqual(seen["scanned"], [])
+        self.assertEqual(gc.get_freeze_count(), 0)
+
+    def test_a_solver_that_raises_leaves_nothing_frozen(self):
+        with self.solver_that_looks("dpll", then_raise=True) as seen:
+            result = run_solver([[1, 2]], "dpll")
+
+        self.assertEqual(result.status, "ERROR")
+        self.assertEqual(seen["scanned"], [])
+        self.assertEqual(gc.get_freeze_count(), 0)
+
+    def test_a_freeze_made_by_the_caller_is_left_in_place(self):
+        kept = [[1, 2]]
+        gc.freeze()
+        self.addCleanup(gc.unfreeze)
+
+        with self.solver_that_looks("cdcl"):
+            run_solver([[1, 2], [-1, 2]], "cdcl")
+
+        # Frozen objects that die are still freed, so the count may drop; the caller's own stay frozen.
+        self.assertGreater(gc.get_freeze_count(), 0)
+        self.assertNotIn(id(kept[0]), tracked_ids())
+
+    def test_the_child_freezes_its_clauses_as_well(self):
+        replace_child_program(self, script=FREEZE_REPORTING_CHILD)
+
+        with mock.patch.dict(os.environ, IN_CHILD):
+            result = run_solver([[1, 2], [-1, 2]], "dpll")
+
+        self.assertEqual(result.error, "DPLL failed: RuntimeError: scanned clauses: 0 of 2")
+
+
+# The child's own program, with DPLL replaced by one that reports how many of its clauses the collector scans.
+FREEZE_REPORTING_CHILD = (
+    "import dataclasses, gc, sys\n"
+    "from sat_core import solver_process, solver_registry\n"
+    "def report(clauses, *args):\n"
+    "    scanned = {id(obj) for obj in gc.get_objects()}\n"
+    "    count = sum(id(clause) in scanned for clause in clauses)\n"
+    "    raise RuntimeError(f'scanned clauses: {count} of {len(clauses)}')\n"
+    "spec = solver_registry.get_solver('dpll')\n"
+    "solver_registry._SOLVERS['dpll'] = dataclasses.replace(spec, runner=report)\n"
+    "sys.stdin.reconfigure(encoding='utf-8')\n"
+    "sys.exit(solver_process.main(lifeline=True))\n"
+)
 
 
 # The child's own program, with DPLL replaced by one that raises (as failing_solver does in this process).

@@ -49,9 +49,18 @@ owner "<ID> is hard: run `/do-item-hard <ID>`", and change nothing else. In
 `/do-item-hard` (Opus), an easy or medium item belongs to `/do-item`: say
 so, and go on only when the owner confirms.
 
+**The fork.** A hard item gets one more read, of the item and for a plan
+task its Design: is a choice left open that would need an ADR (hard to
+reverse, or chosen over a real alternative)? If so, ask with
+`AskUserQuestion` before going red: two or three options, what each costs,
+the recommended one first. For a choice about how processes or messages
+flow, also write a mermaid diagram to a throwaway `.md` in the scratchpad
+(`mkdir -p` it first) for the owner to open in the preview, and delete it
+afterwards. A hard item with no open fork goes on without asking.
+
 **Done when** you have told the owner which item you are working on, its
 "done when" in your own words, its difficulty, and the files you expect to
-touch.
+touch; and for a hard item with an open fork, the owner has chosen.
 
 ## 2. Go red
 

@@ -778,7 +778,7 @@ gets a dated file of its own in this folder instead, like
     on the diff of PR #68's first commit names at least the
     "passes on CPython" problem.
 
-- [ ] **F17. A hard item's design fork is decided silently and shown only after the PR**
+- [x] **F17. A hard item's design fork is decided silently and shown only after the PR** - Done 2026-11-25.
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
   - **Problem:** RUNNER-5's plan said the solver child ends with its

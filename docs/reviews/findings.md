@@ -740,3 +740,122 @@ gets a dated file of its own in this folder instead, like
     frozen during the search; or the item is dropped with the measured
     numbers when the later freeze gains nothing over F13.
 
+
+- [ ] **F15. A Bash redirect into the scratchpad fails when its folder does not exist yet**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** the session's scratchpad folder is created only when
+    something writes to it with the Write tool. A Bash command that
+    redirects into it first (`> "$S/out.txt"`) fails with "No such file or
+    directory". Seen in four sessions (RUNNER-10, RUNNER-5, the dark-theme
+    change, A39). In RUNNER-10 the background timing run
+    (`scripts/pypy_timings.py`) never started; the agent found out only when
+    it read the missing output file, after the owner had asked twice
+    whether the run was done.
+  - **Fix:** one line in "Notes for Claude Code" in `CLAUDE.md`: before a
+    Bash command writes into the scratchpad, `mkdir -p` it (the Write tool
+    creates folders by itself).
+  - **Done when:** `CLAUDE.md` carries the line.
+
+- [ ] **F16. The review does not check that a CI or test-setup change can fail**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** on RUNNER-9 (PR #68, the "Solvers under PyPy" job in
+    `.github/workflows/ci.yml`), `/code-review` at `medium` found nothing.
+    The owner's second review, in a fresh context, found three problems:
+    the PyPy job could pass while running on CPython, the baseline read the
+    shell's `WIZSAT_SOLVER_PYTHON`, and RUNNER-9 was closed before its CI
+    run had been seen. A change to CI or to the test setup passes for the
+    wrong reason more easily than a code change, because nothing tests the
+    test.
+  - **Fix:** in the instructions the `reviewer` agent
+    (`.claude/agents/reviewer.md`) gives `code-review`, two checks for a
+    diff that touches CI, test fixtures or test environment variables: does
+    the new check fail when the thing it guards is missing or wrong (for
+    example the wrong interpreter), and is the item closed only once its
+    "done when" has been observed (a CI run, not the change that adds it).
+  - **Done when:** `reviewer.md` passes the two checks, and a reviewer run
+    on the diff of PR #68's first commit names at least the
+    "passes on CPython" problem.
+
+- [ ] **F17. A hard item's design fork is decided silently and shown only after the PR**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** RUNNER-5's plan said the solver child ends with its
+    parent, not how. The agent chose a watchdog thread in the child, built
+    it, had it reviewed at `high` and opened PR #63. The alternative, a
+    stdin lifeline, appeared only in the PR's "choices you may want to
+    change". The owner chose the lifeline, which cost a second build, a
+    second `high` review and ADR 0006 after the fact. `AGENTS.md` already
+    says to stop at what the item does not settle, but no step in
+    `/do-item` makes the agent look for such a fork before building.
+  - **Fix:** in `.claude/skills/do-item/SKILL.md`, step 1, for a hard item:
+    when the plan's design leaves a choice open that would need an ADR
+    (hard to reverse, or chosen over a real alternative), ask before going
+    red. The question gives two or three options, what each costs, and a
+    recommendation. When the choice is about how processes or messages
+    flow, add a mermaid diagram in a throwaway `.md` in the scratchpad, for
+    the owner to open in the preview; it is not kept. A hard item with no
+    open fork goes on without asking (RUNNER-3, 4, 7, 11 had none). Read
+    the `writing-for-agents` skill first.
+  - **Done when:** the step is in the skill, and a dry run on RUNNER-5's
+    item text as it stood before the build (git history of
+    `docs/plans/done/pypy-solver-runner.md`) stops with watchdog and
+    lifeline as options.
+
+- [ ] **F18. A speed-up is built in full before its gain is measured**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** F12 (garbage collector off while the child parses) was
+    built with its tests and docs in the RUNNER-12 session, then measured
+    and dropped: the time saved came back at the next collection. For F13
+    the owner had to say "measure first". No item says how much gain makes
+    the change worth keeping, so the agent judges after seeing the numbers.
+  - **Fix:** in the item format of `docs/plans/README.md`, an item whose
+    purpose is speed (or memory) carries a `Worth it when:` line, for
+    example "at least 10% on 100-Queens in `scripts/solver_timings.py`,
+    same conflict counts". The work goes: measure the current code, build
+    a rough version, measure it; below the bar, drop the item with the
+    numbers (the existing "Dropped: reason" status); above it, build it
+    properly with tests and docs, measure again and report both numbers.
+    Also in `/write-plan`'s item list if it names fields.
+  - **Done when:** the README defines the line and the order, and the open
+    speed items (F14, the OPT tasks in `docs/plans/solver-optimisations.md`)
+    carry a `Worth it when:` line or a `Needs decision` for it.
+
+- [ ] **F19. A plan closes without checking that the owner can reach what its Goal promised**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Problem:** the PyPy runner plan reached RUNNER-10 before the owner
+    asked where to install PyPy and whether it could be chosen in the UI.
+    Neither was in the plan; the answer became the four INTERP items
+    (`docs/plans/done/solver-interpreter-choice.md`). The gap was against
+    the plan's own Goal, not a new feature, and nothing at a plan's end
+    looks for it.
+  - **Fix:** in "Statuses and closing an item" of `docs/plans/README.md`:
+    when the last item of a plan closes, the agent answers one question in
+    its report to the owner: what can the owner still not do that the Goal
+    promised (how to install, where to switch it on, where the result
+    shows)? At most three lines; nothing is filed unless the owner says
+    so. Not a list of new feature ideas.
+  - **Done when:** the README carries the rule.
+
+- [ ] **F20. The retro skill reads PR comments, but reviews are recorded in the PR body**
+  (added 2026-11-25, found by retro)
+  - **Difficulty:** easy
+  - **Blocked by:** two more `/retro` runs (a skill changes only after
+    three uses since its last change, `AGENTS.md` "Conventions"; last
+    changed 2026-11-22, used once since). Later retros add their evidence
+    here.
+  - **Problem:** step 1 of `.claude/skills/retro/SKILL.md` starts with
+    `gh pr view <n> --comments` and the inline comments API. In this
+    repository the owner reviews in the session, so none of PRs #49-#79
+    has a comment or a GitHub review; the review record is the "Review:"
+    section `write-pr` puts in each PR body (for example PR #57: "reviewer
+    agent at level high reported 8 findings: Fixed ... Pre-existing ...").
+    Also, `--comments` cannot be combined with `--json`, which cost a retry.
+  - **Fix:** step 1 reads the PR bodies' "Review:" and "Rulings" sections
+    (`gh pr view <n> --json body --jq .body`), and keeps the comments call
+    as a second source.
+  - **Done when:** the skill names the body as the first source, and its
+    command runs as written.

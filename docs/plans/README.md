@@ -58,6 +58,8 @@ To list every open item, the findings above included: `grep -n "^- \[ \]" docs/r
     - **Problem:** what is wrong, with the concrete case that shows it.
       (plans use **What:** or go straight to **How:**)
     - **Fix:** the smallest change that works.       (plans: **How:**)
+    - **Worth it when:** the gain that keeps the change, set before measuring
+                                                     (only for speed or memory)
     - **Done when:** behaviour that can be observed and tested.
 ```
 
@@ -80,6 +82,14 @@ Rules for writing one:
 - **Snippets only for interfaces:** a setting name, a JSON shape, a function
   signature, a command to run. No implementation code: it goes stale and gets
   copied even when wrong.
+- **Worth it when** is the bar for an item whose purpose is speed or memory,
+  written before anything is measured, for example "at least 10% faster on
+  100-Queens in `scripts/solver_timings.py`, same conflict counts". The work
+  goes in this order: measure the current code; build a rough version and
+  measure it; below the bar, drop the item with both numbers; above it,
+  build it properly with tests and docs, measure again and report the
+  numbers before and after. The bar is set before the numbers are seen, so
+  the decision to keep a change does not bend to them.
 - IDs are stable. Review items keep their letter and number (A3, B7); plan
   tasks use the plan's prefix (META-2, RUNNER-3, MEM-1, OPT-1, ARCH-4).
 

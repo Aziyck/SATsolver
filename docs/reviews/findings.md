@@ -735,6 +735,8 @@ gets a dated file of its own in this folder instead, like
     built (a hook the solver calls after its setup, or the freeze moved
     there), on 100-Queens and Sudoku 25x25, freeze off and on in turn. If
     it gains, build that hook; the unfreeze stays in `run_solver`.
+  - **Worth it when:** at least 10% faster than F13 alone on Sudoku 25x25
+    or 100-Queens on CPython, same conflict counts.
   - **Done when:** `scripts/solver_timings.py` shows the same conflict
     counts, and a test shows the clause objects a solver searches with are
     frozen during the search; or the item is dropped with the measured
@@ -803,7 +805,7 @@ gets a dated file of its own in this folder instead, like
     `docs/plans/done/pypy-solver-runner.md`) stops with watchdog and
     lifeline as options.
 
-- [ ] **F18. A speed-up is built in full before its gain is measured**
+- [x] **F18. A speed-up is built in full before its gain is measured** - Done 2026-11-25.
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
   - **Problem:** F12 (garbage collector off while the child parses) was

@@ -741,7 +741,7 @@ gets a dated file of its own in this folder instead, like
     numbers when the later freeze gains nothing over F13.
 
 
-- [ ] **F15. A Bash redirect into the scratchpad fails when its folder does not exist yet**
+- [x] **F15. A Bash redirect into the scratchpad fails when its folder does not exist yet** - Done 2026-11-25.
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
   - **Problem:** the session's scratchpad folder is created only when

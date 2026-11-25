@@ -46,8 +46,9 @@ Create `docs/plans/<name>.md` in the form of the existing plans:
   `## Considered and rejected` (every option the grilling dropped, with the
   reason);
 - tasks in the item format with a new prefix (`NAME-1`, `NAME-2`), each one
-  session and one commit, rated by the hard triggers, with `Blocked by` and
-  a testable "done when".
+  session and one commit, rated by the hard triggers, with `Blocked by`, a
+  testable "done when", and for a speed or memory task a `Worth it when:`
+  bar.
 
 Ask the owner where the plan goes in "Order of work" in `README.md`, then add
 it there and to the table.

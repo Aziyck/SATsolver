@@ -66,8 +66,9 @@ between machines, ratios are what matter.
    those tasks.
 4. One task per commit, with the measured gain in the commit message and a line
    in `docs/guide/performance.md`.
-5. A task that brings no measurable gain is closed as dropped, with the
-   numbers, and its code is not merged.
+5. A task whose rough version stays below its `Worth it when:` bar is closed
+   as dropped, with the numbers, and its code is not merged (the order is in
+   [`README.md`](README.md), "Rules for writing one").
 
 ## Tasks
 
@@ -80,6 +81,8 @@ between machines, ratios are what matter.
     Watch lists become lists of `(clause, blocker)` pairs, or two parallel
     lists; `add_clause()` fills them. The blocker must be updated when the
     watch moves.
+  - **Worth it when:** at least 10% faster on 3-SAT n=250 and Sudoku 25x25
+    in `scripts/solver_timings.py`, same conflict counts.
   - **Done when:** rules 1-3 hold with an unchanged conflicts column, and the
     large instances (3-SAT n=250, Sudoku 25x25) are measurably faster.
     Estimate, not measured: 1.2-1.4x on propagation.
@@ -90,6 +93,8 @@ between machines, ratios are what matter.
     instance goes through a dict. Try `@dataclass(eq=False, slots=True)`
     (needs Python 3.10, which the repo requires). Measure plain lists only if
     slots is not enough; they are less readable.
+  - **Worth it when:** at least 3% faster on 3-SAT n=250 and Sudoku 25x25,
+    or at least 10% lower peak memory on 110-Queens, same conflict counts.
   - **Done when:** rules 1-3 hold with an unchanged conflicts column and a
     measured gain; expect a few percent.
   - **Memory:** slots also drop the per-instance attribute dict, roughly 100
@@ -108,6 +113,8 @@ between machines, ratios are what matter.
     pairs). A separate watch list per literal holding just the other literal
     lets propagation handle them without the general replacement search.
     Conflict analysis still needs a reason clause for binary implications.
+  - **Worth it when:** at least 10% faster on Sudoku 25x25 and 25-Queens,
+    or at least 20% lower peak memory on 110-Queens.
   - **Done when:** rules 1-2 hold and Sudoku, N-Queens and graph colouring are
     measurably faster (estimate, not measured: 1.2-1.5x on those). If the
     search changed, `docs/algorithms/cdcl.md` and `docs/guide/performance.md`
@@ -132,6 +139,8 @@ between machines, ratios are what matter.
   - **How:** after first-UIP analysis, remove literals of the learned clause
     that are implied by the others (MiniSat's recursive minimisation), at the
     end of `analyse_conflict()`.
+  - **Worth it when:** with the option on, 3-SAT n=250 (UNSAT) is at least
+    10% faster than with it off.
   - **Done when:** the agreement test passes with the option on and off; with
     it on, the hard instances need fewer conflicts and less time; the option
     is described in `docs/algorithms/cdcl.md`.
@@ -183,6 +192,8 @@ times.
     reference to it for the whole solve, so freeing it changes how clauses
     are handed to the solver, and `solver_process.py` is a hard trigger. File
     it as its own item if this task's measurement shows it is worth doing.
+  - **Worth it when:** at least 10% lower peak memory on 110-Queens, on
+    CPython and on PyPy, same conflict counts.
   - **Done when:** rules 1-3 hold with an unchanged conflicts column, and the
     peak memory of a CDCL solve of 110-Queens (`WIZSAT_MAX_CLAUSES=3000000`),
     read with `peak_memory_mb()` (`sat_core/memory.py`) in a fresh process,

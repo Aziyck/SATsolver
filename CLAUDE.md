@@ -17,6 +17,9 @@
   PID. Do not `pkill -f` a pattern that also appears in your own command line.
 - A fresh `WIZSAT_DATA_DIR` (a temp folder) keeps experiments out of the
   user's `output/wizsat.db`.
+- The scratchpad folder exists only after the Write tool has written into it.
+  Run `mkdir -p` on it before a Bash command redirects there (`> "$S/out.txt"`),
+  or a background run never starts.
 - The frontend build is what `python -m sat_web` serves. After changing
   `frontend/src`, rebuild (`npm run build`) before testing through the
   Python server, or use `npm run dev`.

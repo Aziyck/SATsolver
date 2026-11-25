@@ -151,7 +151,11 @@ as the work.
   A wrong fix that looks done costs more than an open item.
 - When every task of a plan is closed, set its status line to
   `done (date)`, move decisions worth keeping into an ADR, and move the file
-  to `docs/plans/done/` (fix its relative links and the links to it).
+  to `docs/plans/done/` (fix its relative links and the links to it). The
+  report to the owner then answers one question against the plan's Goal:
+  what can the owner still not do that the Goal promised (how to install it,
+  where to switch it on, where the result shows)? At most three lines, about
+  the Goal only; it is filed as an item when the owner asks for that.
 - A **new finding** met along the way (a bug, a weak spot, a review finding
   left unfixed) is filed the moment it is found: a new item at the end of
   [`docs/reviews/findings.md`](../reviews/findings.md), next F number, marked

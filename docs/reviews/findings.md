@@ -825,7 +825,7 @@ gets a dated file of its own in this folder instead, like
     speed items (F14, the OPT tasks in `docs/plans/solver-optimisations.md`)
     carry a `Worth it when:` line or a `Needs decision` for it.
 
-- [ ] **F19. A plan closes without checking that the owner can reach what its Goal promised**
+- [x] **F19. A plan closes without checking that the owner can reach what its Goal promised** - Done 2026-11-25.
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
   - **Problem:** the PyPy runner plan reached RUNNER-10 before the owner

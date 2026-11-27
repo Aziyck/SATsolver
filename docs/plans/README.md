@@ -23,8 +23,8 @@ undecided `Needs decision`. Statuses are on the items themselves, not here.
 Finished work is not listed: closed items stay in their files, and finished
 plans move to [`done/`](done/).
 
-1. **Workflow:** [github-issues.md](github-issues.md) (once its pull
-   request is merged; until then it is a draft and nothing in it can start).
+1. **Workflow:** [github-issues.md](github-issues.md) (accepted
+   2026-11-27; MIG-4 needs a cloud session, the others run locally).
 2. **Features:** [memory-measurement.md](memory-measurement.md) (its
    memory limit, MEM-8, last).
 
@@ -42,7 +42,7 @@ touched anyway:
 |---|---|---|
 | [../reviews/2026-10-16-audit.md](../reviews/2026-10-16-audit.md) | the 2026-10-16 review: whole-repo findings, solver simplification | nothing |
 | [../reviews/findings.md](../reviews/findings.md) | findings made while working | nothing |
-| [github-issues.md](github-issues.md) | items as GitHub issues, plans as design docs | its pull request being merged |
+| [github-issues.md](github-issues.md) | items as GitHub issues, plans as design docs | nothing |
 | [memory-measurement.md](memory-measurement.md) | peak memory and stored literals per run | nothing |
 | [solver-optimisations.md](solver-optimisations.md) | faster pure-Python CDCL | the audit's CDCL clean-up |
 

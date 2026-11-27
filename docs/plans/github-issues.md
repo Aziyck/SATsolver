@@ -1,6 +1,7 @@
 # Plan: work items as GitHub issues, plans as design docs
 
-- **Status:** Draft (under review in its pull request)
+- **Status:** Accepted (2026-11-27, PR #86); tasks still in this file until
+  MIG-5
 - **Written:** 2026-11-27, against commit `a27533b`
 - **Related:** [ADR 0001](../adr/0001-agent-workflow.md) (the file-based
   workflow this replaces; its "GitHub Issues" alternative is revisited here),

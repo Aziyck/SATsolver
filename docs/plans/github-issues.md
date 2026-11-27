@@ -52,12 +52,14 @@ request before its tasks exist.
 - "Blocked by" between issues uses GitHub's issue dependencies. A plan's
   tasks are sub-issues of one parent issue per plan; the open items of the
   2026-10-16 audit are sub-issues of one parent issue for the audit.
-- A plan's header shows its status (`Draft`, `Accepted`, `In progress`,
-  `Done`), so an accepted plan whose issues are not made yet can be seen,
-  and, from `In progress` on, the link to its parent issue.
+- A new plan has no `Status` field; its state follows from facts: its file
+  exists only on its pull request branch (draft), is on `main` with
+  `Issues: none yet` in its header (accepted), has `Issues: #N`, the link to
+  its parent issue (in progress), or is in `done/` (done). So an accepted
+  plan whose issues are not made yet can be seen.
 - A new plan is a design doc in `docs/plans/` with the required sections
-  (see "Design doc format"), opened as a pull request with status `Draft`.
-  Its issues are created only after that pull request is merged.
+  (see "Design doc format"), opened as a pull request. Its issues are
+  created only after that pull request is merged.
 - `/do-item` takes an issue (`#N`), reads the plan section the issue links
   to, and closes the issue through `Fixes #N` in the pull request.
 - A finding met while working is created as an issue at once and named in
@@ -119,7 +121,7 @@ request before its tasks exist.
 | Skill | Job | Reads |
 |---|---|---|
 | `write-plan` | grill the owner, write the design doc, open its pull request; `/write-plan review <PR#>` answers comments; after merge, call `to-issues` | `write-plan/DESIGN-DOC-FORMAT.md` |
-| `to-issues` (new) | turn an accepted design doc, an audit, or a list of findings into issues: labels, dependencies, parent issue; for a plan, set its status to `In progress` and add the parent link to its header. Mechanical, so it pins Sonnet in its frontmatter; it gets no difficulty, since it is a skill step, not an item | `to-issues/ISSUE-FORMAT.md` |
+| `to-issues` (new) | turn an accepted design doc, an audit, or a list of findings into issues: labels, dependencies, parent issue; for a plan, replace `Issues: none yet` in its header with the parent link (an older plan gets `Status: in progress` and an `Issues:` line). Mechanical, so it pins Sonnet in its frontmatter; it gets no difficulty, since it is a skill step, not an item | `to-issues/ISSUE-FORMAT.md` |
 | `do-item`, `do-item-hard` | build one issue | the issue, the plan section it links |
 | `write-pr` | commit subject and pull request body with `Fixes #N` | the issue |
 | `retro` | look back on finished work; files findings through `to-issues` | issues, pull requests, past sessions |
@@ -177,9 +179,9 @@ the system design course; written down in `write-plan/DESIGN-DOC-FORMAT.md`.
 
 | Section | Required | Content |
 |---|---|---|
-| Header | yes | the bullet list at the top of the file: `Status` (`Draft`, `Accepted`, `In progress`, `Done`), `Written`, `Related`, and from `In progress` on `Issues: #N`, the link to the plan's parent issue and so to its progress |
+| Header | yes | the bullet list at the top of the file: `Written`, `Related`, and `Issues`: `none yet` until the issues exist, then `#N`, the link to the plan's parent issue and so to its progress. No `Status` field |
 | Problem statement | yes | the problem and the result needed, in a paragraph |
-| Requirements | yes | `MUST`, `SHOULD`, `MUST NOT`: observable behaviour; the issues' "done when" come from these |
+| Requirements | yes | `MUST`, `SHOULD`, `NICE TO HAVE`, `MUST NOT`: observable behaviour; the issues' "done when" come from these |
 | Non-goals | yes | excluded scope |
 | Quality targets | no | measure, target, condition (for speed or memory work) |
 | Architecture and contracts | no | only the views the change needs: modules, data, JSON shapes, settings |
@@ -190,38 +192,40 @@ the system design course; written down in `write-plan/DESIGN-DOC-FORMAT.md`.
 A small change may merge sections into a short "focused change note", but
 never drops the failure path or the second solution.
 
-**Status rule:**
+**State rule** (decided 2026-11-27; no `Status` field):
 
-| Status | Means | Set by |
+| State | The fact | Written by |
 |---|---|---|
-| `Draft` | its pull request is open; the design is under review | `write-plan` |
-| `Accepted` | merged, but its issues are not made yet | the last commit before the merge (an open question that blocks the decision must be closed first) |
-| `In progress` | its issues exist; the header links the parent issue | `to-issues`, in a docs-only commit to `main` |
-| `Done` | its last sub-issue is closed; the file is in `done/` | the pull request that closes the last sub-issue |
+| draft | the file exists only on its pull request branch (`plan/<name>`) | `write-plan` opens the pull request |
+| accepted | on `main`, header `- **Issues:** none yet` | `write-plan` writes `none yet`; the owner's merge accepts (an open question that blocks the decision must be closed first) |
+| in progress | header `- **Issues:** #N`, the parent issue | `to-issues`, in a docs-only commit to `main` |
+| done | the file is in `done/` | the pull request that closes the last sub-issue |
 
-`/do-item` with no argument names an `Accepted` plan, since its issues are
-still to be made.
+`/do-item` with no argument names an accepted plan (`Issues: none yet`),
+since its issues are still to be made. Older plans keep their `Status`
+lines; `to-issues` sets one to `in progress` and adds the `Issues:` line.
 
 ## Main flow and failures
 
 ### A new plan
 
 1. `/write-plan <idea>` grills the owner section by section, writes
-   `docs/plans/<name>.md` as `Draft` on branch `plan/<name>`, opens a pull
-   request, and stops.
+   `docs/plans/<name>.md` (header `Issues: none yet`) on branch
+   `plan/<name>`, opens a pull request, and stops.
 2. The owner comments on lines of the doc. `/write-plan review <PR#>` answers
    questions in the threads, edits the doc for changes, pushes, and resolves
    what it handled. Repeat until the owner has no comments.
 3. The owner merges. **Success point: the design is accepted.**
 4. `/write-plan issues <name>` runs `to-issues`: it reads the merged doc,
    creates the parent issue and one sub-issue per task with labels and
-   dependencies, and sets the doc to `In progress` with the parent link.
+   dependencies, and replaces `none yet` in the doc's header with the
+   parent link.
 5. `/do-item #N` builds a task; its pull request says `Fixes #N`. If building
    shows the design was wrong, the same pull request edits the plan's
    section; a large change stops and goes back to step 1 as a small design
    doc pull request.
-6. The pull request that closes the last sub-issue sets `Status: Done` and
-   moves the file to `done/`; the parent issue closes on merge.
+6. The pull request that closes the last sub-issue moves the file to
+   `done/`; the parent issue closes on merge.
 
 ### The migration (MIG-5)
 
@@ -293,7 +297,7 @@ No open question blocks the decision.
 Until MIG-5, these tasks follow the item format in [README.md](README.md),
 and findings met along the way are still filed in `docs/reviews/findings.md`.
 
-- [ ] **MIG-1. ADR 0008, the design doc format and the `to-issues` skill**
+- [x] **MIG-1. ADR 0008, the design doc format and the `to-issues` skill** - Done 2026-11-27.
   - **Difficulty:** medium
   - **How:** ADR 0008 ("Work items are GitHub issues; plans are design docs
     reviewed in a pull request"), superseding point 1 and the "GitHub Issues"
@@ -326,11 +330,10 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
   - **How:** `do-item #N` reads the issue (`gh issue view`), the plan section
     it links, its dependencies and its `needs-decision` label; with no
     argument it follows "Order of work" through `gh issue list`, and names
-    any plan that is `Accepted` but has no issues yet. It files a
+    any plan that is accepted (`Issues: none yet`) but has no issues yet. It files a
     finding through `to-issues`. A file ID still works until MIG-5. `write-pr`
     writes `A4 (#N): ...` or `#N: ...` and `Fixes #N`. A task that closes a
-    plan's last sub-issue sets the plan's status to `Done` and moves it to
-    `done/`. The five evals in `.claude/skills/do-item/evals/` get fixture
+    plan's last sub-issue moves the plan to `done/`. The five evals in `.claude/skills/do-item/evals/` get fixture
     issue bodies instead of the plan files.
   - **Done when:** the five evals, rewritten with fixtures, pass under the
     same runner as today (refuses a blocked issue, stops at
@@ -343,8 +346,8 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
   - **Blocked by:** MIG-1
   - **How:** `write-plan` grills section by section against
     `DESIGN-DOC-FORMAT.md` (the failure path and the second solution are
-    never skipped), writes the doc as `Draft` on `plan/<name>`, and opens a
-    pull request. `/write-plan review <PR#>` reads the unresolved review
+    never skipped), writes the doc (header `Issues: none yet`) on
+    `plan/<name>`, and opens a pull request. `/write-plan review <PR#>` reads the unresolved review
     comments, replies or edits, pushes, and resolves the threads it handled.
     After the merge, `/write-plan issues <name>` calls `to-issues`. `retro`
     files findings through `to-issues`.
@@ -413,9 +416,9 @@ switch:
   that is wrong or worse than it should be and starts from a reproduction or
   the code; a `feature` is a task of a plan and starts from the design.
 - **plan:** the engineering design doc of a feature (`docs/plans/`); its
-  tasks are issues. Its status is `Draft` (under review in its pull
-  request), `Accepted` (merged, issues not made yet), `In progress` (issues
-  made) or `Done`.
+  tasks are issues. It has no status field: it is a draft (only on its pull
+  request branch), accepted (on `main`, `Issues: none yet`), in progress
+  (`Issues: #N`) or done (in `done/`).
 - **parent issue:** the issue that groups the items of one plan or one
   audit as sub-issues and links its file.
 - **status of an item:** open, waiting (blocked or needs decision), done
@@ -467,8 +470,10 @@ switch:
   parent.
 - **The audit's items as standalone issues:** a parent issue shows how much
   of the audit is left, at no cost, and a future audit works the same way.
-- **No status between `Accepted` and `Done`:** an accepted plan without
-  issues would look the same as one being built.
+- **No state between accepted and done:** an accepted plan without issues
+  would look the same as one being built; `Issues: none yet` against
+  `Issues: #N` tells them apart. **A `Status` field to flip by hand:** it
+  drifts from the facts (a merged plan still saying `Draft`).
 - **A cron job that polls for accepted plans:** a GitHub Action on the merge
   fires on the event itself; both wait until the switch works by hand.
 - **Installing and logging in `gh` in cloud sessions in any case:** cloud

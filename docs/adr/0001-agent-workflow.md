@@ -1,7 +1,9 @@
 # 0001. Work is tracked as items; code changes go through a branch and a pull request
 
 - **Status:** Accepted (2026-11-13); point 6 superseded by
-  [0005](0005-one-item-skill-model-by-difficulty.md)
+  [0005](0005-one-item-skill-model-by-difficulty.md); point 1 and the
+  "GitHub Issues" alternative superseded, and point 5 amended for design
+  docs, by [0008](0008-work-items-are-github-issues.md)
 - **Decided by:** the repository owner, after the research recorded in
   `docs/plans/done/agent-workflow.md`
 

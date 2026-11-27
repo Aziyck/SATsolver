@@ -302,6 +302,16 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
     "Issue contract" above. `to-issues` has a draft mode that writes the
     issues and the `gh` commands to a folder without running them, and pins
     Sonnet in its frontmatter. Read the `writing-for-agents` skill first.
+  - **Decided (2026-11-27):** a new plan has no `Status` field; its state
+    follows from facts that change anyway. Draft = the file exists only on
+    its pull request branch; accepted = on `main` with
+    `- **Issues:** none yet` (written by `write-plan`); in progress =
+    `- **Issues:** #N` (`to-issues` replaces "none yet"); done = the file is
+    in `done/`. The merge is the acceptance, so nothing has to be flipped by
+    hand. MIG-1 writes this into `DESIGN-DOC-FORMAT.md` and, in the same
+    pull request, rewrites this plan's "Status rule", the header row of
+    "Design doc format", the plan-status requirement and the glossary
+    change for **plan** to match. Older plans keep their `Status` lines.
   - **Done when:** `to-issues` in draft mode, run on
     `docs/plans/memory-measurement.md`, writes a parent issue and one
     `type: feature` issue per open MEM task with the right labels, MEM-8's

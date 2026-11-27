@@ -33,6 +33,8 @@ nothing is shown.
 | B. Show it only in a tooltip | tooltip on the status tag | hidden on touch screens |
 
 **Decision: A.** The deciding reason is that the number is visible at a glance.
+The downside: one more column, which a narrow screen has to collapse (see the
+risks table).
 
 ## Risks and open questions
 

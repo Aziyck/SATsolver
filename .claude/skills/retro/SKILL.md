@@ -17,8 +17,9 @@ Start with what the repository already records, before any transcript:
 
 - the pull requests' review findings and the owner's comments:
   `gh pr view <n> --comments`, `gh api repos/{owner}/{repo}/pulls/<n>/comments`;
-- findings filed "found while" an item
-  (`grep -rn "found while" docs/reviews docs/plans`).
+- findings filed "found while" an item: issues
+  (`gh issue list --state all --search "Found while" --limit 1000 --json number,title,state`)
+  and, until MIG-5, `grep -rn "found while" docs/reviews docs/plans`.
 
 Then the sessions. This session is in your context. Earlier sessions of a
 local Claude Code are JSONL files in `~/.claude/projects/<repo path with
@@ -51,5 +52,7 @@ not on disk, say so and work from the pull requests.
 Candidates ranked by how much they cost, each with the evidence (session,
 PR, line) and the fix. A new skill is never the fix unless it replaces one
 (root `AGENTS.md`, "Conventions"). For each candidate the owner accepts,
-file a finding at the end of `docs/reviews/findings.md` in the item format,
-marked `(added <date>, found by retro)`. Fix nothing in this session.
+call the Skill tool for `to-issues` with the accepted candidates as its
+findings: each is a standalone `type: fix` issue with a Problem, a Fix, a
+Done when and a difficulty (the owner's acceptance is the go-ahead), and its
+origin line says `Found by retro (<date>)`. Fix nothing in this session.

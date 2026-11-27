@@ -27,9 +27,9 @@ with nothing to say:
 - `Needs decision`: the question, the options and the recommendation, with
   the label. The owner answers in a comment; the next session rewrites it as
   `Decided (date): ...` and removes the label.
-- Where it came from: `From the 2026-10-16 audit (A4)`, `Found while #N`, or
-  `From plan <name>, section <heading>` with a relative link to the plan
-  file on `main` (`docs/plans/<name>.md#<anchor>`).
+- Where it came from: `From the 2026-10-16 audit (A4)`, `Found while #N`,
+  `Found by retro (<date>)`, or `From plan <name>, section <heading>` with a
+  relative link to the plan file on `main` (`docs/plans/<name>.md#<anchor>`).
 
 Text is copied from the source item unchanged, apart from the `Blocked by`
 line (it becomes a dependency) and the checkbox. Names, not line numbers;

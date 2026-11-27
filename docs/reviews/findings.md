@@ -845,10 +845,10 @@ gets a dated file of its own in this folder instead, like
 - [ ] **F20. The retro skill reads PR comments, but reviews are recorded in the PR body**
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
-  - **Blocked by:** two more `/retro` runs (a skill changes only after
-    three uses since its last change, `AGENTS.md` "Conventions"; last
-    changed 2026-11-22, used once since). Later retros add their evidence
-    here.
+  - **Blocked by:** three `/retro` runs since its last change (a skill
+    changes only after three uses since its last change, `AGENTS.md`
+    "Conventions"; last changed 2026-11-27 by MIG-3, which moved its
+    filing to `to-issues`). Later retros add their evidence here.
   - **Problem:** step 1 of `.claude/skills/retro/SKILL.md` starts with
     `gh pr view <n> --comments` and the inline comments API. In this
     repository the owner reviews in the session, so none of PRs #49-#79
@@ -861,3 +861,20 @@ gets a dated file of its own in this folder instead, like
     as a second source.
   - **Done when:** the skill names the body as the first source, and its
     command runs as written.
+
+- [x] **F21. `do-item` names `/to-issues <name>` for an accepted plan, not `/write-plan issues <name>`** - Done 2026-11-27.
+  (added 2026-11-27, found while MIG-3)
+  - **Difficulty:** easy
+  - **Problem:** MIG-3 made `/write-plan issues <name>` the entry point that
+    makes a plan's issues: it checks that the plan's pull request was merged,
+    runs `to-issues` in draft mode, and creates the issues on the owner's
+    go-ahead. Step 1 of `.claude/skills/do-item/SKILL.md` ("A plan name",
+    `none yet`) still tells the owner to run `/to-issues <name>`, and the
+    `/do-item` bullet of `.claude/skills/write-plan/DESIGN-DOC-FORMAT.md`
+    names no command, so an owner sent by `do-item` skips the merge check.
+    Found by the MIG-3 review; left for its own change, since `do-item` was
+    changed by MIG-2 the same day.
+  - **Fix:** both places name `/write-plan issues <name>`.
+  - **Done when:** `grep -rn "/to-issues <name>" .claude/skills` finds no
+    pointer for making a plan's issues, and `do-item`'s `none yet` branch
+    names `/write-plan issues <name>`.

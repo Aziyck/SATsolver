@@ -48,7 +48,7 @@ anyway, so nothing is flipped by hand:
 - An open question that blocks the decision is closed before the merge,
   since the merge is the acceptance.
 - `/do-item` with no argument names an accepted plan (`Issues: none yet`):
-  its issues are still to be made.
+  its issues are still to be made, with `/write-plan issues <name>`.
 - Plans written before this format keep their `Status:` line. `to-issues`
   sets it to `in progress` and adds the `Issues:` line when it makes their
   issues.

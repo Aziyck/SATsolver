@@ -1,1 +1,3 @@
 * text=auto
+# bash fails on CRLF (eval fixtures under .claude/skills/*/evals/)
+*.sh text eol=lf

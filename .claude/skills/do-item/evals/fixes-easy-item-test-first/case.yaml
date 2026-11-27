@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: fixes-easy-item-test-first
-expected_outcome: |
-  The session works on A31 (easy), writes a component test that compares a run and delivers its deleted event, sees it fail, fixes BenchmarkResults so the comparison drops the run, runs the frontend checks, closes A31 and commits with a subject that starts with A31:.

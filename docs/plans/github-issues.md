@@ -324,7 +324,7 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
     items as `type: fix` sub-issues; and on two findings from
     `findings.md`, two standalone `type: fix` issues. No issue is created.
 
-- [ ] **MIG-2. `do-item`, `do-item-hard` and `write-pr` work from issues**
+- [x] **MIG-2. `do-item`, `do-item-hard` and `write-pr` work from issues** - Done 2026-11-27.
   - **Difficulty:** medium
   - **Blocked by:** MIG-1
   - **How:** `do-item #N` reads the issue (`gh issue view`), the plan section
@@ -340,6 +340,28 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
     `needs-decision`, hands a hard issue to `/do-item-hard`, picks the first
     issue that can start, writes the test first); and `do-item A4` still
     finds the file item.
+  - **Built as:** `do-item` takes `#N` (reads the issue, its `blocked_by`
+    dependencies and its labels through `gh`; stops when `gh` cannot read
+    it), a file ID (until MIG-5), or a plan name by its header's `Issues:`
+    line (`#N`: the parent's sub-issues; `none yet`: names `/to-issues`;
+    none: `## Tasks`). With no argument, the audit and `findings.md` give
+    their file items until MIG-5, so the empty issue list does not hide
+    them. A finding met while working an issue is filed through `to-issues`;
+    while working a file item, in `findings.md` as before. `write-pr` writes
+    `Fixes #N` and the `A4 (#N):` / `#N:` subjects.
+    The old evals could not pass under `claude plugin eval`: it runs each
+    case in an empty workspace without the repository (a trial scored 0.50).
+    The six new cases (the five behaviours plus `finds-file-item` for the
+    file-ID path) share one fixture, `evals/_fixture/world.sh`, copied into
+    each case; `tests/test_eval_fixtures.py` keeps the copies equal. How to
+    run them: `.claude/skills/do-item/evals/README.md`. Result on
+    2026-11-27 (`--allow-tools Write Edit`, Windows): each case scored 1.00
+    on its last run (`stops-at-needs-decision` twice, after the
+    relative-path line in the system prompt; `picks-first-issue-that-can-start`
+    after the fixture gained W-1's `widgets.py`). The same cases on the old `do-item` also
+    pass `hands-hard-issue-to-opus` and `picks-first-issue-that-can-start`:
+    the fixture's `.gh/README.md` is enough for the model, so the evals guard
+    the behaviours rather than tell the old skill from the new one.
 
 - [ ] **MIG-3. `write-plan` writes design docs; `retro` files through `to-issues`**
   - **Difficulty:** medium

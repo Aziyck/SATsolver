@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: picks-first-task-that-can-start
-expected_outcome: |
-  The session reads the whole memory-measurement plan, picks MEM-1 (the first open task that can start), tells the owner the task, its done-when and its difficulty, writes failing tests first, builds sat_core/memory.py, and closes MEM-1 only.

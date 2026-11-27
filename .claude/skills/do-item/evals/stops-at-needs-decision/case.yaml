@@ -1,4 +1,8 @@
 schema_version: "1.1"
 name: stops-at-needs-decision
 expected_outcome: |
-  The session reads item A8, sees its undecided Needs decision, and asks the owner to decide what a second start does, showing the options and the recommendation, without changing any file.
+  The session reads issue #30, sees its needs-decision label, and asks the owner what a second start does, with the options and the recommendation, without changing any file.
+context:
+  scaffold_script: world.sh
+execution:
+  append_system_prompt: "This workspace is an offline fixture of a repository. `gh` is not available: before any `gh` call, read `.gh/README.md`, which maps each call to its saved output. The repository is the current working directory: read its files by paths relative to it (`docs/plans/README.md`), not under the skill's base directory."

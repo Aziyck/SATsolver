@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: hands-hard-item-to-opus
-expected_outcome: |
-  The session reads A40, sees that it is hard, and tells the owner to run /do-item-hard A40 without changing any file.

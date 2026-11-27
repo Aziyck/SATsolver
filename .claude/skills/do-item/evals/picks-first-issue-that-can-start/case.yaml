@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: picks-first-issue-that-can-start
+expected_outcome: |
+  The session reads the widgets plan, follows its Issues: #20 line to the parent's sub-issues, skips #21 (closed) and #22 (blocked by #23), and says it is working on #23 (W-3, medium) with its done-when, before any file is written.
+context:
+  scaffold_script: world.sh
+execution:
+  append_system_prompt: "This workspace is an offline fixture of a repository. `gh` is not available: before any `gh` call, read `.gh/README.md`, which maps each call to its saved output. The repository is the current working directory: read its files by paths relative to it (`docs/plans/README.md`), not under the skill's base directory."

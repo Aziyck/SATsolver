@@ -1,7 +1,7 @@
 ---
 name: do-item-hard
 description: "Work one hard item on Opus: the same steps as /do-item, for the items it hands over."
-argument-hint: "[item ID]"
+argument-hint: "[#N or item ID]"
 disable-model-invocation: true
 model: opus
 effort: high

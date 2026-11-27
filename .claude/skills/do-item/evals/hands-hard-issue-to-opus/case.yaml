@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: hands-hard-issue-to-opus
+expected_outcome: |
+  The session reads issue #31, sees that it is hard (label difficulty: hard; it touches server/locks.py), and tells the owner to run /do-item-hard #31 without changing any file.
+context:
+  scaffold_script: world.sh
+execution:
+  append_system_prompt: "This workspace is an offline fixture of a repository. `gh` is not available: before any `gh` call, read `.gh/README.md`, which maps each call to its saved output. The repository is the current working directory: read its files by paths relative to it (`docs/plans/README.md`), not under the skill's base directory."

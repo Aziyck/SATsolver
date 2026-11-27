@@ -1,7 +1,7 @@
 ---
 name: do-item
-description: "Work one item: a review finding (A3, B7), a plan task (RUNNER-2), a pasted bug report, or the next item in the work queue. Test-first, reviewed, closed."
-argument-hint: "[item ID, plan name or bug report; empty for the next item]"
+description: "Work one item: a GitHub issue (#12), a file item (A3, RUNNER-2), a plan name, a pasted bug report, or the next item in the work queue. Test-first, reviewed, closed."
+argument-hint: "[#N, item ID, plan name or bug report; empty for the next item]"
 disable-model-invocation: true
 model: sonnet
 effort: high
@@ -18,31 +18,54 @@ runs the same steps on Opus.
 
 ## 1. Pick the item
 
-- **An ID:** `grep -rn "\*\*<ID>\. " docs/reviews docs/plans`, then read the
-  whole item and the header of its file.
-- **A plan name:** its first open task that can start.
+- **An issue (`#12` or `12`):** `gh issue view 12 --json number,title,body,labels,state,comments`,
+  then what blocks it:
+  `gh api --paginate repos/{owner}/{repo}/issues/12/dependencies/blocked_by --jq '.[] | "#\(.number) \(.state)"'`.
+  The labels give the difficulty, the type and `needs-decision`. Read the
+  plan section the body links. When `gh` cannot read the issue (not
+  installed, not logged in, no network, no such issue), stop and tell the
+  owner that; do not fall back to the files.
+- **A file ID (`A4`, `MEM-4`)**, until MIG-5 moves the open items:
+  `grep -rn "\*\*<ID>\. " docs/reviews docs/plans`, then read the whole item
+  and the header of its file. A line that says `Moved to #N` is issue `#N`.
+- **A plan name:** read the `Issues:` line of its header.
+  - `#N`: the first open sub-issue of that parent that can start, in the
+    parent's order (`gh api --paginate repos/{owner}/{repo}/issues/N/sub_issues`).
+  - `none yet`: the plan is accepted and its issues are not made. Tell the
+    owner to run `/to-issues <name>`, and stop.
+  - no `Issues:` line (an older plan): its first open task in `## Tasks`.
 - **Nothing:** follow "Order of work" in `docs/plans/README.md` to the first
-  open item that can start, a review finding or a plan task alike.
+  item that can start. A plan gives its tasks as in "A plan name". The rest
+  are the open `type: fix` issues, lowest number first
+  (`gh issue list --state open --label "type: fix" --limit 1000 --json number,title,labels`),
+  and, until MIG-5, the open `- [ ]` items of the audit and `findings.md`.
+  Name any accepted plan (`Issues: none yet`) met on the way: its issues are
+  still to be made.
 - **A bug report without an ID** (a console error, a traceback, a wrong
   result): the report is the item, and its "done when" is "the reported
-  symptom no longer happens". Once step 2 has a reproduction, file it as a new
-  item at the end of `docs/reviews/findings.md` (next F number), so it is
-  closed like any other.
+  symptom no longer happens". Once step 2 has a reproduction, file it
+  through the `to-issues` skill as a standalone `type: fix` issue, and work
+  that issue, so it is closed like any other.
 
 For a plan task, read the whole plan: Goal, Non-goals, Design and
 "Considered and rejected". The plan already did the thinking; the task is
 built inside that design, and a rejected option stays rejected.
 
-An item **can start** when it is open, every item in its `Blocked by` is
-closed, and it has no undecided `Needs decision`. When it cannot, tell the
-owner what it waits for and stop; when nothing in the queue can start, say
-what each open item waits for.
+An item **can start** when it is open, everything that blocks it is closed
+(a file item's `Blocked by` line; an issue's `blocked by` dependencies, or a
+`Blocked by: #N` line in its body where the dependency API was not usable),
+and it has no undecided `Needs decision` (a file item's line; an issue's
+`needs-decision` label, whose question sits in the body and whose answer in
+a comment). When it cannot, tell the owner what it waits for and stop; when
+nothing in the queue can start, say what each open item waits for.
 
 Then **re-rate** it. List the files the fix or task will touch and compare
 them with the hard triggers in `docs/plans/README.md` ("Difficulty"). When a
 trigger matches and the item is not hard and has no `Not hard:` line, change
-its difficulty line to `hard (re-rated <date>: <trigger>)`. A small change
-in a hard area is hard.
+its difficulty line to `hard (re-rated <date>: <trigger>)`; for an issue,
+swap its `difficulty:` label (`gh issue edit N --add-label "difficulty: hard"
+--remove-label "difficulty: <old>"`) and add a comment
+`Re-rated <date>: <trigger>`. A small change in a hard area is hard.
 
 **The model gate.** In `/do-item` (Sonnet), stop at a hard item: tell the
 owner "<ID> is hard: run `/do-item-hard <ID>`", and change nothing else. In
@@ -118,9 +141,13 @@ task skips this step.
   cannot be undone; anything security-sensitive; something a plan's
   Non-goals exclude; or a design that turns out not to work (say what you
   found).
-- Stay inside the item. Each other problem you meet, file now as a new
-  finding (`docs/plans/README.md`, "Statuses and closing an item") and
-  carry on.
+- Stay inside the item. Each other problem you meet, file now as a **new
+  finding** and carry on: working an issue, through the `to-issues` skill as
+  a standalone `type: fix` issue whose body says `Found while #N`; working a
+  file item, until MIG-5, at the end of `docs/reviews/findings.md`
+  (`docs/plans/README.md`, "Statuses and closing an item"). It goes into the
+  pull request body and the report to the owner; the fix waits for its own
+  session.
 
 **Done when** the loop is green: every test from step 2 passes, and for a
 baseline, the tests pass and the conflicts column matches it.
@@ -149,10 +176,15 @@ the item open, and report what was tried and where it failed.
 
 ## 6. Close
 
-1. Close the item in its file; for the last task of a plan, set the plan's
-   status line to done. Update the docs the item names and those for the
-   area (`docs/plans/README.md`, docs table in `AGENTS.md`). Measured
-   numbers go where the plan says.
+1. Close the item. A file item is closed in its file; for the last task of
+   a plan, set the plan's status line to done. An issue is closed by the
+   pull request: its body starts with `Fixes #N` (`write-pr`), so nothing is
+   ticked. When the issue is the last open sub-issue of its plan's parent
+   (every other one is closed), the same change moves the plan to
+   `docs/plans/done/` (fix its relative links and the links to it), and the
+   pull request body also says `Fixes #<parent>`, so the parent closes too. Update
+   the docs the item names and those for the area (`docs/plans/README.md`,
+   docs table in `AGENTS.md`). Measured numbers go where the plan says.
 2. Write the commit message, pull request and report with the `write-pr`
    skill.
 3. Commit and open the pull request with its files unchanged, as "Working

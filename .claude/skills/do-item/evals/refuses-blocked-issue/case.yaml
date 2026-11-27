@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: refuses-blocked-issue
+expected_outcome: |
+  The session reads issue #22 and its dependencies, sees that it is blocked by the open issue #23, changes no file, and tells the owner what it waits for.
+context:
+  scaffold_script: world.sh
+execution:
+  append_system_prompt: "This workspace is an offline fixture of a repository. `gh` is not available: before any `gh` call, read `.gh/README.md`, which maps each call to its saved output. The repository is the current working directory: read its files by paths relative to it (`docs/plans/README.md`), not under the skill's base directory."

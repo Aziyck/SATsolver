@@ -20,6 +20,9 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/*.tsbuildinfo
 
+# Skill eval results (claude plugin eval)
+.claude/skills/*/evals/results/
+
 # OS / editors
 .DS_Store
 Thumbs.db

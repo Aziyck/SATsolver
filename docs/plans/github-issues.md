@@ -437,7 +437,7 @@ switch:
 - **Labels for where an item came from (`audit-2026-10-16`, `found-while`):**
   that goes in the body; labels stay for what selects and routes work.
 - **GitHub's default labels next to ours:** an agent offered `bug` and
-  `kind: finding` would have to guess.
+  `type: fix` would have to guess.
 - **Committing the migration script:** it runs once.
 - **Making issues as a mode of `write-plan`:** plans are one of three sources
   of issues (plans, `retro`, review findings); a skill of its own serves all

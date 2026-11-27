@@ -842,7 +842,7 @@ gets a dated file of its own in this folder instead, like
     so. Not a list of new feature ideas.
   - **Done when:** the README carries the rule.
 
-- [ ] **F20. The retro skill reads PR comments, but reviews are recorded in the PR body**
+- [x] **F20. The retro skill reads PR comments, but reviews are recorded in the PR body** - Dropped 2026-11-27: the owner now reviews in pull request comments, which step 1 of `retro` already reads first; the "Review:" section `write-pr` puts in the body stays a secondary record, not worth a skill change.
   (added 2026-11-25, found by retro)
   - **Difficulty:** easy
   - **Blocked by:** three `/retro` runs since its last change (a skill

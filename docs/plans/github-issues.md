@@ -363,7 +363,7 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
     the fixture's `.gh/README.md` is enough for the model, so the evals guard
     the behaviours rather than tell the old skill from the new one.
 
-- [ ] **MIG-3. `write-plan` writes design docs; `retro` files through `to-issues`**
+- [x] **MIG-3. `write-plan` writes design docs; `retro` files through `to-issues`** - Done 2026-11-27.
   - **Difficulty:** medium
   - **Blocked by:** MIG-1
   - **How:** `write-plan` grills section by section against
@@ -377,6 +377,26 @@ and findings met along the way are still filed in `docs/reviews/findings.md`.
     pull request with one question comment and one change comment replies to
     the first, edits the doc for the second, and resolves both threads; the
     test pull request is closed unmerged afterwards.
+  - **Built as:** `write-plan` takes `<idea>`, `review <PR#>` or `issues
+    <name>`. A new plan is grilled against `DESIGN-DOC-FORMAT.md`, written on
+    `plan/<name>` and opened as a pull request (its "Order of work" entry, ADR
+    and glossary term go in the same pull request). The review steps are in
+    `write-plan/REVIEW.md`: a thread is handled when it is unresolved and its
+    last comment does not start with `**Claude:** `; a question gets a reply,
+    a change an edit, a commit and a reply, and a comment that reverses a
+    decision or has two reasonable answers gets options and stays open.
+    `issues <name>` checks the merge, runs `to-issues` in draft mode, then
+    for real on the owner's go-ahead. `retro` files accepted candidates
+    through `to-issues` with the origin line `Found by retro (<date>)`
+    (added to `ISSUE-FORMAT.md`).
+    Result on 2026-11-27: test pull request #89 (a throwaway design doc on
+    `plan/mig-3-review-test`, one question and one change comment, both from
+    the owner's account and marked as test comments). Run in this session by
+    following `REVIEW.md`, not through `/write-plan review`, which a session
+    cannot invoke: the question got a reply and no edit, the change got an
+    edit, a commit and a reply, both threads were resolved, and the pull
+    request was closed unmerged and its branch deleted. The three GraphQL
+    calls in `REVIEW.md` ran as written.
 
 - [ ] **MIG-4. Cloud sessions reach issues**
   - **Difficulty:** medium

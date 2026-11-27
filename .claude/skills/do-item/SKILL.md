@@ -32,7 +32,7 @@ runs the same steps on Opus.
   - `#N`: the first open sub-issue of that parent that can start, in the
     parent's order (`gh api --paginate repos/{owner}/{repo}/issues/N/sub_issues`).
   - `none yet`: the plan is accepted and its issues are not made. Tell the
-    owner to run `/to-issues <name>`, and stop.
+    owner to run `/write-plan issues <name>`, and stop.
   - no `Issues:` line (an older plan): its first open task in `## Tasks`.
 - **Nothing:** follow "Order of work" in `docs/plans/README.md` to the first
   item that can start. A plan gives its tasks as in "A plan name". The rest

@@ -862,7 +862,7 @@ gets a dated file of its own in this folder instead, like
   - **Done when:** the skill names the body as the first source, and its
     command runs as written.
 
-- [ ] **F21. `do-item` names `/to-issues <name>` for an accepted plan, not `/write-plan issues <name>`**
+- [x] **F21. `do-item` names `/to-issues <name>` for an accepted plan, not `/write-plan issues <name>`** - Done 2026-11-27.
   (added 2026-11-27, found while MIG-3)
   - **Difficulty:** easy
   - **Problem:** MIG-3 made `/write-plan issues <name>` the entry point that
